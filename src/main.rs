@@ -5,7 +5,53 @@ use std::net::SocketAddr;
 
 use tokio::{net::{TcpListener, TcpStream}, io::{copy_bidirectional, AsyncReadExt, AsyncWriteExt}};
 use commander::Commander;
-use webparse::Buffer;
+use webparse::{Buffer, Method, WebError};
+
+
+async fn process(inbound: &mut TcpStream) -> Result<(), WebError> {
+    let mut outbound;
+    let mut request;
+    let mut buffer = Buffer::new();
+    loop {
+        let n = inbound
+            .read(buffer.get_write_array(1024))
+            .await?;
+
+        if n == 0 {
+            return Err(WebError::Extension("empty"));
+        }
+
+        buffer.add_write_len(n);
+        buffer.uncommit();
+        // println!("n === {:?}", n);
+        // println!("value = {:?}", String::from_utf8_lossy(buffer.get_write_data()));
+        
+        request = webparse::Request::new();
+        let _result = request.parse_buffer(&mut buffer)?;
+        match request.get_connect_url() {
+            Some(host) => {
+                // println!("host !!= {}", host);
+                outbound = TcpStream::connect(host).await?;
+                break;
+            }
+            None => continue,
+        }
+    }
+
+    match request.method() {
+        &Method::Connect => {
+            inbound.write_all(b"HTTP/1.1 200 OK\r\n\r\n").await?;
+        }
+        _ => {
+            buffer.set_start(0);
+            outbound.write_all(buffer.get_write_data()).await?;
+        }
+    }
+    // println!("outbound = {:?}", outbound);
+    let _ = copy_bidirectional(inbound, &mut outbound)
+        .await?;
+    Ok(())
+}
 
 async fn run_main() -> Result<(), Error> {
     let command = Commander::new()
@@ -30,43 +76,16 @@ async fn run_main() -> Result<(), Error> {
     let listener = TcpListener::bind(addr).await?;
     while let Ok((mut inbound, _)) = listener.accept().await {
         tokio::spawn(async move {
-            let mut outbound;
-            let mut buffer = Buffer::new();
-            // In a loop, read data from the socket and write the data back.
-            loop {
-                let n = inbound
-                    .read(buffer.get_write_array(1024))
-                    .await
-                    .expect("failed to read data from socket");
+            
+            match process(&mut inbound).await {
+                Err(_) => {
+                    let _ = inbound.write_all(b"HTTP/1.1 500 OK\r\n\r\n").await;
+                }
+                _ => {
 
-                buffer.add_write_len(n);
-                buffer.uncommit();
-                println!("n === {:?}", n);
-                println!("value = {:?}", String::from_utf8_lossy(buffer.get_write_data()));
-                
-                let mut request = webparse::Request::new();
-                let _result = request.parse_buffer(&mut buffer).expect("ok");
-                match request.get_connect_url() {
-                    Some(host) => {
-                        println!("host !!= {}", host);
-                        outbound = TcpStream::connect(host).await.unwrap();
-                        break;
-                    }
-                    None => continue,
                 }
             }
 
-            buffer.set_start(0);
-            outbound.write_all(buffer.get_write_data()).await.expect("");
-
-            // let mut outbound = TcpStream::connect("www.baidu.com:80").await.unwrap();
-            // println!("outbound = {:?}", outbound);
-            let _ = copy_bidirectional(&mut inbound, &mut outbound)
-                .await.map(|_r| {
-                    // if let Err(e) = r {
-                    //     println!("Failed to transfer; error={}", e);
-                    // }
-                });
 
             // let mut buf = vec![0; 1024];
 
