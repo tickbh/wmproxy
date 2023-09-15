@@ -91,16 +91,16 @@ impl Proxy {
         let command = Commander::new()
             .version(&env!("CARGO_PKG_VERSION").to_string())
             .usage("-b 127.0.0.1 -p 8090")
-            .usage_desc("use http proxy")
+            .usage_desc("wmproxy -p 8090")
             .option_list(
                 "-f, --flag [value]",
                 "可兼容的方法, 如http https socks5",
                 None,
             )
-            .option_int("-p, --port [value]", "listen port", Some(8090))
+            .option_int("-p, --port [value]", "监听端口", Some(8090))
             .option_str(
                 "-b, --bind [value]",
-                "bind addr",
+                "监听地址",
                 Some("0.0.0.0".to_string()),
             )
             .parse_env_or_exit();
@@ -130,8 +130,11 @@ impl Proxy {
         }
     }
 
-    
-    async fn process_socks5(flag: Flag, inbound: &mut TcpStream, buffer: Option<BinaryMut>) -> ProxyResult<()> {
+    async fn process_socks5(
+        flag: Flag,
+        inbound: &mut TcpStream,
+        buffer: Option<BinaryMut>,
+    ) -> ProxyResult<()> {
         if flag.contains(Flag::SOCKS5) {
             ProxySocks5::process(inbound, buffer).await
         } else {
@@ -147,6 +150,7 @@ impl Proxy {
         let flag = self.flag;
         while let Ok((mut inbound, _)) = listener.accept().await {
             tokio::spawn(async move {
+                // tcp的连接被移动到该协程中，我们只要专注的处理该stream即可
                 let read_buf = match Self::process_http(flag, &mut inbound).await {
                     Ok(()) => {
                         return;
