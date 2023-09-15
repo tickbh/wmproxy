@@ -8,7 +8,7 @@ use webparse::{BinaryMut, Buf, BufMut, Method, WebError, HttpError};
 pub struct ProxyHttp {}
 
 impl ProxyHttp {
-    pub async fn process(inbound: &mut TcpStream) -> ProxyResult<bool> {
+    pub async fn process(inbound: &mut TcpStream) -> ProxyResult<()> {
         let mut outbound;
         let mut request;
         let mut buffer = BinaryMut::new();
@@ -44,7 +44,7 @@ impl ProxyHttp {
                     continue;
                 },
                 Err(_) => {
-                    return Err(ProxyError::Continue(buffer));
+                    return Err(ProxyError::Continue(Some(buffer)));
                 }
             }
         }
@@ -59,6 +59,6 @@ impl ProxyHttp {
             }
         }
         let _ = copy_bidirectional(inbound, &mut outbound).await?;
-        Ok(true)
+        Ok(())
     }
 }

@@ -6,8 +6,9 @@ use webparse::{WebError, BinaryMut};
 pub enum ProxyError {
     IoError(io::Error),
     WebError(WebError),
-    Continue(BinaryMut),
+    Continue(Option<BinaryMut>),
     UnknowHost,
+    SizeNotMatch,
     Extension(&'static str)
 }
 

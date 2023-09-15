@@ -2,8 +2,9 @@ use std::net::SocketAddr;
 
 use commander::Commander;
 use tokio::net::{TcpListener, TcpStream};
+use webparse::BinaryMut;
 
-use crate::{Flag, ProxyError, ProxyHttp, ProxyResult};
+use crate::{Flag, ProxyError, ProxyHttp, ProxyResult, ProxySocks5};
 
 pub struct Builder {
     inner: ProxyResult<Proxy>,
@@ -121,11 +122,20 @@ impl Proxy {
         builder.inner
     }
 
-    async fn process_http(flag: Flag, inbound: &mut TcpStream) -> ProxyResult<bool> {
+    async fn process_http(flag: Flag, inbound: &mut TcpStream) -> ProxyResult<()> {
         if flag.contains(Flag::HTTP) || flag.contains(Flag::HTTPS) {
             ProxyHttp::process(inbound).await
         } else {
-            Ok(false)
+            Err(ProxyError::Continue(None))
+        }
+    }
+
+    
+    async fn process_socks5(flag: Flag, inbound: &mut TcpStream, buffer: Option<BinaryMut>) -> ProxyResult<()> {
+        if flag.contains(Flag::SOCKS5) {
+            ProxySocks5::process(inbound, buffer).await
+        } else {
+            Err(ProxyError::Continue(buffer))
         }
     }
 
@@ -138,11 +148,17 @@ impl Proxy {
         while let Ok((mut inbound, _)) = listener.accept().await {
             tokio::spawn(async move {
                 let read_buf = match Self::process_http(flag, &mut inbound).await {
-                    Ok(true) => {
+                    Ok(()) => {
                         return;
                     }
-                    Ok(false) => None,
-                    Err(ProxyError::Continue(buf)) => Some(buf),
+                    Err(ProxyError::Continue(buf)) => buf,
+                    Err(_) => return,
+                };
+                let _read_buf = match Self::process_socks5(flag, &mut inbound, read_buf).await {
+                    Ok(()) => {
+                        return;
+                    }
+                    Err(ProxyError::Continue(buf)) => buf,
                     Err(_) => return,
                 };
             });
