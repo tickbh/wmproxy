@@ -6,7 +6,7 @@ authors = [ "tickbh <tickdream125@hotmail.com>" ]
 description = " http https proxy by rust"
 repository = "https://github.com/tickbh/qyproxy"
 license = "Apache-2.0"
-keywords = []
+keywords = ["http"]
 
 [dependencies]
 
