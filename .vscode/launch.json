@@ -7,15 +7,34 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug executable 'qyproxy'",
+            "name": "Debug unit tests in library 'wmproxy'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=wmproxy"
+                ],
+                "filter": {
+                    "name": "wmproxy",
+                    "kind": "lib"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'wmproxy'",
             "cargo": {
                 "args": [
                     "build",
-                    "--bin=qyproxy",
-                    "--package=qyproxy"
+                    "--bin=wmproxy",
+                    "--package=wmproxy"
                 ],
                 "filter": {
-                    "name": "qyproxy",
+                    "name": "wmproxy",
                     "kind": "bin"
                 }
             },
@@ -25,16 +44,16 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug unit tests in executable 'qyproxy'",
+            "name": "Debug unit tests in executable 'wmproxy'",
             "cargo": {
                 "args": [
                     "test",
                     "--no-run",
-                    "--bin=qyproxy",
-                    "--package=qyproxy"
+                    "--bin=wmproxy",
+                    "--package=wmproxy"
                 ],
                 "filter": {
-                    "name": "qyproxy",
+                    "name": "wmproxy",
                     "kind": "bin"
                 }
             },

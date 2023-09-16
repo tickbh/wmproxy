@@ -14,7 +14,7 @@ async fn run_main() -> ProxyResult<()> {
     Ok(())
 }
 
-#[forever_rs::main]
+// #[forever_rs::main]
 #[tokio::main]
 async fn main() {
     let _  = run_main().await;

@@ -29,16 +29,16 @@ impl ProxySocks5 {
         buffer: &mut BinaryMut,
     ) -> ProxyResult<u8> {
         let _ = self.read_len(stream, buffer, 2).await;
-        if buffer.get_next() != Some(5) {
+        if buffer.get_u8() == 5 {
             return Err(ProxyError::SizeNotMatch);
         }
-        let len = buffer.get_next().unwrap() as usize;
+        let len = buffer.get_u8() as usize;
         let _ = self.read_len(stream, buffer, len).await;
-        // let result = buffer.chunk()[0..len].to_vec();
         let mut verify = 0;
         let chunk = buffer.chunk();
+        println!("len = {}, chunk = {:?}", len, buffer.chunk());
         if self.is_user_password() {
-            if chunk.len() < 2 || chunk[2] == 0 {
+            if !chunk.contains(&2) {
                 verify = 0xFF;
             } else {
                 verify = 2u8;
@@ -54,10 +54,10 @@ impl ProxySocks5 {
         buffer: &mut BinaryMut,
     ) -> ProxyResult<bool> {
         let _ = self.read_len(stream, buffer, 2).await?;
-        if buffer.get_next() != Some(1) {
+        if buffer.get_u8() == 1 {
             return Err(ProxyError::ProtocolErr);
         }
-        let user_len = buffer.get_next().unwrap() as usize;
+        let user_len = buffer.get_u8() as usize;
         let _ = self.read_len(stream, buffer, user_len).await?;
         if let Some(user) = &self.username {
             if user_len == 0 || user.as_bytes() != &buffer.chunk()[0..user_len] {
@@ -66,7 +66,7 @@ impl ProxySocks5 {
             buffer.advance(user_len);
         }
         let _ = self.read_len(stream, buffer, 1).await?;
-        let pass_len = buffer.get_next().unwrap() as usize;
+        let pass_len = buffer.get_u8() as usize;
         let _ = self.read_len(stream, buffer, pass_len).await?;
         if let Some(user) = &self.username {
             if pass_len == 0 || user.as_bytes() != &buffer.chunk()[0..pass_len] {
@@ -111,14 +111,14 @@ impl ProxySocks5 {
         buffer: &mut BinaryMut,
     ) -> ProxyResult<(u8, SocketAddr)> {
         let _ = self.read_len(stream, buffer, 4).await?;
-        if buffer.get_next() != Some(5) {
+        if buffer.get_u8() == 5 {
             return Err(ProxyError::ProtocolErr);
         }
-        let sock = buffer.get_next().unwrap();
-        if buffer.get_next() != Some(0) {
+        let sock = buffer.get_u8();
+        if buffer.get_u8() == 0 {
             return Err(ProxyError::ProtocolErr);
         }
-        let atyp = buffer.get_next().unwrap();
+        let atyp = buffer.get_u8();
         let addr = match atyp {
             0x01 => {
                 self.read_len(stream, buffer, 6).await?;
@@ -169,6 +169,7 @@ impl ProxySocks5 {
         stream: &mut TcpStream,
         buffer: Option<BinaryMut>,
     ) -> ProxyResult<()> {
+        println!("socks5 process");
         let mut buffer = buffer.unwrap_or(BinaryMut::new());
         let verify = match self.read_head_len(stream, &mut buffer).await {
             Err(ProxyError::SizeNotMatch) => {
@@ -201,7 +202,10 @@ impl ProxySocks5 {
         let (_sock, addr) = self.read_addr(stream, &mut buffer).await?;
         println!("connecting {:?}", addr);
         let mut target = match TcpStream::connect(addr.clone()).await {
-            Ok(tcp) => tcp,
+            Ok(tcp) => {
+                stream.write_all(&[5, 0, 0, 1, 0, 0, 0, 0, 0, 0]).await?;
+                tcp
+            },
             Err(_err) => {
                 stream.write_all(&[5, 1, 0, 1, 0, 0, 0, 0, 0, 0]).await?;
                 return Err(ProxyError::Extension("Can't connect tcp"));

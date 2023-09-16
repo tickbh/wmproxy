@@ -53,6 +53,20 @@ impl Builder {
         })
     }
 
+    pub fn username(self, username: String) -> Builder {
+        self.and_then(|mut proxy| {
+            proxy.username = Some(username);
+            Ok(proxy)
+        })
+    }
+    
+    pub fn password(self, password: String) -> Builder {
+        self.and_then(|mut proxy| {
+            proxy.password = Some(password);
+            Ok(proxy)
+        })
+    }
+
     fn and_then<F>(self, func: F) -> Self
     where
         F: FnOnce(Proxy) -> ProxyResult<Proxy>,
@@ -122,7 +136,8 @@ impl Proxy {
                 builder = builder.bind_addr(listen_host);
             }
         };
-
+        builder = builder.flag(Flag::HTTP | Flag::HTTPS | Flag::SOCKS5);
+        builder = builder.username("aa".to_string()).password("bb".to_string());
         builder.inner
     }
 
@@ -135,7 +150,7 @@ impl Proxy {
     }
 
     
-    async fn process_socks5(flag: Flag, inbound: &mut TcpStream, buffer: Option<BinaryMut>) -> ProxyResult<()> {
+    async fn process_socks5(username: Option<String>, password: Option<String>, flag: Flag, inbound: &mut TcpStream, buffer: Option<BinaryMut>) -> ProxyResult<()> {
         if flag.contains(Flag::SOCKS5) {
             let mut sock = ProxySocks5::new(username, password);
             sock.process(inbound, buffer).await
