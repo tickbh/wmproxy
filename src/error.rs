@@ -7,8 +7,10 @@ pub enum ProxyError {
     IoError(io::Error),
     WebError(WebError),
     Continue(Option<BinaryMut>),
+    VerifyFail,
     UnknowHost,
     SizeNotMatch,
+    ProtocolErr,
     Extension(&'static str)
 }
 

@@ -69,6 +69,8 @@ pub struct Proxy {
     bind_addr: String,
     bind_port: u16,
     server: Option<SocketAddr>,
+    username: Option<String>,
+    password: Option<String>,
 }
 
 impl Default for Proxy {
@@ -78,6 +80,8 @@ impl Default for Proxy {
             bind_addr: "127.0.0.1".to_string(),
             bind_port: 8090,
             server: None,
+            username: None,
+            password: None,
         }
     }
 }
@@ -131,9 +135,10 @@ impl Proxy {
     }
 
     
-    async fn process_socks5(flag: Flag, inbound: &mut TcpStream, buffer: Option<BinaryMut>) -> ProxyResult<()> {
+    async fn process_socks5(username: Option<String>, password: Option<String>, flag: Flag, inbound: &mut TcpStream, buffer: Option<BinaryMut>) -> ProxyResult<()> {
         if flag.contains(Flag::SOCKS5) {
-            ProxySocks5::process(inbound, buffer).await
+            let mut sock = ProxySocks5::new(username, password);
+            sock.process(inbound, buffer).await
         } else {
             Err(ProxyError::Continue(buffer))
         }
@@ -146,6 +151,8 @@ impl Proxy {
         let listener = TcpListener::bind(addr).await?;
         let flag = self.flag;
         while let Ok((mut inbound, _)) = listener.accept().await {
+            let username = self.username.clone();
+            let password = self.password.clone();
             tokio::spawn(async move {
                 let read_buf = match Self::process_http(flag, &mut inbound).await {
                     Ok(()) => {
@@ -154,7 +161,8 @@ impl Proxy {
                     Err(ProxyError::Continue(buf)) => buf,
                     Err(_) => return,
                 };
-                let _read_buf = match Self::process_socks5(flag, &mut inbound, read_buf).await {
+
+                let _read_buf = match Self::process_socks5(username, password, flag, &mut inbound, read_buf).await {
                     Ok(()) => {
                         return;
                     }

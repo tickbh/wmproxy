@@ -1,9 +1,14 @@
+use std::{
+    io,
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6, ToSocketAddrs},
+};
+
 use crate::{ProxyError, ProxyResult};
 use tokio::{
     io::{copy_bidirectional, AsyncReadExt, AsyncWriteExt, ReadBuf},
     net::TcpStream,
 };
-use webparse::{BinaryMut, Buf, BufMut, Method, WebError, HttpError};
+use webparse::{BinaryMut, Buf, BufMut, HttpError, Method, WebError};
 
 pub struct ProxySocks5 {
     username: Option<String>,
@@ -11,14 +16,76 @@ pub struct ProxySocks5 {
 }
 
 impl ProxySocks5 {
-    pub async fn read_head_len(stream: &mut TcpStream, buffer: &mut BinaryMut) -> ProxyResult<()> {
-        let mut size = 257;
+    pub const SOCK_CONNECT: u8 = 0x01u8;
+    pub const SOCK_BIND: u8 = 0x02u8;
+    pub const SOCK_UDP: u8 = 0x03u8;
+
+    pub fn new(username: Option<String>, password: Option<String>) -> Self {
+        Self { username, password }
+    }
+    pub async fn read_head_len(
+        &self,
+        stream: &mut TcpStream,
+        buffer: &mut BinaryMut,
+    ) -> ProxyResult<u8> {
+        let _ = self.read_len(stream, buffer, 2).await;
+        if buffer.get_next() != Some(5) {
+            return Err(ProxyError::SizeNotMatch);
+        }
+        let len = buffer.get_next().unwrap() as usize;
+        let _ = self.read_len(stream, buffer, len).await;
+        // let result = buffer.chunk()[0..len].to_vec();
+        let mut verify = 0;
+        let chunk = buffer.chunk();
+        if self.is_user_password() {
+            if chunk.len() < 2 || chunk[2] == 0 {
+                verify = 0xFF;
+            } else {
+                verify = 2u8;
+            }
+        }
+        buffer.advance(len);
+        return Ok(verify);
+    }
+
+    pub async fn read_verify(
+        &self,
+        stream: &mut TcpStream,
+        buffer: &mut BinaryMut,
+    ) -> ProxyResult<bool> {
+        let _ = self.read_len(stream, buffer, 2).await?;
+        if buffer.get_next() != Some(1) {
+            return Err(ProxyError::ProtocolErr);
+        }
+        let user_len = buffer.get_next().unwrap() as usize;
+        let _ = self.read_len(stream, buffer, user_len).await?;
+        if let Some(user) = &self.username {
+            if user_len == 0 || user.as_bytes() != &buffer.chunk()[0..user_len] {
+                return Ok(false);
+            }
+            buffer.advance(user_len);
+        }
+        let _ = self.read_len(stream, buffer, 1).await?;
+        let pass_len = buffer.get_next().unwrap() as usize;
+        let _ = self.read_len(stream, buffer, pass_len).await?;
+        if let Some(user) = &self.username {
+            if pass_len == 0 || user.as_bytes() != &buffer.chunk()[0..pass_len] {
+                return Ok(false);
+            }
+            buffer.advance(pass_len);
+        }
+        Ok(true)
+    }
+
+    pub async fn read_len(
+        &self,
+        stream: &mut TcpStream,
+        buffer: &mut BinaryMut,
+        size: usize,
+    ) -> ProxyResult<()> {
         buffer.reserve(size);
         loop {
-            if buffer.remaining() > size {
-                return Err(ProxyError::SizeNotMatch);
-            }
-            if buffer.remaining() == size {
+            if buffer.remaining() >= size {
                 return Ok(());
             }
             let n = {
@@ -26,103 +93,126 @@ impl ProxySocks5 {
                 stream.read_buf(&mut buf).await?;
                 buf.filled().len()
             };
-            unsafe {
-                buffer.advance_mut(n);
+            if n == 0 {
+                return Err(ProxyError::IoError(io::Error::new(
+                    io::ErrorKind::Interrupted,
+                    "",
+                )));
             }
-            if buffer.len() > 2 {
-                if buffer.chunk()[0] != 0x05 {
-                    return Err(ProxyError::SizeNotMatch)
-                }
-                size = buffer.chunk()[1] as usize;
-            }
-        }
-    }
-
-    pub async fn read_len(stream: &mut TcpStream, buffer: &mut BinaryMut, size: usize) -> ProxyResult<()> {
-        buffer.reserve(size);
-        loop {
-            if buffer.remaining() > size {
-                return Err(ProxyError::SizeNotMatch);
-            }
-            if buffer.remaining() == size {
-                return Ok(());
-            }
-            let n = {
-                let mut buf = ReadBuf::uninit(buffer.chunk_mut());
-                stream.read_buf(&mut buf).await?;
-                buf.filled().len()
-            };
             unsafe {
                 buffer.advance_mut(n);
             }
         }
     }
 
-    pub async fn process(stream: &mut TcpStream, buffer: Option<BinaryMut>) -> ProxyResult<()> {
+    pub async fn read_addr(
+        &self,
+        stream: &mut TcpStream,
+        buffer: &mut BinaryMut,
+    ) -> ProxyResult<(u8, SocketAddr)> {
+        let _ = self.read_len(stream, buffer, 4).await?;
+        if buffer.get_next() != Some(5) {
+            return Err(ProxyError::ProtocolErr);
+        }
+        let sock = buffer.get_next().unwrap();
+        if buffer.get_next() != Some(0) {
+            return Err(ProxyError::ProtocolErr);
+        }
+        let atyp = buffer.get_next().unwrap();
+        let addr = match atyp {
+            0x01 => {
+                self.read_len(stream, buffer, 6).await?;
+                SocketAddr::new(
+                    IpAddr::V4(Ipv4Addr::new(
+                        buffer.get_u8(),
+                        buffer.get_u8(),
+                        buffer.get_u8(),
+                        buffer.get_u8(),
+                    )),
+                    buffer.get_u16(),
+                )
+            }
+            0x03 => {
+                self.read_len(stream, buffer, 1).await?;
+                let len = buffer.get_u8() as usize;
+                self.read_len(stream, buffer, len + 2).await?;
+                let name = String::from_utf8_lossy(&buffer.chunk()[0..len]).to_string();
+                buffer.advance(len);
+                let port = buffer.get_u16();
+                let domain = format!("{}:{}", name, port);
+                let mut addrs = domain.to_socket_addrs()?;
+                addrs.next().unwrap()
+            }
+            0x04 => {
+                self.read_len(stream, buffer, 18).await?;
+                SocketAddr::new(
+                    IpAddr::V6(Ipv6Addr::new(
+                        buffer.get_u16(),
+                        buffer.get_u16(),
+                        buffer.get_u16(),
+                        buffer.get_u16(),
+                        buffer.get_u16(),
+                        buffer.get_u16(),
+                        buffer.get_u16(),
+                        buffer.get_u16(),
+                    )),
+                    buffer.get_u16(),
+                )
+            }
+            _ => return Err(ProxyError::ProtocolErr),
+        };
+        return Ok((sock, addr));
+    }
+
+    pub async fn process(
+        &mut self,
+        stream: &mut TcpStream,
+        buffer: Option<BinaryMut>,
+    ) -> ProxyResult<()> {
         let mut buffer = buffer.unwrap_or(BinaryMut::new());
-        match Self::read_head_len(stream, &mut buffer).await {
+        let verify = match self.read_head_len(stream, &mut buffer).await {
             Err(ProxyError::SizeNotMatch) => {
                 return Err(ProxyError::Continue(Some(buffer)));
             }
             Err(err) => {
                 return Err(err);
             }
-            Ok(_) => (),
+            Ok(result) => result,
+        };
+
+        let is_verify = {
+            stream.write_all(&[0x05_u8, verify]).await?;
+            if verify == 0xFF {
+                return Err(ProxyError::VerifyFail);
+            }
+            verify == 2
+        };
+
+        if is_verify {
+            let succ = self.read_verify(stream, &mut buffer).await?;
+            if !succ {
+                stream.write_all(&[0x01_u8, 0x01]).await?;
+                return Err(ProxyError::VerifyFail);
+            } else {
+                stream.write_all(&[0x01_u8, 0x00]).await?;
+            }
         }
 
-        stream.write_all(&[0x05_u8, 0x00_u8]).await?;
-
-
-        // let mut outbound;
-        // let mut request;
-        // let mut buffer = BinaryMut::new();
-        // loop {
-        //     let size = {
-        //         let mut buf = ReadBuf::uninit(buffer.chunk_mut());
-        //         stream.read_buf(&mut buf).await?;
-        //         buf.filled().len()
-        //     };
-
-        //     if size == 0 {
-        //         return Err(ProxyError::Extension("empty"));
-        //     }
-        //     unsafe {
-        //         buffer.advance_mut(size);
-        //     }
-        //     request = webparse::Request::new();
-        //     match request.parse_buffer(&mut buffer.clone()) {
-        //         Ok(_) => {
-        //             match request.get_connect_url() {
-        //                 Some(host) => {
-        //                     outbound = TcpStream::connect(host).await?;
-        //                     break;
-        //                 }
-        //                 None => {
-        //                     if !request.is_partial() {
-        //                         return Err(ProxyError::UnknowHost);
-        //                     }
-        //                 }
-        //             }
-        //         },
-        //         Err(WebError::Http(HttpError::Partial)) => {
-        //             continue;
-        //         },
-        //         Err(_) => {
-        //             return Err(ProxyError::Continue(buffer));
-        //         }
-        //     }
-        // }
-
-        // match request.method() {
-        //     &Method::Connect => {
-        //         println!("connect = {:?}", String::from_utf8_lossy(buffer.chunk()));
-        //         stream.write_all(b"HTTP/1.1 200 OK\r\n\r\n").await?;
-        //     }
-        //     _ => {
-        //         outbound.write_all(buffer.chunk()).await?;
-        //     }
-        // }
-        // let _ = copy_bidirectional(stream, &mut outbound).await?;
+        let (_sock, addr) = self.read_addr(stream, &mut buffer).await?;
+        println!("connecting {:?}", addr);
+        let mut target = match TcpStream::connect(addr.clone()).await {
+            Ok(tcp) => tcp,
+            Err(_err) => {
+                stream.write_all(&[5, 1, 0, 1, 0, 0, 0, 0, 0, 0]).await?;
+                return Err(ProxyError::Extension("Can't connect tcp"));
+            },
+        };
+        
+        let _ = copy_bidirectional(stream, &mut target).await?;
         Ok(())
+    }
+
+    pub fn is_user_password(&self) -> bool {
+        self.username.is_some() && self.password.is_some()
     }
 }
