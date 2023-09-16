@@ -51,7 +51,7 @@ impl ProxyHttp {
 
         match request.method() {
             &Method::Connect => {
-                println!("connect = {:?}", String::from_utf8_lossy(buffer.chunk()));
+                log::trace!("https connect {:?}", String::from_utf8_lossy(buffer.chunk()));
                 inbound.write_all(b"HTTP/1.1 200 OK\r\n\r\n").await?;
             }
             _ => {

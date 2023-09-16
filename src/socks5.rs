@@ -23,6 +23,8 @@ impl ProxySocks5 {
     pub fn new(username: Option<String>, password: Option<String>) -> Self {
         Self { username, password }
     }
+
+    /// 读取的信息, 并返回验证方法, 如果没有用户密码则表示无需认证
     pub async fn read_head_len(
         &self,
         stream: &mut TcpStream,
@@ -47,6 +49,7 @@ impl ProxySocks5 {
         return Ok(verify);
     }
 
+    /// 尝试是否验证成功
     pub async fn read_verify(
         &self,
         stream: &mut TcpStream,
@@ -76,6 +79,7 @@ impl ProxySocks5 {
         Ok(true)
     }
 
+    /// 读取至少长度为size的大小的字节数, 如果足够则返回Ok(())
     pub async fn read_len(
         &self,
         stream: &mut TcpStream,
@@ -104,6 +108,7 @@ impl ProxySocks5 {
         }
     }
 
+    /// 读取远程的链接地址
     pub async fn read_addr(
         &self,
         stream: &mut TcpStream,
@@ -168,7 +173,6 @@ impl ProxySocks5 {
         stream: &mut TcpStream,
         buffer: Option<BinaryMut>,
     ) -> ProxyResult<()> {
-        // println!("socks5 process {:?}:{:?}", self.username, self.password);
         let mut buffer = buffer.unwrap_or(BinaryMut::new());
         let verify = match self.read_head_len(stream, &mut buffer).await {
             Err(ProxyError::SizeNotMatch) => {
@@ -199,7 +203,6 @@ impl ProxySocks5 {
         }
 
         let (_sock, addr) = self.read_addr(stream, &mut buffer).await?;
-        println!("connecting {:?}", addr);
         let mut target = match TcpStream::connect(addr.clone()).await {
             Ok(tcp) => {
                 stream.write_all(&[5, 0, 0, 1, 0, 0, 0, 0, 0, 0]).await?;

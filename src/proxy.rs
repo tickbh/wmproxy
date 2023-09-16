@@ -137,8 +137,6 @@ impl Proxy {
         let listen_host = command.get_str("b").unwrap();
         let user = command.get_str("user");
         let pass = command.get_str("pass");
-        println!("user = {:?}", user);
-        println!("pass = {:?}", pass);
 
         let mut builder = Self::builder().bind_port(listen_port);
         println!("listener bind {} {}", listen_host, listen_port);
@@ -203,7 +201,7 @@ impl Proxy {
                     }
                     Err(ProxyError::Continue(buf)) => buf,
                     Err(err) => {
-                        println!("err = {:?}", err);
+                        log::trace!("socks5 error {:?}", err);
                         return
                     },
                 };

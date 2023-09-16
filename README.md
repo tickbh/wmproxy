@@ -28,10 +28,9 @@ wmproxy
 # 设置账号密码
 wmproxy -p 8090 -b 0.0.0.0 --user wmproxy --pass wmproxy
 
+# 其它指令
 wmproxy --help
 ```
-
-
 
 # 🚥 Roadmap
 
