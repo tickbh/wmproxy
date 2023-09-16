@@ -115,16 +115,30 @@ impl Proxy {
                 "可兼容的方法, 如http https socks5",
                 None,
             )
-            .option_int("-p, --port [value]", "监听端口", Some(8090))
+            .option_int("-p, --port value", "监听端口", Some(8090))
             .option_str(
-                "-b, --bind [value]",
+                "-b, --bind value",
                 "监听地址",
-                Some("0.0.0.0".to_string()),
+                Some("127.0.0.1".to_string()),
+            )
+            .option_str(
+                "--user value",
+                "auth的用户名",
+                None,
+            )
+            .option_str(
+                "--pass value",
+                "auth的密码",
+                None,
             )
             .parse_env_or_exit();
 
         let listen_port: u16 = command.get_int("p").unwrap() as u16;
         let listen_host = command.get_str("b").unwrap();
+        let user = command.get_str("user");
+        let pass = command.get_str("pass");
+        println!("user = {:?}", user);
+        println!("pass = {:?}", pass);
 
         let mut builder = Self::builder().bind_port(listen_port);
         println!("listener bind {} {}", listen_host, listen_port);
@@ -137,7 +151,12 @@ impl Proxy {
             }
         };
         builder = builder.flag(Flag::HTTP | Flag::HTTPS | Flag::SOCKS5);
-        builder = builder.username("aa".to_string()).password("bb".to_string());
+        if user.is_some() {
+            builder = builder.username(user.unwrap());
+        }
+        if pass.is_some() {
+            builder = builder.password(pass.unwrap());
+        }
         builder.inner
     }
 
@@ -183,7 +202,10 @@ impl Proxy {
                         return;
                     }
                     Err(ProxyError::Continue(buf)) => buf,
-                    Err(_) => return,
+                    Err(err) => {
+                        println!("err = {:?}", err);
+                        return
+                    },
                 };
             });
         }
