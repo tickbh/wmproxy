@@ -1,11 +1,5 @@
 // #![deny(warnings)]
 
-
-
-
-
-
-
 use wmproxy::{Proxy, ProxyResult};
 
 async fn run_main() -> ProxyResult<()> {

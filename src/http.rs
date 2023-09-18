@@ -26,6 +26,9 @@ impl ProxyHttp {
                 buffer.advance_mut(size);
             }
             request = webparse::Request::new();
+            // 通过该方法解析标头是否合法, 若是partial(部分)则继续读数据
+            // 若解析失败, 则表示非http协议能处理, 则抛出错误
+            // 此处clone为浅拷贝，不确定是否一定能解析成功，不能影响偏移
             match request.parse_buffer(&mut buffer.clone()) {
                 Ok(_) => match request.get_connect_url() {
                     Some(host) => {
@@ -34,7 +37,7 @@ impl ProxyHttp {
                     }
                     None => {
                         if !request.is_partial() {
-                            return Err(ProxyError::UnknowHost);
+                            return Err(ProxyError::UnknownHost);
                         }
                     }
                 },

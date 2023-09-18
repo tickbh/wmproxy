@@ -440,8 +440,8 @@ impl ProxySocks5 {
         inbound: UdpSocket,
     ) -> ProxyResult<()> {
         let outbound = UdpSocket::bind("0.0.0.0:0").await?;
-        let (sender, _) = channel::<()>(1);
-        let req_fut = Self::udp_handle_request(&inbound, &outbound, sender.subscribe());
+        let (sender, receiver) = channel::<()>(1);
+        let req_fut = Self::udp_handle_request(&inbound, &outbound, receiver);
         let res_fut = Self::udp_handle_response(&inbound, &outbound, sender.subscribe());
         let tcp_fut = Self::upd_handle_tcp_block(stream, sender);
         match try_join!(tcp_fut, req_fut, res_fut) {

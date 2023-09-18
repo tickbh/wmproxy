@@ -7,9 +7,10 @@ use webparse::{WebError, BinaryMut};
 pub enum ProxyError {
     IoError(io::Error),
     WebError(WebError),
+    /// 该错误发生协议不可被解析,则尝试下一个协议
     Continue((Option<BinaryMut>, TcpStream)),
     VerifyFail,
-    UnknowHost,
+    UnknownHost,
     SizeNotMatch,
     ProtErr,
     ProtNoSupport,
