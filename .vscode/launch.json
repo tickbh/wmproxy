@@ -38,7 +38,7 @@
                     "kind": "bin"
                 }
             },
-            "args": ["--user", "aaa", "--pass", "bbb", "-b", "0.0.0.0", "--udp", "192.168.179.133"],
+            "args": ["--user", "aaa", "--pass", "bbb", "-b", "0.0.0.0", "--udp", "127.0.0.1"],
             "cwd": "${workspaceFolder}"
         },
         {

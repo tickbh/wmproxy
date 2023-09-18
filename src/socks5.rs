@@ -5,8 +5,10 @@ use std::{
 
 use crate::{ProxyError, ProxyResult};
 use tokio::{
-    io::{copy_bidirectional, AsyncReadExt, AsyncWriteExt, Interest, ReadBuf, AsyncRead},
-    net::{TcpStream, UdpSocket}, try_join,
+    io::{copy_bidirectional, AsyncRead, AsyncReadExt, AsyncWriteExt, Interest, ReadBuf},
+    net::{TcpStream, UdpSocket},
+    sync::broadcast::{channel, Receiver, Sender},
+    try_join,
 };
 use webparse::{BinaryMut, Buf, BufMut, HttpError, Method, WebError};
 
@@ -25,9 +27,12 @@ pub const SOCKS5_ADDR_TYPE_IPV4: u8 = 0x01;
 pub const SOCKS5_ADDR_TYPE_DOMAIN: u8 = 0x03;
 pub const SOCKS5_ADDR_TYPE_IPV6: u8 = 0x04;
 
-
 impl ProxySocks5 {
-    pub fn new(username: Option<String>, password: Option<String>, bind_ip: Option<IpAddr>) -> Self {
+    pub fn new(
+        username: Option<String>,
+        password: Option<String>,
+        bind_ip: Option<IpAddr>,
+    ) -> Self {
         Self {
             username,
             password,
@@ -36,12 +41,10 @@ impl ProxySocks5 {
     }
 
     /// 读取的信息, 并返回验证方法, 如果没有用户密码则表示无需认证
-    pub async fn read_head_len<T>(
-        &self,
-        stream: &mut T,
-        buffer: &mut BinaryMut,
-    ) -> ProxyResult<u8>
-    where T: AsyncRead + Unpin {
+    pub async fn read_head_len<T>(&self, stream: &mut T, buffer: &mut BinaryMut) -> ProxyResult<u8>
+    where
+        T: AsyncRead + Unpin,
+    {
         let _ = ProxySocks5::read_len(stream, buffer, 2).await;
         if buffer.get_u8() != SOCKS5_VERSION {
             return Err(ProxyError::SizeNotMatch);
@@ -62,12 +65,10 @@ impl ProxySocks5 {
     }
 
     /// 尝试是否验证成功
-    pub async fn read_verify<T>(
-        &self,
-        stream: &mut T,
-        buffer: &mut BinaryMut,
-    ) -> ProxyResult<bool>
-    where T: AsyncRead + Unpin {
+    pub async fn read_verify<T>(&self, stream: &mut T, buffer: &mut BinaryMut) -> ProxyResult<bool>
+    where
+        T: AsyncRead + Unpin,
+    {
         let _ = ProxySocks5::read_len(stream, buffer, 2).await?;
         if buffer.get_u8() != 1 {
             return Err(ProxyError::ProtErr);
@@ -93,12 +94,10 @@ impl ProxySocks5 {
     }
 
     /// 读取至少长度为size的大小的字节数, 如果足够则返回Ok(())
-    pub async fn read_len<T>(
-        stream: &mut T,
-        buffer: &mut BinaryMut,
-        size: usize,
-    ) -> ProxyResult<()>
-    where T: AsyncRead + Unpin {
+    pub async fn read_len<T>(stream: &mut T, buffer: &mut BinaryMut, size: usize) -> ProxyResult<()>
+    where
+        T: AsyncRead + Unpin,
+    {
         buffer.reserve(size);
         loop {
             if buffer.remaining() >= size {
@@ -127,11 +126,10 @@ impl ProxySocks5 {
     /// |  1   | Variable |    2     |
     /// +------+----------+----------+
     /// 读取通用地址格式，包含V4/V6/Doamin三种格式
-    pub async fn read_addr<T>(
-        stream: &mut T,
-        buffer: &mut BinaryMut,
-    ) -> ProxyResult<SocketAddr>
-    where T: AsyncRead + Unpin {
+    pub async fn read_addr<T>(stream: &mut T, buffer: &mut BinaryMut) -> ProxyResult<SocketAddr>
+    where
+        T: AsyncRead + Unpin,
+    {
         let atyp = buffer.get_u8();
         let addr = match atyp {
             SOCKS5_ADDR_TYPE_IPV4 => {
@@ -178,7 +176,6 @@ impl ProxySocks5 {
         Ok(addr)
     }
 
-    
     /// +------+----------+----------+
     /// | ATYP | DST.ADDR | DST.PORT |
     /// +------+----------+----------+
@@ -205,7 +202,6 @@ impl ProxySocks5 {
         Ok(())
     }
 
-
     /// +----+-----+-------+------+----------+----------+
     /// |VER | CMD |  RSV  | ATYP | DST.ADDR | DST.PORT |
     /// +----+-----+-------+------+----------+----------+
@@ -215,8 +211,10 @@ impl ProxySocks5 {
     pub async fn tcp_read_request<T>(
         stream: &mut T,
         buffer: &mut BinaryMut,
-    ) -> ProxyResult<(u8, SocketAddr)> 
-    where T: AsyncRead + Unpin{
+    ) -> ProxyResult<(u8, SocketAddr)>
+    where
+        T: AsyncRead + Unpin,
+    {
         let _ = ProxySocks5::read_len(stream, buffer, 4).await?;
         if buffer.get_u8() != SOCKS5_VERSION {
             return Err(ProxyError::ProtErr);
@@ -295,7 +293,7 @@ impl ProxySocks5 {
                         .unwrap_or(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))),
                 )
                 .await?;
-                return Err(ProxyError::ProtErr);
+                return Ok(());
             }
             _ => {
                 return Err(ProxyError::ProtErr);
@@ -308,7 +306,6 @@ impl ProxySocks5 {
         self.username.is_some() && self.password.is_some()
     }
 
-
     /// +----+-----+-------+------+----------+----------+
     /// |VER | REP |  RSV  | ATYP | BND.ADDR | BND.PORT |
     /// +----+-----+-------+------+----------+----------+
@@ -320,7 +317,6 @@ impl ProxySocks5 {
         succ: bool,
         addr: SocketAddr,
     ) -> ProxyResult<()> {
-        println!("addr == {:?}", addr);
         let mut buf = BinaryMut::with_capacity(100);
         buf.put_slice(&vec![SOCKS5_VERSION, if succ { 0 } else { 1 }, 0x00]);
         Self::encode_socket_addr(&mut buf, &addr)?;
@@ -335,14 +331,9 @@ impl ProxySocks5 {
         proxy_addr: SocketAddr,
         bind_ip: IpAddr,
     ) -> ProxyResult<()> {
-        let peer_sock = UdpSocket::bind("[::]:0").await?;
-        ProxySocks5::tcp_write_reply(
-            &mut stream,
-            true,
-            SocketAddr::new(bind_ip, peer_sock.local_addr()?.port()),
-        )
-        .await?;
-
+        let peer_sock = UdpSocket::bind("0.0.0.0:0").await?;
+        let port = peer_sock.local_addr()?.port();
+        ProxySocks5::tcp_write_reply(&mut stream, true, SocketAddr::new(bind_ip, port)).await?;
         Self::udp_transfer(stream, proxy_addr, peer_sock).await?;
         Ok(())
     }
@@ -361,56 +352,73 @@ impl ProxySocks5 {
         let flag = buf.get_u8();
         let array: Vec<u8> = vec![];
         let addr = ProxySocks5::read_addr(&mut &array[..], buf).await?;
-        return Ok((flag, addr))
+        return Ok((flag, addr));
     }
 
-    async fn upd_handle_tcp_block(mut stream: TcpStream) -> ProxyResult<()> {
+    async fn upd_handle_tcp_block(mut stream: TcpStream, sender: Sender<()>) -> ProxyResult<()> {
         let mut buf = [0u8; 100];
         loop {
             let n = stream.read(&mut buf).await?;
             if n == 0 {
-                println!("zzzzzzzzzzzzzzzzzzzzzz {:?}", n);
-                return Ok(())
+                let _ = sender.send(());
+                return Ok(());
             }
         }
     }
 
-    async fn udp_handle_request(inbound: &UdpSocket, outbound: &UdpSocket) -> ProxyResult<()> {
+    async fn udp_handle_request(
+        inbound: &UdpSocket,
+        outbound: &UdpSocket,
+        mut receiver: Receiver<()>,
+    ) -> ProxyResult<()> {
         let mut buf = BinaryMut::with_capacity(0x10000);
         loop {
-            println!("aaaaaaaaaaaaaaaa ??? ");
             buf.clear();
             let (size, client_addr) = {
                 let mut buf = ReadBuf::uninit(buf.chunk_mut());
-                let (size, client_addr) = inbound.recv_buf_from(&mut buf).await?;
-                (size, client_addr)
+                tokio::select! {
+                    r = inbound.recv_buf_from(&mut buf) => {
+                        r?
+                    },
+                    _ = receiver.recv() => {
+                        return Ok(());
+                    }
+                }
             };
-            println!("recv message {:?}", client_addr);
             inbound.connect(client_addr).await?;
             unsafe {
                 buf.advance_mut(size);
             }
 
-            println!("recv data {:?}", buf.chunk());
-
             let (flag, addr) = Self::udp_parse_request(&mut buf).await?;
             if flag != 0 {
-                return Ok(())
+                return Ok(());
             }
 
             outbound.send_to(buf.chunk(), addr).await?;
-            println!("aaaaaaaaaaaaa");
         }
     }
 
-    async fn udp_handle_response(inbound: &UdpSocket, outbound: &UdpSocket) -> ProxyResult<()> {
+    async fn udp_handle_response(
+        inbound: &UdpSocket,
+        outbound: &UdpSocket,
+        mut receiver: Receiver<()>,
+    ) -> ProxyResult<()> {
         let mut buf = BinaryMut::with_capacity(0x10000);
         loop {
             buf.clear();
-            println!("bbbbbbbbbbbbbbbb ??? ");
             let (size, client_addr) = {
-                let mut buf = ReadBuf::uninit(buf.chunk_mut());
-                let (size, client_addr) = outbound.recv_buf_from(&mut buf).await?;
+                let (size, client_addr) = {
+                    let mut buf = ReadBuf::uninit(buf.chunk_mut());
+                    tokio::select! {
+                        r = outbound.recv_buf_from(&mut buf) => {
+                            r?
+                        },
+                        _ = receiver.recv() => {
+                            return Ok(());
+                        }
+                    }
+                };
                 (size, client_addr)
             };
             unsafe {
@@ -423,32 +431,23 @@ impl ProxySocks5 {
             buffer.put_slice(buf.chunk());
 
             inbound.send(buffer.chunk()).await?;
-            println!("bbbbbbbbbbbbbbbb");
         }
     }
 
     async fn udp_transfer(
         stream: TcpStream,
         _proxy_addr: SocketAddr,
-        inbound: UdpSocket) -> ProxyResult<()> {
-        let outbound = UdpSocket::bind("[::]:0").await?;
-        println!("outbound = {:?}", outbound);
-
-        let tcp_fut = Self::upd_handle_tcp_block(stream);
-        let req_fut = Self::udp_handle_request(&inbound, &outbound);
-        let res_fut = Self::udp_handle_response(&inbound, &outbound);
-        match try_join!(req_fut, res_fut) {
-            Ok(_) => {
-                println!("!!!!!!!!!!!!!!!!!!!");
-            }
-            Err(error) => {
-                
-                println!("!!!!!!!!!!!!!!!!!!! {:?}", error);
-                return Err(error)
-            },
+        inbound: UdpSocket,
+    ) -> ProxyResult<()> {
+        let outbound = UdpSocket::bind("0.0.0.0:0").await?;
+        let (sender, _) = channel::<()>(1);
+        let req_fut = Self::udp_handle_request(&inbound, &outbound, sender.subscribe());
+        let res_fut = Self::udp_handle_response(&inbound, &outbound, sender.subscribe());
+        let tcp_fut = Self::upd_handle_tcp_block(stream, sender);
+        match try_join!(tcp_fut, req_fut, res_fut) {
+            Ok(_) => {}
+            Err(error) => return Err(error),
         }
-
-        println!("ddddddddddddddddddddd");
         Ok(())
     }
 }
