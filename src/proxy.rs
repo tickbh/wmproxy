@@ -193,7 +193,7 @@ impl Proxy {
             .map_err(|_| ProxyError::Extension("parse addr error"))?;
         let listener = TcpListener::bind(addr).await?;
         let flag = self.flag;
-        while let Ok((mut inbound, _)) = listener.accept().await {
+        while let Ok((inbound, _)) = listener.accept().await {
             let username = self.username.clone();
             let password = self.password.clone();
             let udp_bind = self.udp_bind.clone();

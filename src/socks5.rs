@@ -1,16 +1,16 @@
 use std::{
     io,
-    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6, ToSocketAddrs},
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, ToSocketAddrs},
 };
 
 use crate::{ProxyError, ProxyResult};
 use tokio::{
-    io::{copy_bidirectional, AsyncRead, AsyncReadExt, AsyncWriteExt, Interest, ReadBuf},
+    io::{copy_bidirectional, AsyncRead, AsyncReadExt, AsyncWriteExt, ReadBuf},
     net::{TcpStream, UdpSocket},
     sync::broadcast::{channel, Receiver, Sender},
     try_join,
 };
-use webparse::{BinaryMut, Buf, BufMut, HttpError, Method, WebError};
+use webparse::{BinaryMut, Buf, BufMut};
 
 pub struct ProxySocks5 {
     username: Option<String>,
