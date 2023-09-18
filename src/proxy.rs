@@ -1,4 +1,4 @@
-use std::net::SocketAddr;
+use std::net::{SocketAddr, IpAddr};
 
 use commander::Commander;
 use tokio::net::{TcpListener, TcpStream};
@@ -53,16 +53,23 @@ impl Builder {
         })
     }
 
-    pub fn username(self, username: String) -> Builder {
+    pub fn username(self, username: Option<String>) -> Builder {
         self.and_then(|mut proxy| {
-            proxy.username = Some(username);
+            proxy.username = username;
             Ok(proxy)
         })
     }
     
-    pub fn password(self, password: String) -> Builder {
+    pub fn password(self, password: Option<String>) -> Builder {
         self.and_then(|mut proxy| {
-            proxy.password = Some(password);
+            proxy.password = password;
+            Ok(proxy)
+        })
+    }
+
+    pub fn udp_bind(self, udp_bind: Option<IpAddr>) -> Builder {
+        self.and_then(|mut proxy| {
+            proxy.udp_bind = udp_bind;
             Ok(proxy)
         })
     }
@@ -85,6 +92,7 @@ pub struct Proxy {
     server: Option<SocketAddr>,
     username: Option<String>,
     password: Option<String>,
+    udp_bind: Option<IpAddr>,
 }
 
 impl Default for Proxy {
@@ -96,6 +104,7 @@ impl Default for Proxy {
             server: None,
             username: None,
             password: None,
+            udp_bind: None,
         }
     }
 }
@@ -130,14 +139,15 @@ impl Proxy {
                 "--pass value",
                 "auth的密码",
                 None,
+            ).option_str(
+                "--udp value",
+                "udp的监听地址,如127.0.0.1,socks5的udp协议用",
+                None,
             )
             .parse_env_or_exit();
 
         let listen_port: u16 = command.get_int("p").unwrap() as u16;
         let listen_host = command.get_str("b").unwrap();
-        let user = command.get_str("user");
-        let pass = command.get_str("pass");
-
         let mut builder = Self::builder().bind_port(listen_port);
         println!("listener bind {} {}", listen_host, listen_port);
         match format!("{}:{}", listen_host, listen_port).parse::<SocketAddr>() {
@@ -149,30 +159,31 @@ impl Proxy {
             }
         };
         builder = builder.flag(Flag::HTTP | Flag::HTTPS | Flag::SOCKS5);
-        if user.is_some() {
-            builder = builder.username(user.unwrap());
-        }
-        if pass.is_some() {
-            builder = builder.password(pass.unwrap());
-        }
+        builder = builder.username(command.get_str("user"));
+        builder = builder.password(command.get_str("pass"));
+        
+        if let Some(udp) = command.get_str("udp") {
+            builder = builder.udp_bind(udp.parse::<IpAddr>().ok());
+        };
+
         builder.inner
     }
 
-    async fn process_http(flag: Flag, inbound: &mut TcpStream) -> ProxyResult<()> {
+    async fn process_http(flag: Flag, inbound: TcpStream) -> ProxyResult<()> {
         if flag.contains(Flag::HTTP) || flag.contains(Flag::HTTPS) {
             ProxyHttp::process(inbound).await
         } else {
-            Err(ProxyError::Continue(None))
+            Err(ProxyError::Continue((None, inbound)))
         }
     }
 
     
-    async fn process_socks5(username: Option<String>, password: Option<String>, flag: Flag, inbound: &mut TcpStream, buffer: Option<BinaryMut>) -> ProxyResult<()> {
+    async fn process_socks5(username: Option<String>, password: Option<String>, udp_bind: Option<IpAddr>, flag: Flag, inbound: TcpStream, buffer: Option<BinaryMut>) -> ProxyResult<()> {
         if flag.contains(Flag::SOCKS5) {
-            let mut sock = ProxySocks5::new(username, password);
+            let mut sock = ProxySocks5::new(username, password, udp_bind);
             sock.process(inbound, buffer).await
         } else {
-            Err(ProxyError::Continue(buffer))
+            Err(ProxyError::Continue((buffer, inbound)))
         }
     }
 
@@ -185,9 +196,10 @@ impl Proxy {
         while let Ok((mut inbound, _)) = listener.accept().await {
             let username = self.username.clone();
             let password = self.password.clone();
+            let udp_bind = self.udp_bind.clone();
             tokio::spawn(async move {
                 // tcp的连接被移动到该协程中，我们只要专注的处理该stream即可
-                let read_buf = match Self::process_http(flag, &mut inbound).await {
+                let (read_buf, inbound) = match Self::process_http(flag, inbound).await {
                     Ok(()) => {
                         return;
                     }
@@ -195,13 +207,14 @@ impl Proxy {
                     Err(_) => return,
                 };
 
-                let _read_buf = match Self::process_socks5(username, password, flag, &mut inbound, read_buf).await {
+                let _read_buf = match Self::process_socks5(username, password, udp_bind, flag, inbound, read_buf).await {
                     Ok(()) => {
                         return;
                     }
                     Err(ProxyError::Continue(buf)) => buf,
                     Err(err) => {
                         log::trace!("socks5 error {:?}", err);
+                        println!("socks5 error {:?}", err);
                         return
                     },
                 };

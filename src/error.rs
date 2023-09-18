@@ -1,16 +1,18 @@
 use std::io;
 
+use tokio::net::TcpStream;
 use webparse::{WebError, BinaryMut};
 
 #[derive(Debug)]
 pub enum ProxyError {
     IoError(io::Error),
     WebError(WebError),
-    Continue(Option<BinaryMut>),
+    Continue((Option<BinaryMut>, TcpStream)),
     VerifyFail,
     UnknowHost,
     SizeNotMatch,
-    ProtocolErr,
+    ProtErr,
+    ProtNoSupport,
     Extension(&'static str)
 }
 

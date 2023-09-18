@@ -35,6 +35,7 @@ forever-rs = { version = "0.1.0" }
 log = "0.4.19"
 
 bitflags="2.4"
+# webparse = { version = "0.1.2"}
 
 [dependencies.webparse]
 path = "../webparse"
