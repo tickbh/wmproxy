@@ -288,7 +288,6 @@ impl ProxySocks5 {
                 }
                 Self::udp_execute_assoc(
                     stream,
-                    addr,
                     self.bind_ip
                         .unwrap_or(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))),
                 )
@@ -324,17 +323,18 @@ impl ProxySocks5 {
         Ok(())
     }
 
-    /// CMD udp
+    /// UDP 关联请求用于在UDP中继进程内建立关联以处理UDP数据报。
+    /// DST.ADDR和DST.PORT字段包含客户端期望用于发送UDP数据报的地址和端口。
+    /// 服务器可以使用此信息来限制对关联的访问。如果客户端在UDP 关联请求时没有掌握此信息，
+    /// 客户端必须使用端口号和地址都为零的地址。
+    /// UDP关联会在随着的TCP连接终止时终止。
+    /// 在UDP 关联请求的回复中，BND.PORT和BND.ADDR字段指示客户端必须发送UDP请求消息以进行中继的端口号/地址。
     /// https://datatracker.ietf.org/doc/html/rfc1928#section-7
-    pub async fn udp_execute_assoc(
-        mut stream: TcpStream,
-        proxy_addr: SocketAddr,
-        bind_ip: IpAddr,
-    ) -> ProxyResult<()> {
+    pub async fn udp_execute_assoc(mut stream: TcpStream, bind_ip: IpAddr) -> ProxyResult<()> {
         let peer_sock = UdpSocket::bind("0.0.0.0:0").await?;
         let port = peer_sock.local_addr()?.port();
         ProxySocks5::tcp_write_reply(&mut stream, true, SocketAddr::new(bind_ip, port)).await?;
-        Self::udp_transfer(stream, proxy_addr, peer_sock).await?;
+        Self::udp_transfer(stream, peer_sock).await?;
         Ok(())
     }
 
@@ -355,10 +355,17 @@ impl ProxySocks5 {
         return Ok((flag, addr));
     }
 
-    async fn upd_handle_tcp_block(mut stream: TcpStream, sender: Sender<()>) -> ProxyResult<()> {
+    async fn upd_handle_tcp_block(mut stream: TcpStream, mut receiver: Receiver<()>, sender: Sender<()>) -> ProxyResult<()> {
         let mut buf = [0u8; 100];
         loop {
-            let n = stream.read(&mut buf).await?;
+            let n = tokio::select! {
+                r = stream.read(&mut buf) => {
+                    r?
+                },
+                _ = receiver.recv() => {
+                    return Ok(());
+                }
+            };
             if n == 0 {
                 let _ = sender.send(());
                 return Ok(());
@@ -366,6 +373,7 @@ impl ProxySocks5 {
         }
     }
 
+    /// 处理收到客户端的消息, 解析发送到远程
     async fn udp_handle_request(
         inbound: &UdpSocket,
         outbound: &UdpSocket,
@@ -385,10 +393,11 @@ impl ProxySocks5 {
                     }
                 }
             };
-            inbound.connect(client_addr).await?;
             unsafe {
                 buf.advance_mut(size);
             }
+            // 代理对内的端口只会跟客户端的通讯, 所以建立connect
+            inbound.connect(client_addr).await?;
 
             let (flag, addr) = Self::udp_parse_request(&mut buf).await?;
             if flag != 0 {
@@ -399,6 +408,7 @@ impl ProxySocks5 {
         }
     }
 
+    /// 处理收到远程的消息, 添加头发送到客户端
     async fn udp_handle_response(
         inbound: &UdpSocket,
         outbound: &UdpSocket,
@@ -430,23 +440,25 @@ impl ProxySocks5 {
             ProxySocks5::encode_socket_addr(&mut buffer, &client_addr)?;
             buffer.put_slice(buf.chunk());
 
+            // 因为已经建立了绑定, 所以直接发送
             inbound.send(buffer.chunk()).await?;
         }
     }
 
-    async fn udp_transfer(
-        stream: TcpStream,
-        _proxy_addr: SocketAddr,
-        inbound: UdpSocket,
-    ) -> ProxyResult<()> {
+    async fn udp_transfer(stream: TcpStream, inbound: UdpSocket) -> ProxyResult<()> {
         let outbound = UdpSocket::bind("0.0.0.0:0").await?;
+        // 使tcp断开的时候通知udp结束关联,结束处理函数
         let (sender, receiver) = channel::<()>(1);
         let req_fut = Self::udp_handle_request(&inbound, &outbound, receiver);
         let res_fut = Self::udp_handle_response(&inbound, &outbound, sender.subscribe());
-        let tcp_fut = Self::upd_handle_tcp_block(stream, sender);
+        let tcp_fut = Self::upd_handle_tcp_block(stream, sender.subscribe(), sender.clone());
         match try_join!(tcp_fut, req_fut, res_fut) {
             Ok(_) => {}
-            Err(error) => return Err(error),
+            Err(error) => {
+                // 发生错误时不确定是哪个处理函数出错, 通知其它的停止
+                let _ = sender.send(());
+                return Err(error)
+            }
         }
         Ok(())
     }
