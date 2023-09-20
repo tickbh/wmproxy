@@ -302,11 +302,42 @@ KAGn9FipIhtW68gMBH9OR+2e2lcY24IUrTJ6l47jrK3aq1Izl0SSQqobdqX2hSyx
 KSiBV2ZVIpKHuxCtgp4VuNacoVJ9aDHIRZ87UdCB82Trui7oao8B5D7DDl89RqQs
 DawEK+lxC9RRlhv6thcVWle8oNX3r0FrfTDcmLm2NhWTOi894QLyDBj7pQ8hKXE=
 -----END CERTIFICATE-----
+-----BEGIN CERTIFICATE-----
+MIIEqjCCA5KgAwIBAgIQDeD/te5iy2EQn2CMnO1e0zANBgkqhkiG9w0BAQsFADBh
+MQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYDVQQLExB3
+d3cuZGlnaWNlcnQuY29tMSAwHgYDVQQDExdEaWdpQ2VydCBHbG9iYWwgUm9vdCBH
+MjAeFw0xNzExMjcxMjQ2NDBaFw0yNzExMjcxMjQ2NDBaMG4xCzAJBgNVBAYTAlVT
+MRUwEwYDVQQKEwxEaWdpQ2VydCBJbmMxGTAXBgNVBAsTEHd3dy5kaWdpY2VydC5j
+b20xLTArBgNVBAMTJEVuY3J5cHRpb24gRXZlcnl3aGVyZSBEViBUTFMgQ0EgLSBH
+MjCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAO8Uf46i/nr7pkgTDqnE
+eSIfCFqvPnUq3aF1tMJ5hh9MnO6Lmt5UdHfBGwC9Si+XjK12cjZgxObsL6Rg1njv
+NhAMJ4JunN0JGGRJGSevbJsA3sc68nbPQzuKp5Jc8vpryp2mts38pSCXorPR+sch
+QisKA7OSQ1MjcFN0d7tbrceWFNbzgL2csJVQeogOBGSe/KZEIZw6gXLKeFe7mupn
+NYJROi2iC11+HuF79iAttMc32Cv6UOxixY/3ZV+LzpLnklFq98XORgwkIJL1HuvP
+ha8yvb+W6JislZJL+HLFtidoxmI7Qm3ZyIV66W533DsGFimFJkz3y0GeHWuSVMbI
+lfsCAwEAAaOCAU8wggFLMB0GA1UdDgQWBBR435GQX+7erPbFdevVTFVT7yRKtjAf
+BgNVHSMEGDAWgBROIlQgGJXm427mD/r6uRLtBhePOTAOBgNVHQ8BAf8EBAMCAYYw
+HQYDVR0lBBYwFAYIKwYBBQUHAwEGCCsGAQUFBwMCMBIGA1UdEwEB/wQIMAYBAf8C
+AQAwNAYIKwYBBQUHAQEEKDAmMCQGCCsGAQUFBzABhhhodHRwOi8vb2NzcC5kaWdp
+Y2VydC5jb20wQgYDVR0fBDswOTA3oDWgM4YxaHR0cDovL2NybDMuZGlnaWNlcnQu
+Y29tL0RpZ2lDZXJ0R2xvYmFsUm9vdEcyLmNybDBMBgNVHSAERTBDMDcGCWCGSAGG
+/WwBAjAqMCgGCCsGAQUFBwIBFhxodHRwczovL3d3dy5kaWdpY2VydC5jb20vQ1BT
+MAgGBmeBDAECATANBgkqhkiG9w0BAQsFAAOCAQEAoBs1eCLKakLtVRPFRjBIJ9LJ
+L0s8ZWum8U8/1TMVkQMBn+CPb5xnCD0GSA6L/V0ZFrMNqBirrr5B241OesECvxIi
+98bZ90h9+q/X5eMyOD35f8YTaEMpdnQCnawIwiHx06/0BfiTj+b/XQih+mqt3ZXe
+xNCJqKexdiB2IWGSKcgahPacWkk/BAQFisKIFYEqHzV974S3FAz/8LIfD58xnsEN
+GfzyIDkH3JrwYZ8caPTf6ZX9M1GrISN8HnWTtdNCH2xEajRa/h9ZBXjUyFKQrGk2
+n2hcLrfZSbynEC/pSw/ET7H5nWwckjmAJ1l9fcnbqkU/pf6uMQmnfl0JQjJNSg==
+-----END CERTIFICATE-----
             ";
-            let certs = vec![cert.to_vec()];
+            
+            let cursor = io::Cursor::new(cert);
+            let mut buf = BufReader::new(cursor);
+            let certs = rustls_pemfile::certs(&mut buf)?;
             Ok(certs.into_iter().map(Certificate).collect())
         }
     }
+
 
     fn load_keys(path: &Option<String>) -> io::Result<PrivateKey> {
         let mut keys = if let Some(path) = path {
@@ -438,11 +469,16 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
         // webpki_roots::TLS_SERVER_ROOTS
         if is_tls {
             println!("connect by tls");
-            let root_cert_store = rustls::RootCertStore::empty();
+            
+            let certs = Self::load_certs(&None)?;
+            //let key = Self::load_keys(&None)?;
+            let mut root_cert_store = rustls::RootCertStore::empty();
+            root_cert_store.add(&certs[1]).unwrap();
             let config = rustls::ClientConfig::builder()
                 .with_safe_defaults()
                 .with_root_certificates(root_cert_store)
-                .with_no_client_auth(); // i guess this was previously the default?
+                .with_no_client_auth();
+                // .with_client_auth_cert(certs, key).unwrap(); // i guess this was previously the default?
             let connector = TlsConnector::from(Arc::new(config));
 
             let stream = TcpStream::connect(&server).await?;
