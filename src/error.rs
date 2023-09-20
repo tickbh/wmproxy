@@ -1,14 +1,15 @@
-use std::io;
+use std::{io, fmt::Debug};
 
-use tokio::net::TcpStream;
+use tokio::{net::TcpStream, io::{AsyncRead, AsyncWrite}};
 use webparse::{WebError, BinaryMut};
 
-#[derive(Debug)]
-pub enum ProxyError {
+// #[derive(Debug)]
+pub enum ProxyError<T>
+where T : AsyncRead + AsyncWrite + Unpin {
     IoError(io::Error),
     WebError(WebError),
     /// 该错误发生协议不可被解析,则尝试下一个协议
-    Continue((Option<BinaryMut>, TcpStream)),
+    Continue((Option<BinaryMut>, T)),
     VerifyFail,
     UnknownHost,
     SizeNotMatch,
@@ -17,8 +18,9 @@ pub enum ProxyError {
     Extension(&'static str)
 }
 
-impl ProxyError {
-    pub fn extension(value: &'static str) -> ProxyError {
+impl<T> ProxyError<T>
+where T : AsyncRead + AsyncWrite + Unpin {
+    pub fn extension(value: &'static str) -> ProxyError<T> {
         ProxyError::Extension(value)
     }
 
@@ -28,18 +30,55 @@ impl ProxyError {
             _ => false,
         }
     }
+    pub fn to_type<B>(self) -> ProxyError<B> 
+    where B : AsyncRead + AsyncWrite + Unpin{
+        match self {
+            ProxyError::IoError(e) => ProxyError::IoError(e),
+            ProxyError::WebError(e) => ProxyError::WebError(e),
+            ProxyError::Continue(_) => unreachable!("continue can't convert"),
+            ProxyError::VerifyFail => ProxyError::VerifyFail,
+            ProxyError::UnknownHost => ProxyError::UnknownHost,
+            ProxyError::SizeNotMatch => ProxyError::SizeNotMatch,
+            ProxyError::ProtErr => ProxyError::ProtErr,
+            ProxyError::ProtNoSupport => ProxyError::ProtNoSupport,
+            ProxyError::Extension(s) => ProxyError::Extension(s),
+        }
+    }
+
+
 }
+ 
+pub type ProxyResult<T> = Result<T, ProxyError<TcpStream>>;
+pub type ProxyTypeResult<T, B> = Result<T, ProxyError<B>>;
 
-pub type ProxyResult<T> = Result<T, ProxyError>;
 
-impl From<io::Error> for ProxyError {
+impl<T> From<io::Error> for ProxyError<T>
+where T : AsyncRead + AsyncWrite + Unpin {
     fn from(value: io::Error) -> Self {
         ProxyError::IoError(value)
     }
 }
 
-impl From<WebError> for ProxyError {
+impl<T> From<WebError> for ProxyError<T>
+where T : AsyncRead + AsyncWrite + Unpin {
     fn from(value: WebError) -> Self {
         ProxyError::WebError(value)
+    }
+}
+
+impl<T> Debug for ProxyError<T>
+where T : AsyncRead + AsyncWrite + Unpin {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::IoError(arg0) => f.debug_tuple("IoError").field(arg0).finish(),
+            Self::WebError(arg0) => f.debug_tuple("WebError").field(arg0).finish(),
+            Self::Continue(_arg0) => f.debug_tuple("Continue").finish(),
+            Self::VerifyFail => write!(f, "VerifyFail"),
+            Self::UnknownHost => write!(f, "UnknownHost"),
+            Self::SizeNotMatch => write!(f, "SizeNotMatch"),
+            Self::ProtErr => write!(f, "ProtErr"),
+            Self::ProtNoSupport => write!(f, "ProtNoSupport"),
+            Self::Extension(arg0) => f.debug_tuple("Extension").field(arg0).finish(),
+        }
     }
 }

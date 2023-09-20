@@ -27,7 +27,12 @@ forever-rs = { version = "0.1.0" }
 log = "0.4.19"
 bitflags="2.4"
 
+rustls = { version = "0.21.7", default-features = false }
+webpki-roots = "0.25"
+rustls-pemfile = "1.0.3"
+webpki = { version = "0.22", features = ["alloc", "std"] }
 tokio-rustls="0.24"
+
 # webparse = { version = "0.1.2"}
 
 [dependencies.webparse]

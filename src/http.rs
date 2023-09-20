@@ -1,6 +1,6 @@
 use crate::{ProxyError, ProxyResult};
 use tokio::{
-    io::{copy_bidirectional, AsyncReadExt, AsyncWriteExt, ReadBuf},
+    io::{copy_bidirectional, AsyncReadExt, AsyncWriteExt, ReadBuf, AsyncRead, AsyncWrite},
     net::TcpStream,
 };
 use webparse::{BinaryMut, Buf, BufMut, HttpError, Method, WebError};
@@ -8,7 +8,10 @@ use webparse::{BinaryMut, Buf, BufMut, HttpError, Method, WebError};
 pub struct ProxyHttp {}
 
 impl ProxyHttp {
-    pub async fn process(mut inbound: TcpStream) -> ProxyResult<()> {
+    pub async fn process<T>(mut inbound: T) -> Result<(), ProxyError<T>>
+    where
+        T: AsyncRead + AsyncWrite + Unpin,
+    {
         let mut outbound;
         let mut request;
         let mut buffer = BinaryMut::new();

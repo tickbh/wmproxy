@@ -3,9 +3,9 @@ use std::{
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, ToSocketAddrs},
 };
 
-use crate::{ProxyError, ProxyResult};
+use crate::{error::ProxyTypeResult, ProxyError, ProxyResult};
 use tokio::{
-    io::{copy_bidirectional, AsyncRead, AsyncReadExt, AsyncWriteExt, ReadBuf},
+    io::{copy_bidirectional, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf},
     net::{TcpStream, UdpSocket},
     sync::broadcast::{channel, Receiver, Sender},
     try_join,
@@ -41,9 +41,13 @@ impl ProxySocks5 {
     }
 
     /// 读取的信息, 并返回验证方法, 如果没有用户密码则表示无需认证
-    pub async fn read_head_len<T>(&self, stream: &mut T, buffer: &mut BinaryMut) -> ProxyResult<u8>
+    pub async fn read_head_len<T>(
+        &self,
+        stream: &mut T,
+        buffer: &mut BinaryMut,
+    ) -> ProxyTypeResult<u8, T>
     where
-        T: AsyncRead + Unpin,
+        T: AsyncRead + AsyncWrite + Unpin,
     {
         let _ = ProxySocks5::read_len(stream, buffer, 2).await;
         if buffer.get_u8() != SOCKS5_VERSION {
@@ -227,11 +231,14 @@ impl ProxySocks5 {
         return Ok((sock, addr));
     }
 
-    pub async fn process(
+    pub async fn process<T>(
         &mut self,
-        mut stream: TcpStream,
+        mut stream: T,
         buffer: Option<BinaryMut>,
-    ) -> ProxyResult<()> {
+    ) -> ProxyTypeResult<(), T>
+    where
+        T: AsyncRead + AsyncWrite + Unpin,
+    {
         let mut buffer = buffer.unwrap_or(BinaryMut::new());
         let verify = match self.read_head_len(&mut stream, &mut buffer).await {
             Err(ProxyError::SizeNotMatch) => {
@@ -252,7 +259,10 @@ impl ProxySocks5 {
         };
 
         if is_verify {
-            let succ = self.read_verify(&mut stream, &mut buffer).await?;
+            let succ = self
+                .read_verify(&mut stream, &mut buffer)
+                .await
+                .map_err(|e| e.to_type::<T>())?;
             if !succ {
                 stream.write_all(&[0x01_u8, 0x01]).await?;
                 return Err(ProxyError::VerifyFail);
@@ -261,7 +271,9 @@ impl ProxySocks5 {
             }
         }
 
-        let (sock, addr) = ProxySocks5::tcp_read_request(&mut stream, &mut buffer).await?;
+        let (sock, addr) = ProxySocks5::tcp_read_request(&mut stream, &mut buffer)
+            .await
+            .map_err(|e| e.to_type::<T>())?;
         match sock {
             SOCK_CONNECT => {
                 let mut target = match TcpStream::connect(addr.clone()).await {
@@ -291,7 +303,8 @@ impl ProxySocks5 {
                     self.bind_ip
                         .unwrap_or(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))),
                 )
-                .await?;
+                .await
+                .map_err(|e| e.to_type::<T>())?;
                 return Ok(());
             }
             _ => {
@@ -311,11 +324,12 @@ impl ProxySocks5 {
     /// | 1  |  1  | X'00' |  1   | Variable |    2     |
     /// +----+-----+-------+------+----------+----------+
     /// https://datatracker.ietf.org/doc/html/rfc1928#section-6
-    pub async fn tcp_write_reply(
-        stream: &mut TcpStream,
+    pub async fn tcp_write_reply<T>(
+        stream: &mut T,
         succ: bool,
         addr: SocketAddr,
-    ) -> ProxyResult<()> {
+    ) -> ProxyResult<()>
+    where T: AsyncRead + AsyncWrite + Unpin {
         let mut buf = BinaryMut::with_capacity(100);
         buf.put_slice(&vec![SOCKS5_VERSION, if succ { 0 } else { 1 }, 0x00]);
         Self::encode_socket_addr(&mut buf, &addr)?;
@@ -330,7 +344,8 @@ impl ProxySocks5 {
     /// UDP关联会在随着的TCP连接终止时终止。
     /// 在UDP 关联请求的回复中，BND.PORT和BND.ADDR字段指示客户端必须发送UDP请求消息以进行中继的端口号/地址。
     /// https://datatracker.ietf.org/doc/html/rfc1928#section-7
-    pub async fn udp_execute_assoc(mut stream: TcpStream, bind_ip: IpAddr) -> ProxyResult<()> {
+    pub async fn udp_execute_assoc<T>(mut stream: T, bind_ip: IpAddr) -> ProxyResult<()>
+    where T: AsyncRead + AsyncWrite + Unpin {
         let peer_sock = UdpSocket::bind("0.0.0.0:0").await?;
         let port = peer_sock.local_addr()?.port();
         ProxySocks5::tcp_write_reply(&mut stream, true, SocketAddr::new(bind_ip, port)).await?;
@@ -355,7 +370,12 @@ impl ProxySocks5 {
         return Ok((flag, addr));
     }
 
-    async fn upd_handle_tcp_block(mut stream: TcpStream, mut receiver: Receiver<()>, sender: Sender<()>) -> ProxyResult<()> {
+    async fn upd_handle_tcp_block<T>(
+        mut stream: T,
+        mut receiver: Receiver<()>,
+        sender: Sender<()>,
+    ) -> ProxyResult<()>
+    where T: AsyncRead + AsyncWrite + Unpin {
         let mut buf = [0u8; 100];
         loop {
             let n = tokio::select! {
@@ -445,7 +465,8 @@ impl ProxySocks5 {
         }
     }
 
-    async fn udp_transfer(stream: TcpStream, inbound: UdpSocket) -> ProxyResult<()> {
+    async fn udp_transfer<T>(stream: T, inbound: UdpSocket) -> ProxyResult<()>
+    where T: AsyncRead + AsyncWrite + Unpin {
         let outbound = UdpSocket::bind("0.0.0.0:0").await?;
         // 使tcp断开的时候通知udp结束关联,结束处理函数
         let (sender, receiver) = channel::<()>(1);
@@ -457,7 +478,7 @@ impl ProxySocks5 {
             Err(error) => {
                 // 发生错误时不确定是哪个处理函数出错, 通知其它的停止
                 let _ = sender.send(());
-                return Err(error)
+                return Err(error);
             }
         }
         Ok(())

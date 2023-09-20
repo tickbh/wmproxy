@@ -38,7 +38,25 @@
                     "kind": "bin"
                 }
             },
-            "args": ["--user", "aaa", "--pass", "bbb", "-b", "0.0.0.0", "--udp", "127.0.0.1"],
+            "args": ["--user", "aaa", "--pass", "bbb", "-b", "0.0.0.0", "--udp", "127.0.0.1", "-S", "127.0.0.1:8091", "--ts"],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "server",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=wmproxy",
+                    "--package=wmproxy"
+                ],
+                "filter": {
+                    "name": "wmproxy",
+                    "kind": "bin"
+                }
+            },
+            "args": ["-b", "0.0.0.0", "--udp", "127.0.0.1", "-p", "8091", "--tc"],
             "cwd": "${workspaceFolder}"
         },
         {
