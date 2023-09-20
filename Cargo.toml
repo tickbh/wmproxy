@@ -11,6 +11,7 @@ keywords = ["http"]
 [dependencies]
 
 tokio = { version = "1", features = [
+    "net",
     "fs",
     "macros",
     "io-std",
@@ -21,20 +22,12 @@ tokio = { version = "1", features = [
     "time",
     "test-util",
 ] }
-hyper = { version="0.14", features=[
-    "client",
-    "http1",
-    "http2",
-    "server",
-    "stream",
-    "runtime",
-]}
-
 commander = "0.1.3"
 forever-rs = { version = "0.1.0" }
 log = "0.4.19"
-
 bitflags="2.4"
+
+tokio-rustls="0.24"
 # webparse = { version = "0.1.2"}
 
 [dependencies.webparse]

@@ -46,9 +46,17 @@ impl Builder {
         })
     }
 
-    pub fn server(self, addr: SocketAddr) -> Builder {
+    pub fn server(self, addr: Option<SocketAddr>) -> Builder {
         self.and_then(|mut proxy| {
-            proxy.server = Some(addr);
+            proxy.server = addr;
+            Ok(proxy)
+        })
+    }
+
+
+    pub fn tls(self, is_tls: bool) -> Builder {
+        self.and_then(|mut proxy| {
+            proxy.is_tls = is_tls;
             Ok(proxy)
         })
     }
@@ -87,6 +95,7 @@ impl Builder {
 /// 代理类, 一个代理类启动一种类型的代理
 pub struct Proxy {
     flag: Flag,
+    is_tls: bool,
     bind_addr: String,
     bind_port: u16,
     server: Option<SocketAddr>,
@@ -99,6 +108,7 @@ impl Default for Proxy {
     fn default() -> Self {
         Self {
             flag: Flag::HTTP | Flag::HTTPS,
+            is_tls: false,
             bind_addr: "127.0.0.1".to_string(),
             bind_port: 8090,
             server: None,
@@ -124,6 +134,7 @@ impl Proxy {
                 "可兼容的方法, 如http https socks5",
                 None,
             )
+            .option("-t, --tls value", "是否加密端口", Some(true))
             .option_int("-p, --port value", "监听端口", Some(8090))
             .option_str(
                 "-b, --bind value",
@@ -133,6 +144,10 @@ impl Proxy {
             .option_str(
                 "--user value",
                 "auth的用户名",
+                None,
+            ).option_str(
+                "-S value",
+                "父级的监听端口地址,如127.0.0.1:8091",
                 None,
             )
             .option_str(
@@ -161,9 +176,13 @@ impl Proxy {
         builder = builder.flag(Flag::HTTP | Flag::HTTPS | Flag::SOCKS5);
         builder = builder.username(command.get_str("user"));
         builder = builder.password(command.get_str("pass"));
-        
+        builder = builder.tls(command.get("t").unwrap_or(false));
         if let Some(udp) = command.get_str("udp") {
             builder = builder.udp_bind(udp.parse::<IpAddr>().ok());
+        };
+
+        if let Some(s) = command.get_str("S") {
+            builder = builder.server(s.parse::<SocketAddr>().ok());
         };
 
         builder.inner
@@ -194,32 +213,52 @@ impl Proxy {
         let listener = TcpListener::bind(addr).await?;
         let flag = self.flag;
         while let Ok((inbound, _)) = listener.accept().await {
-            let username = self.username.clone();
-            let password = self.password.clone();
-            let udp_bind = self.udp_bind.clone();
-            tokio::spawn(async move {
-                // tcp的连接被移动到该协程中，我们只要专注的处理该stream即可
-                let (read_buf, inbound) = match Self::process_http(flag, inbound).await {
-                    Ok(()) => {
-                        return;
-                    }
-                    Err(ProxyError::Continue(buf)) => buf,
-                    Err(_) => return,
-                };
 
-                let _read_buf = match Self::process_socks5(username, password, udp_bind, flag, inbound, read_buf).await {
-                    Ok(()) => {
-                        return;
-                    }
-                    Err(ProxyError::Continue(buf)) => buf,
-                    Err(err) => {
-                        log::trace!("socks5 error {:?}", err);
-                        println!("socks5 error {:?}", err);
-                        return
-                    },
-                };
-            });
+            if let Some(server) = self.server.clone() {
+                tokio::spawn(async move {
+                    // 转到上层服务器进行处理
+                    let _ = Self::transfer_server(inbound, server).await;
+                });
+            } else {
+                let username = self.username.clone();
+                let password = self.password.clone();
+                let udp_bind = self.udp_bind.clone();
+                tokio::spawn(async move {
+                    // tcp的连接被移动到该协程中，我们只要专注的处理该stream即可
+                    let _ = Self::deal_proxy(inbound, flag, username, password, udp_bind).await;
+                });
+            }
+            
         }
+        Ok(())
+    }
+
+    async fn transfer_server(mut inbound: TcpStream, server: SocketAddr) -> ProxyResult<()> {
+        let mut outbound = TcpStream::connect(server).await?;
+        let _ = tokio::io::copy_bidirectional(&mut inbound, &mut outbound).await?;
+        Ok(())
+    }
+
+    async fn deal_proxy(inbound: TcpStream, flag: Flag, username: Option<String>, password: Option<String>, udp_bind: Option<IpAddr>) -> ProxyResult<()> {
+        let (read_buf, inbound) = match Self::process_http(flag, inbound).await {
+            Ok(()) => {
+                return Ok(());
+            }
+            Err(ProxyError::Continue(buf)) => buf,
+            Err(err) => return Err(err),
+        };
+
+        let _read_buf = match Self::process_socks5(username, password, udp_bind, flag, inbound, read_buf).await {
+            Ok(()) => {
+                return Ok(())
+            }
+            Err(ProxyError::Continue(buf)) => buf,
+            Err(err) => {
+                log::trace!("socks5 error {:?}", err);
+                println!("socks5 error {:?}", err);
+                return Err(err)
+            },
+        };
         Ok(())
     }
 }
