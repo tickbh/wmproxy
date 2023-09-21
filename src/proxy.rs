@@ -398,6 +398,7 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
         }
     }
 
+    /// 获取服务端https的证书信息
     pub async fn get_tls_accept(&mut self) -> ProxyResult<TlsAcceptor> {
         if !self.tc {
             return Err(ProxyError::ProtNoSupport);
@@ -417,6 +418,7 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
         Ok(acceptor)
     }
 
+    /// 获取客户端https的Config配置
     pub async fn get_tls_request(&mut self) -> ProxyResult<Arc<rustls::ClientConfig>> {
         if !self.ts {
             return Err(ProxyError::ProtNoSupport);
@@ -446,10 +448,11 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
             self.server, self.tc, self.ts, tls_client.is_some()
         );
         let flag = self.flag;
+        let domain = self.domain.clone();
         if let Some(server) = self.server.clone() {
             tokio::spawn(async move {
                 // 转到上层服务器进行处理
-                let _e = Self::transfer_server(flag, tls_client, inbound, server).await;
+                let _e = Self::transfer_server(domain, tls_client, inbound, server).await;
             });
         } else {
             let username = self.username.clone();
@@ -475,6 +478,7 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
         while let Ok((inbound, _)) = listener.accept().await {
             if let Some(a) = accept.clone() {
                 let inbound = a.accept(inbound).await;
+                // 获取的流跟正常内容一样读写, 在内部实现了自动加解密
                 if let Ok(inbound) = inbound {
                     let _ = self.deal_stream(inbound, client.clone()).await;
                 } else {
@@ -488,7 +492,7 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
     }
 
     async fn transfer_server<T>(
-        _flag: Flag,
+        domain: Option<String>,
         tls_client: Option<Arc<rustls::ClientConfig>>,
         mut inbound: T,
         server: SocketAddr,
@@ -500,10 +504,12 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
             println!("connect by tls");
             let connector = TlsConnector::from(tls_client.unwrap());
             let stream = TcpStream::connect(&server).await?;
-            let domain = rustls::ServerName::try_from("soft.wm-proxy.com")
+            // 这里的域名只为认证设置
+            let domain = rustls::ServerName::try_from(&*domain.unwrap_or("soft.wm-proxy.com".to_string()))
                 .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid dnsname"))?;
 
             if let Ok(mut outbound) = connector.connect(domain, stream).await {
+                // connect 之后的流跟正常内容一样读写, 在内部实现了自动加解密
                 let _ = tokio::io::copy_bidirectional(&mut inbound, &mut outbound).await?;
             } else {
                 // TODO 返回对应协议的错误
