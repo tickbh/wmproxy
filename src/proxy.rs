@@ -2,7 +2,6 @@ use std::{
     fs::File,
     io::{self, BufReader},
     net::{IpAddr, SocketAddr},
-    path::Path,
     sync::Arc,
 };
 
@@ -14,9 +13,6 @@ use tokio::{
 };
 use tokio_rustls::{rustls, TlsAcceptor, TlsConnector};
 use webparse::BinaryMut;
-
-use rustls_pemfile::{certs, rsa_private_keys};
-use tokio::io::{copy, sink, split, AsyncWriteExt};
 
 use crate::{error::ProxyTypeResult, Flag, ProxyError, ProxyHttp, ProxyResult, ProxySocks5};
 
@@ -143,10 +139,15 @@ pub struct Proxy {
     password: Option<String>,
     udp_bind: Option<IpAddr>,
 
+    /// 连接服务端是否启用tls
     ts: bool,
+    /// 接收客户端是否启用tls
     tc: bool,
+    /// tls证书所用的域名
     domain: Option<String>,
+    /// 公开的证书公钥文件
     cert: Option<String>,
+    /// 隐私的证书私钥文件
     key: Option<String>,
 }
 
@@ -187,6 +188,9 @@ impl Proxy {
             )
             .option("--tc value", "接收客户端是否加密", Some(false))
             .option("--ts value", "连接服务端是否加密", Some(false))
+            .option_str("--cert value", "证书的公钥", None)
+            .option_str("--key value", "证书的私钥", None)
+            .option_str("--domain value", "证书的域名", None)
             .option_int("-p, --port value", "监听端口", Some(8090))
             .option_str(
                 "-b, --bind value",
@@ -220,6 +224,9 @@ impl Proxy {
         builder = builder.password(command.get_str("pass"));
         builder = builder.tc(command.get("tc").unwrap_or(false));
         builder = builder.ts(command.get("ts").unwrap_or(false));
+        builder = builder.domain(command.get_str("domain"));
+        builder = builder.cert(command.get_str("cert"));
+        builder = builder.key(command.get_str("key"));
         if let Some(udp) = command.get_str("udp") {
             builder = builder.udp_bind(udp.parse::<IpAddr>().ok());
         };
@@ -330,14 +337,13 @@ GfzyIDkH3JrwYZ8caPTf6ZX9M1GrISN8HnWTtdNCH2xEajRa/h9ZBXjUyFKQrGk2
 n2hcLrfZSbynEC/pSw/ET7H5nWwckjmAJ1l9fcnbqkU/pf6uMQmnfl0JQjJNSg==
 -----END CERTIFICATE-----
             ";
-            
+
             let cursor = io::Cursor::new(cert);
             let mut buf = BufReader::new(cursor);
             let certs = rustls_pemfile::certs(&mut buf)?;
             Ok(certs.into_iter().map(Certificate).collect())
         }
     }
-
 
     fn load_keys(path: &Option<String>) -> io::Result<PrivateKey> {
         let mut keys = if let Some(path) = path {
@@ -378,7 +384,7 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
             // rustls_pemfile::pkcs8_private_keys(&mut buf)?
             rustls_pemfile::rsa_private_keys(&mut buf)?
         };
-        
+
         match keys.len() {
             0 => Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
@@ -406,25 +412,46 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
             .map_err(|err| {
                 println!("error = {:?}", err);
                 io::Error::new(io::ErrorKind::InvalidInput, err)
-            } )?;
+            })?;
         let acceptor = TlsAcceptor::from(Arc::new(config));
         Ok(acceptor)
     }
 
-    async fn deal_stream<T>(&mut self, inbound: T) -> ProxyResult<()>
+    pub async fn get_tls_request(&mut self) -> ProxyResult<Arc<rustls::ClientConfig>> {
+        if !self.ts {
+            return Err(ProxyError::ProtNoSupport);
+        }
+        let certs = Self::load_certs(&self.cert)?;
+        let mut root_cert_store = rustls::RootCertStore::empty();
+        for cert in certs {
+            let _ = root_cert_store.add(&cert);
+        }
+        let config = rustls::ClientConfig::builder()
+            .with_safe_defaults()
+            .with_root_certificates(root_cert_store)
+            .with_no_client_auth();
+        Ok(Arc::new(config))
+    }
+
+    async fn deal_stream<T>(
+        &mut self,
+        inbound: T,
+        tls_client: Option<Arc<rustls::ClientConfig>>,
+    ) -> ProxyResult<()>
     where
         T: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static,
     {
-        println!("server = {:?} tc = {:?} ts = {:?}", self.server, self.tc, self.ts);
+        println!(
+            "server = {:?} tc = {:?} ts = {:?} tls_client = {:?}",
+            self.server, self.tc, self.ts, tls_client.is_some()
+        );
+        let flag = self.flag;
         if let Some(server) = self.server.clone() {
-            let is_tls = self.ts;
             tokio::spawn(async move {
                 // 转到上层服务器进行处理
-                let e = Self::transfer_server(is_tls, inbound, server).await;
-                println!("e ==== {:?}", e);
+                let _e = Self::transfer_server(flag, tls_client, inbound, server).await;
             });
         } else {
-            let flag = self.flag;
             let username = self.username.clone();
             let password = self.password.clone();
             let udp_bind = self.udp_bind.clone();
@@ -442,58 +469,54 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
             .parse::<SocketAddr>()
             .map_err(|_| ProxyError::Extension("parse addr error"))?;
         let listener = TcpListener::bind(addr).await?;
-        if let Err(e) = self.get_tls_accept().await {
-            println!("eeeeeeeeeeeeee = {:?}", e);
-        }
         let accept = self.get_tls_accept().await.ok();
-        println!("accept = {:?}", accept.is_some());
+        let client = self.get_tls_request().await.ok();
+        println!("accept = {:?} client = {:?}", accept.is_some(), client.is_some());
         while let Ok((inbound, _)) = listener.accept().await {
             if let Some(a) = accept.clone() {
                 let inbound = a.accept(inbound).await;
                 if let Ok(inbound) = inbound {
-                    let _ = self.deal_stream(inbound).await;
+                    let _ = self.deal_stream(inbound, client.clone()).await;
                 } else {
                     println!("accept error = {:?}", inbound.err());
                 }
             } else {
-                let _ = self.deal_stream(inbound).await;
+                let _ = self.deal_stream(inbound, client.clone()).await;
             };
         }
         Ok(())
     }
 
-    async fn transfer_server<T>(is_tls: bool, mut inbound: T, server: SocketAddr) -> ProxyResult<()>
+    async fn transfer_server<T>(
+        _flag: Flag,
+        tls_client: Option<Arc<rustls::ClientConfig>>,
+        mut inbound: T,
+        server: SocketAddr,
+    ) -> ProxyResult<()>
     where
         T: AsyncRead + AsyncWrite + Unpin,
     {
-        // webpki_roots::TLS_SERVER_ROOTS
-        if is_tls {
+        if tls_client.is_some() {
             println!("connect by tls");
-            
-            let certs = Self::load_certs(&None)?;
-            //let key = Self::load_keys(&None)?;
-            let mut root_cert_store = rustls::RootCertStore::empty();
-            root_cert_store.add(&certs[1]).unwrap();
-            let config = rustls::ClientConfig::builder()
-                .with_safe_defaults()
-                .with_root_certificates(root_cert_store)
-                .with_no_client_auth();
-                // .with_client_auth_cert(certs, key).unwrap(); // i guess this was previously the default?
-            let connector = TlsConnector::from(Arc::new(config));
-
+            let connector = TlsConnector::from(tls_client.unwrap());
             let stream = TcpStream::connect(&server).await?;
-
             let domain = rustls::ServerName::try_from("soft.wm-proxy.com")
                 .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid dnsname"))?;
 
-            let mut outbound = connector.connect(domain, stream).await?;
-            let _ = tokio::io::copy_bidirectional(&mut inbound, &mut outbound).await?;
-            // stream.write_all(content.as_bytes()).await?;
-            // let (mut reader, mut writer) = split(stream);
+            if let Ok(mut outbound) = connector.connect(domain, stream).await {
+                let _ = tokio::io::copy_bidirectional(&mut inbound, &mut outbound).await?;
+            } else {
+                // TODO 返回对应协议的错误
+                // let _ = Self::deal_proxy(inbound, flag, None, None, None).await;
+            }
         } else {
             println!("connect by normal");
-            let mut outbound = TcpStream::connect(server).await?;
-            let _ = tokio::io::copy_bidirectional(&mut inbound, &mut outbound).await?;
+            if let Ok(mut outbound) = TcpStream::connect(server).await {
+                let _ = tokio::io::copy_bidirectional(&mut inbound, &mut outbound).await?;
+            } else {
+                // TODO 返回对应协议的错误
+                // let _ = Self::deal_proxy(inbound, flag, None, None, None).await;
+            }
         }
         Ok(())
     }

@@ -1,4 +1,4 @@
-use crate::{ProxyError, ProxyResult};
+use crate::{ProxyError};
 use tokio::{
     io::{copy_bidirectional, AsyncReadExt, AsyncWriteExt, ReadBuf, AsyncRead, AsyncWrite},
     net::TcpStream,
@@ -8,6 +8,14 @@ use webparse::{BinaryMut, Buf, BufMut, HttpError, Method, WebError};
 pub struct ProxyHttp {}
 
 impl ProxyHttp {
+    async fn err_server_status<T>(mut inbound: T, status: u16) -> Result<(), ProxyError<T>>
+    where
+        T: AsyncRead + AsyncWrite + Unpin, {
+        let mut res = webparse::Response::builder().status(status).body(())?;
+        inbound.write_all(&res.httpdata()?).await?;
+        Ok(())
+    }
+
     pub async fn process<T>(mut inbound: T) -> Result<(), ProxyError<T>>
     where
         T: AsyncRead + AsyncWrite + Unpin,
@@ -35,11 +43,18 @@ impl ProxyHttp {
             match request.parse_buffer(&mut buffer.clone()) {
                 Ok(_) => match request.get_connect_url() {
                     Some(host) => {
-                        outbound = TcpStream::connect(host).await?;
+                        match TcpStream::connect(host).await {
+                            Ok(v) => outbound = v,
+                            Err(e) => {
+                                Self::err_server_status(inbound, 503).await?;
+                                return Err(ProxyError::from(e))
+                            }
+                        }
                         break;
                     }
                     None => {
                         if !request.is_partial() {
+                            Self::err_server_status(inbound, 503).await?;
                             return Err(ProxyError::UnknownHost);
                         }
                     }

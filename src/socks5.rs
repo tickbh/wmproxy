@@ -281,9 +281,9 @@ impl ProxySocks5 {
                         stream.write_all(&[5, 0, 0, 1, 0, 0, 0, 0, 0, 0]).await?;
                         tcp
                     }
-                    Err(_err) => {
+                    Err(err) => {
                         stream.write_all(&[5, 1, 0, 1, 0, 0, 0, 0, 0, 0]).await?;
-                        return Err(ProxyError::Extension("Can't connect tcp"));
+                        return Err(ProxyError::from(err));
                     }
                 };
 
