@@ -445,7 +445,10 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
     {
         println!(
             "server = {:?} tc = {:?} ts = {:?} tls_client = {:?}",
-            self.server, self.tc, self.ts, tls_client.is_some()
+            self.server,
+            self.tc,
+            self.ts,
+            tls_client.is_some()
         );
         let flag = self.flag;
         let domain = self.domain.clone();
@@ -474,7 +477,11 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
         let listener = TcpListener::bind(addr).await?;
         let accept = self.get_tls_accept().await.ok();
         let client = self.get_tls_request().await.ok();
-        println!("accept = {:?} client = {:?}", accept.is_some(), client.is_some());
+        println!(
+            "accept = {:?} client = {:?}",
+            accept.is_some(),
+            client.is_some()
+        );
         while let Ok((inbound, _)) = listener.accept().await {
             if let Some(a) = accept.clone() {
                 let inbound = a.accept(inbound).await;
@@ -505,8 +512,9 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
             let connector = TlsConnector::from(tls_client.unwrap());
             let stream = TcpStream::connect(&server).await?;
             // 这里的域名只为认证设置
-            let domain = rustls::ServerName::try_from(&*domain.unwrap_or("soft.wm-proxy.com".to_string()))
-                .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid dnsname"))?;
+            let domain =
+                rustls::ServerName::try_from(&*domain.unwrap_or("soft.wm-proxy.com".to_string()))
+                    .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid dnsname"))?;
 
             if let Ok(mut outbound) = connector.connect(domain, stream).await {
                 // connect 之后的流跟正常内容一样读写, 在内部实现了自动加解密
