@@ -13,6 +13,7 @@ where T : AsyncRead + AsyncWrite + Unpin {
     VerifyFail,
     UnknownHost,
     SizeNotMatch,
+    TooShort,
     ProtErr,
     ProtNoSupport,
     Extension(&'static str)
@@ -39,6 +40,7 @@ where T : AsyncRead + AsyncWrite + Unpin {
             ProxyError::VerifyFail => ProxyError::VerifyFail,
             ProxyError::UnknownHost => ProxyError::UnknownHost,
             ProxyError::SizeNotMatch => ProxyError::SizeNotMatch,
+            ProxyError::TooShort => ProxyError::TooShort,
             ProxyError::ProtErr => ProxyError::ProtErr,
             ProxyError::ProtNoSupport => ProxyError::ProtNoSupport,
             ProxyError::Extension(s) => ProxyError::Extension(s),
@@ -76,6 +78,7 @@ where T : AsyncRead + AsyncWrite + Unpin {
             Self::VerifyFail => write!(f, "VerifyFail"),
             Self::UnknownHost => write!(f, "UnknownHost"),
             Self::SizeNotMatch => write!(f, "SizeNotMatch"),
+            Self::TooShort => write!(f, "TooShort"),
             Self::ProtErr => write!(f, "ProtErr"),
             Self::ProtNoSupport => write!(f, "ProtNoSupport"),
             Self::Extension(arg0) => f.debug_tuple("Extension").field(arg0).finish(),

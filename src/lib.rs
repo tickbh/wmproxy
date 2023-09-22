@@ -6,6 +6,8 @@ mod error;
 mod http;
 mod socks5;
 
+mod prot;
+
 pub use error::{ProxyResult, ProxyError};
 pub use flag::Flag;
 pub use proxy::Proxy;
