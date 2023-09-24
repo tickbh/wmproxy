@@ -1,10 +1,14 @@
 use std::{
+    future::poll_fn,
     pin::Pin,
     task::{ready, Context, Poll},
 };
 
 use futures_core::Stream;
-use tokio::{io::{AsyncRead, AsyncWrite, ReadBuf}, sync::mpsc::{Sender, Receiver}};
+use tokio::{
+    io::{AsyncRead, AsyncReadExt, AsyncWrite, Interest, ReadBuf},
+    sync::mpsc::{Receiver, Sender},
+};
 use webparse::{http2::frame::read_u24, BinaryMut, Buf, BufMut};
 
 use crate::ProxyResult;
@@ -26,13 +30,42 @@ impl<T> TransStream<T>
 where
     T: AsyncRead + AsyncWrite + Unpin,
 {
-    pub fn new(stream: T) -> Self {
+    pub fn new(
+        stream: T,
+        in_sender: Option<Sender<ProtFrame>>,
+        out_receiver: Option<Receiver<ProtFrame>>,
+    ) -> Self {
         Self {
             stream,
             read: BinaryMut::new(),
             write: BinaryMut::new(),
-            in_sender: None,
-            out_receiver: None,
+            in_sender,
+            out_receiver,
+        }
+    }
+
+    pub async fn copy_wait(&mut self) -> Result<(), std::io::Error> {
+        let mut buf = vec![0u8; 2048];
+        loop {
+            tokio::select! {
+                n = self.stream.read(&mut buf) => {
+                    let n = n?;
+                    self.read.put_slice(&buf[..n]);
+                },
+                r = self.out_receiver.as_mut().unwrap().recv() => {
+
+                }
+                p = self.in_sender.as_mut().unwrap().reserve(), if self.read.remaining() > 0 => {
+
+                }
+            }
+            // let x = self.next().await;
+            // self.next()
+            // poll_fn(|cx| {
+            //     Poll::Pending
+            // });
+            // self.stream.po
+            // self.stream.ready(Interest::READABLE | Interest::WRITABLE).await;
         }
     }
 

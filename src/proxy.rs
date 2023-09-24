@@ -9,12 +9,12 @@ use commander::Commander;
 use rustls::{Certificate, PrivateKey};
 use tokio::{
     io::{AsyncRead, AsyncWrite},
-    net::{TcpListener, TcpStream},
+    net::{TcpListener, TcpStream}, sync::mpsc::{Sender, Receiver},
 };
 use tokio_rustls::{rustls, TlsAcceptor, TlsConnector};
 use webparse::BinaryMut;
 
-use crate::{error::ProxyTypeResult, Flag, ProxyError, ProxyHttp, ProxyResult, ProxySocks5};
+use crate::{error::ProxyTypeResult, Flag, ProxyError, ProxyHttp, ProxyResult, ProxySocks5, prot::{ProtFrame, TransStream}};
 
 pub struct Builder {
     inner: ProxyResult<Proxy>,
@@ -66,6 +66,14 @@ impl Builder {
     pub fn ts(self, is_tls: bool) -> Builder {
         self.and_then(|mut proxy| {
             proxy.ts = is_tls;
+            Ok(proxy)
+        })
+    }
+
+
+    pub fn center(self, center: bool) -> Builder {
+        self.and_then(|mut proxy| {
+            proxy.center = center;
             Ok(proxy)
         })
     }
@@ -139,6 +147,8 @@ pub struct Proxy {
     password: Option<String>,
     udp_bind: Option<IpAddr>,
 
+    //// 是否启用一对多
+    center: bool,
     /// 连接服务端是否启用tls
     ts: bool,
     /// 接收客户端是否启用tls
@@ -162,6 +172,7 @@ impl Default for Proxy {
             password: None,
             udp_bind: None,
 
+            center: false,
             ts: false,
             tc: false,
             domain: None,
@@ -185,7 +196,8 @@ impl Proxy {
                 "-f, --flag [value]",
                 "可兼容的方法, 如http https socks5",
                 None,
-            )
+            )            
+            .option("-c, --center value", "是否启用一对多", Some(false))
             .option("--tc value", "接收客户端是否加密", Some(false))
             .option("--ts value", "连接服务端是否加密", Some(false))
             .option_str("--cert value", "证书的公钥", None)
@@ -224,6 +236,7 @@ impl Proxy {
         builder = builder.password(command.get_str("pass"));
         builder = builder.tc(command.get("tc").unwrap_or(false));
         builder = builder.ts(command.get("ts").unwrap_or(false));
+        builder = builder.center(command.get("c").unwrap_or(false));
         builder = builder.domain(command.get_str("domain"));
         builder = builder.cert(command.get_str("cert"));
         builder = builder.key(command.get_str("key"));
@@ -435,6 +448,38 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
         Ok(Arc::new(config))
     }
 
+    async fn deal_center_stream<T>(
+        &mut self,
+        inbound: T,
+        tls_client: Option<Arc<rustls::ClientConfig>>,
+    ) -> ProxyResult<()>
+    where
+        T: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static,
+    {
+        if let Some(_) = &self.server {
+            // client.
+            
+        }
+        let flag = self.flag;
+        let domain = self.domain.clone();
+        if let Some(server) = self.server.clone() {
+            tokio::spawn(async move {
+                // 转到上层服务器进行处理
+                let _e = Self::transfer_server(domain, tls_client, inbound, server).await;
+            });
+        } else {
+            let username = self.username.clone();
+            let password = self.password.clone();
+            let udp_bind = self.udp_bind.clone();
+            tokio::spawn(async move {
+                // tcp的连接被移动到该协程中，我们只要专注的处理该stream即可
+                let _ = Self::deal_proxy(inbound, flag, username, password, udp_bind).await;
+            });
+        }
+
+        Ok(())
+    }
+
     async fn deal_stream<T>(
         &mut self,
         inbound: T,
@@ -443,6 +488,9 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
     where
         T: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static,
     {
+        if self.center {
+            return self.deal_center_stream(inbound, tls_client).await
+        }
         println!(
             "server = {:?} tc = {:?} ts = {:?} tls_client = {:?}",
             self.server,
@@ -495,6 +543,44 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
                 let _ = self.deal_stream(inbound, client.clone()).await;
             };
         }
+        Ok(())
+    }
+
+
+    async fn transfer_center_server<T>(
+        in_sender: Option<Sender<ProtFrame>>,
+        out_receiver: Option<Receiver<ProtFrame>>,
+        inbound: T,
+    ) -> ProxyResult<()>
+    where
+        T: AsyncRead + AsyncWrite + Unpin,
+    {
+        let trans = TransStream::new(inbound, in_sender, out_receiver);
+        // if tls_client.is_some() {
+        //     println!("connect by tls");
+        //     let connector = TlsConnector::from(tls_client.unwrap());
+        //     let stream = TcpStream::connect(&server).await?;
+        //     // 这里的域名只为认证设置
+        //     let domain =
+        //         rustls::ServerName::try_from(&*domain.unwrap_or("soft.wm-proxy.com".to_string()))
+        //             .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid dnsname"))?;
+
+        //     if let Ok(mut outbound) = connector.connect(domain, stream).await {
+        //         // connect 之后的流跟正常内容一样读写, 在内部实现了自动加解密
+        //         let _ = tokio::io::copy_bidirectional(&mut inbound, &mut outbound).await?;
+        //     } else {
+        //         // TODO 返回对应协议的错误
+        //         // let _ = Self::deal_proxy(inbound, flag, None, None, None).await;
+        //     }
+        // } else {
+        //     println!("connect by normal");
+        //     if let Ok(mut outbound) = TcpStream::connect(server).await {
+        //         let _ = tokio::io::copy_bidirectional(&mut inbound, &mut outbound).await?;
+        //     } else {
+        //         // TODO 返回对应协议的错误
+        //         // let _ = Self::deal_proxy(inbound, flag, None, None, None).await;
+        //     }
+        // }
         Ok(())
     }
 
