@@ -49,7 +49,7 @@ use crate::{prot::ProtFrame, ProxyResult};
 //     }
 // }
 
-pub struct Server {
+pub struct CenterClient {
     tls_client: Option<Arc<rustls::ClientConfig>>,
     domain: Option<String>,
     server_addr: SocketAddr,
@@ -57,7 +57,7 @@ pub struct Server {
     receiver: Option<Receiver<ProtFrame>>,
 }
 
-impl Server {
+impl CenterClient {
     pub fn new(
         server_addr: SocketAddr,
         tls_client: Option<Arc<rustls::ClientConfig>>,

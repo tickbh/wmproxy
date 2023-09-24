@@ -43,6 +43,14 @@ impl ProtFrameHeader {
             return Err(crate::ProxyError::TooShort);
         }
         let length = read_u24(buffer);
+        Self::parse_by_len(buffer, length)
+    }
+
+    #[inline]
+    pub fn parse_by_len<T: Buf>(buffer: &mut T, length: u32) -> ProxyResult<ProtFrameHeader> {
+        if buffer.remaining() < FRAME_HEADER_BYTES - 3 {
+            return Err(crate::ProxyError::TooShort);
+        }
         let kind = buffer.get_u8();
         let flag = buffer.get_u8();
         let sock_map = read_u24(buffer);

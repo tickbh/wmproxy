@@ -32,6 +32,7 @@ webpki-roots = "0.25"
 rustls-pemfile = "1.0.3"
 webpki = { version = "0.22", features = ["alloc", "std"] }
 tokio-rustls="0.24"
+futures-core = { version = "0.3", default-features = false }
 
 # webparse = { version = "0.1.2"}
 

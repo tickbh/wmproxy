@@ -5,6 +5,8 @@ mod close;
 mod data;
 mod frame;
 mod kind;
+mod center_stream;
+mod trans_stream;
 
 pub use flag::ProtFlag;
 pub use kind::ProtKind;
@@ -12,6 +14,8 @@ pub use create::ProtCreate;
 pub use close::ProtClose;
 pub use data::ProtData;
 pub use frame::{ProtFrame, ProtFrameHeader};
+pub use center_stream::CenterStream;
+pub use trans_stream::TransStream;
 
 use webparse::{Buf, BufMut};
 
