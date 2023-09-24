@@ -9,12 +9,17 @@ use commander::Commander;
 use rustls::{Certificate, PrivateKey};
 use tokio::{
     io::{AsyncRead, AsyncWrite},
-    net::{TcpListener, TcpStream}, sync::mpsc::{Sender, Receiver},
+    net::{TcpListener, TcpStream},
+    sync::mpsc::{Receiver, Sender},
 };
 use tokio_rustls::{rustls, TlsAcceptor, TlsConnector};
 use webparse::BinaryMut;
 
-use crate::{error::ProxyTypeResult, Flag, ProxyError, ProxyHttp, ProxyResult, ProxySocks5, prot::{ProtFrame, TransStream}};
+use crate::{
+    error::ProxyTypeResult,
+    prot::{ProtFrame, TransStream},
+    Flag, ProxyError, ProxyHttp, ProxyResult, ProxySocks5, CenterClient,
+};
 
 pub struct Builder {
     inner: ProxyResult<Proxy>,
@@ -69,7 +74,6 @@ impl Builder {
             Ok(proxy)
         })
     }
-
 
     pub fn center(self, center: bool) -> Builder {
         self.and_then(|mut proxy| {
@@ -196,7 +200,7 @@ impl Proxy {
                 "-f, --flag [value]",
                 "可兼容的方法, 如http https socks5",
                 None,
-            )            
+            )
             .option("-c, --center value", "是否启用一对多", Some(false))
             .option("--tc value", "接收客户端是否加密", Some(false))
             .option("--ts value", "连接服务端是否加密", Some(false))
@@ -456,26 +460,28 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
     where
         T: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static,
     {
+        // CenterClient
         if let Some(_) = &self.server {
-            // client.
-            
-        }
-        let flag = self.flag;
-        let domain = self.domain.clone();
-        if let Some(server) = self.server.clone() {
             tokio::spawn(async move {
-                // 转到上层服务器进行处理
-                let _e = Self::transfer_server(domain, tls_client, inbound, server).await;
-            });
-        } else {
-            let username = self.username.clone();
-            let password = self.password.clone();
-            let udp_bind = self.udp_bind.clone();
-            tokio::spawn(async move {
-                // tcp的连接被移动到该协程中，我们只要专注的处理该stream即可
-                let _ = Self::deal_proxy(inbound, flag, username, password, udp_bind).await;
+                let _ = Self::transfer_center_server(None, None, inbound).await;
             });
         }
+        // let flag = self.flag;
+        // let domain = self.domain.clone();
+        // if let Some(server) = self.server.clone() {
+        //     tokio::spawn(async move {
+        //         // 转到上层服务器进行处理
+        //         let _e = Self::transfer_server(domain, tls_client, inbound, server).await;
+        //     });
+        // } else {
+        //     let username = self.username.clone();
+        //     let password = self.password.clone();
+        //     let udp_bind = self.udp_bind.clone();
+        //     tokio::spawn(async move {
+        //         // tcp的连接被移动到该协程中，我们只要专注的处理该stream即可
+        //         let _ = Self::deal_proxy(inbound, flag, username, password, udp_bind).await;
+        //     });
+        // }
 
         Ok(())
     }
@@ -489,7 +495,7 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
         T: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static,
     {
         if self.center {
-            return self.deal_center_stream(inbound, tls_client).await
+            return self.deal_center_stream(inbound, tls_client).await;
         }
         println!(
             "server = {:?} tc = {:?} ts = {:?} tls_client = {:?}",
@@ -545,7 +551,6 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
         }
         Ok(())
     }
-
 
     async fn transfer_center_server<T>(
         in_sender: Option<Sender<ProtFrame>>,
