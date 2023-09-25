@@ -17,7 +17,7 @@ impl ProtClose {
     }
 
     pub fn parse<T: Buf>(header: ProtFrameHeader, mut buf: T) -> ProxyResult<ProtClose> {
-        let mode = buf.get_u8();
+        let _mode = buf.get_u8();
         Ok(ProtClose {
             sock_map: header.sock_map(),
         })

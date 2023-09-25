@@ -1,6 +1,9 @@
 use webparse::{Binary, Buf, BufMut, Serialize};
 
-use crate::{ProxyResult, prot::{ProtKind, ProtFlag}};
+use crate::{
+    prot::{ProtFlag, ProtKind},
+    ProxyResult,
+};
 
 use super::ProtFrameHeader;
 
@@ -9,23 +12,19 @@ pub struct ProtData {
     data: Binary,
 }
 
-
 impl ProtData {
-    pub fn parse<T: Buf>(
-        header: ProtFrameHeader,
-        buf: T,
-    ) -> ProxyResult<ProtData> {
+    pub fn new(sock_map: u32, data: Binary) -> ProtData {
+        Self { sock_map, data }
+    }
+
+    pub fn parse<T: Buf>(header: ProtFrameHeader, buf: T) -> ProxyResult<ProtData> {
         Ok(Self {
             sock_map: header.sock_map(),
-            data: buf.into_binary()
+            data: buf.into_binary(),
         })
     }
 
-    pub fn encode<B: Buf + BufMut>(
-        mut self,
-        buf: &mut B,
-    ) -> ProxyResult<usize> {
-
+    pub fn encode<B: Buf + BufMut>(mut self, buf: &mut B) -> ProxyResult<usize> {
         log::trace!("encoding Data; len={}", self.data.remaining());
         let mut head = ProtFrameHeader::new(ProtKind::Data, ProtFlag::zero(), self.sock_map);
         head.length = self.data.remaining() as u32;

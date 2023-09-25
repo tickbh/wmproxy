@@ -1,14 +1,13 @@
-use std::{collections::HashMap, io, net::SocketAddr};
+use std::{collections::HashMap};
 use tokio::{
     io::{split, AsyncReadExt, AsyncWriteExt},
-    net::TcpStream,
 };
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     sync::mpsc::Receiver,
     sync::mpsc::Sender,
 };
-use tokio_rustls::{TlsConnector, TlsStream};
+
 use webparse::BinaryMut;
 use webparse::Buf;
 

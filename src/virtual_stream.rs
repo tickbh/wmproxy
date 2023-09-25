@@ -1,17 +1,19 @@
 use std::{
     pin::Pin,
-    task::{ready, Context, Poll},
+    task::{ready, Poll},
 };
+use tokio_util::sync::PollSender;
 
-use futures_core::Stream;
-use tokio::{io::{AsyncRead, AsyncWrite, ReadBuf}, sync::mpsc::{Sender, Receiver}};
-use webparse::{http2::frame::read_u24, BinaryMut, Buf, BufMut};
+use tokio::{io::{AsyncRead, AsyncWrite}, sync::mpsc::{Sender, Receiver}};
+use webparse::{Binary, BinaryMut, Buf, BufMut};
 
-use crate::{ProxyResult, prot::ProtFrame};
+use crate::prot::ProtData;
+use crate::{prot::ProtFrame};
 
 pub struct VirtualStream
 {
-    sender: Sender<ProtFrame>,
+    id: u32,
+    sender: PollSender<ProtFrame>,
     receiver: Receiver<ProtFrame>,
     read: BinaryMut,
     write: BinaryMut,
@@ -19,9 +21,10 @@ pub struct VirtualStream
 
 impl VirtualStream
 {
-    pub fn new(sender: Sender<ProtFrame>, receiver: Receiver<ProtFrame>) -> Self {
+    pub fn new(id: u32, sender: Sender<ProtFrame>, receiver: Receiver<ProtFrame>) -> Self {
         Self {
-            sender,
+            id,
+            sender: PollSender::new(sender),
             receiver,
             read: BinaryMut::new(),
             write: BinaryMut::new(),
@@ -82,49 +85,38 @@ impl AsyncWrite for VirtualStream
         buf: &[u8],
     ) -> std::task::Poll<Result<usize, std::io::Error>> {
         self.write.put_slice(buf);
-        // self.sender.try_reserve()
-        // self.sender.poll_
-
-        Pin::new(&mut self.stream).poll_write(cx, buf)
+        if let Err(_) = ready!(self.sender.poll_reserve(cx)) {
+            return Poll::Pending;
+        }
+        let binary = Binary::from(self.write.chunk().to_vec());
+        let id = self.id;
+        if let Ok(_) = self.sender.send_item(ProtFrame::Data(ProtData::new(id, binary))) {
+            self.write.clear();
+        }
+        Poll::Ready(Ok(buf.len()))
     }
 
     fn poll_flush(
         mut self: Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Result<(), std::io::Error>> {
-        Pin::new(&mut self.stream).poll_flush(cx)
+        if self.write.has_remaining() {
+            if let Err(_) = ready!(self.sender.poll_reserve(cx)) {
+                return Poll::Pending;
+            }
+            let binary = Binary::from(self.write.chunk().to_vec());
+            let id = self.id;
+            if let Ok(_) = self.sender.send_item(ProtFrame::Data(ProtData::new(id, binary))) {
+                self.write.clear();
+            }
+        }
+        Poll::Ready(Ok(()))
     }
 
     fn poll_shutdown(
-        mut self: Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
+        self: Pin<&mut Self>,
+        _cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Result<(), std::io::Error>> {
-        Pin::new(&mut self.stream).poll_shutdown(cx)
-    }
-}
-
-impl Stream for VirtualStream
-{
-    type Item = ProxyResult<ProtFrame>;
-    fn poll_next(
-        mut self: Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Option<Self::Item>> {
-        if let Some(v) = self.decode_frame()? {
-            return Poll::Ready(Some(Ok(v)));
-        }
-        match ready!(self.poll_read_all(cx)?) {
-            0 => {
-                println!("test:::: recv client end!!!");
-                return Poll::Ready(None);
-            }
-            _ => {
-                if let Some(v) = self.decode_frame()? {
-                    return Poll::Ready(Some(Ok(v)));
-                } else {
-                    return Poll::Pending;
-                }
-            }
-        }
+        Poll::Ready(Ok(()))
     }
 }

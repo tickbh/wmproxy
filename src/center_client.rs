@@ -12,7 +12,7 @@ use webparse::http2::frame::read_u24;
 use webparse::{BinaryMut, Buf};
 
 use crate::prot::{ProtFrameHeader, ProtClose, TransStream};
-use crate::{prot::ProtFrame, Proxy, ProxyResult};
+use crate::{prot::ProtFrame, ProxyResult};
 
 // pub struct Builder {
 //     server_addr: SocketAddr,

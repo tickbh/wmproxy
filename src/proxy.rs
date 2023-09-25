@@ -1,24 +1,23 @@
 use std::{
-    fs::File,
-    io::{self, BufReader},
+    io::{self},
     net::{IpAddr, SocketAddr},
     sync::Arc, process,
 };
 
-use commander::Commander;
-use rustls::{Certificate, PrivateKey};
+
+
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::{TcpListener, TcpStream},
     sync::mpsc::{Receiver, Sender},
 };
-use tokio_rustls::{rustls, TlsAcceptor, TlsConnector};
+use tokio_rustls::{rustls, TlsConnector};
 use webparse::BinaryMut;
 
 use crate::{
     error::ProxyTypeResult,
-    prot::{ProtFrame, TransStream},
-    Flag, ProxyError, ProxyHttp, ProxyResult, ProxySocks5, CenterClient, CenterServer, ProxyOption,
+    prot::{ProtFrame},
+    Flag, ProxyError, ProxyHttp, ProxyResult, ProxySocks5, CenterClient, ProxyOption,
 };
 
 pub struct Proxy {
@@ -195,9 +194,9 @@ impl Proxy {
     }
 
     async fn transfer_center_server<T>(
-        in_sender: Option<Sender<ProtFrame>>,
-        out_receiver: Option<Receiver<ProtFrame>>,
-        inbound: T,
+        _in_sender: Option<Sender<ProtFrame>>,
+        _out_receiver: Option<Receiver<ProtFrame>>,
+        _inbound: T,
     ) -> ProxyResult<()>
     where
         T: AsyncRead + AsyncWrite + Unpin,

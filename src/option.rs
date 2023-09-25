@@ -7,18 +7,12 @@ use std::{
 
 use commander::Commander;
 use rustls::{Certificate, PrivateKey};
-use tokio::{
-    io::{AsyncRead, AsyncWrite},
-    net::{TcpListener, TcpStream},
-    sync::mpsc::{Receiver, Sender},
-};
-use tokio_rustls::{rustls, TlsAcceptor, TlsConnector};
-use webparse::BinaryMut;
+
+use tokio_rustls::{rustls, TlsAcceptor};
+
 
 use crate::{
-    error::ProxyTypeResult,
-    prot::{ProtFrame, TransStream},
-    Flag, ProxyError, ProxyHttp, ProxyResult, ProxySocks5, CenterClient, CenterServer,
+    Flag, ProxyError, ProxyResult,
 };
 
 pub struct Builder {

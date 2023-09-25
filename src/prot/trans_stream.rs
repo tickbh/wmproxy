@@ -1,12 +1,11 @@
 use std::{
-    future::poll_fn,
     pin::Pin,
     task::{ready, Context, Poll},
 };
 
 use futures_core::Stream;
 use tokio::{
-    io::{AsyncRead, AsyncReadExt, AsyncWrite, Interest, ReadBuf},
+    io::{AsyncRead, AsyncReadExt, AsyncWrite, ReadBuf},
     sync::mpsc::{Receiver, Sender},
 };
 use webparse::{http2::frame::read_u24, BinaryMut, Buf, BufMut};
@@ -55,10 +54,10 @@ where
                     let n = n?;
                     self.read.put_slice(&buf[..n]);
                 },
-                r = self.out_receiver.as_mut().unwrap().recv() => {
+                _r = self.out_receiver.as_mut().unwrap().recv() => {
 
                 }
-                p = self.in_sender.as_mut().unwrap().reserve(), if self.read.remaining() > 0 => {
+                _p = self.in_sender.as_mut().unwrap().reserve(), if self.read.remaining() > 0 => {
 
                 }
             }

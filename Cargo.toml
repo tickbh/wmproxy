@@ -27,6 +27,7 @@ forever-rs = { version = "0.1.0" }
 log = "0.4.19"
 bitflags="2.4"
 
+tokio-util = "0.7"
 rustls = { version = "0.21.7", default-features = false }
 webpki-roots = "0.25"
 rustls-pemfile = "1.0.3"
