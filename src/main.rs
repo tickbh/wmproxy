@@ -1,9 +1,10 @@
 // #![deny(warnings)]
 
-use wmproxy::{Proxy, ProxyResult};
+use wmproxy::{ProxyOption, ProxyResult, Proxy};
 
 async fn run_main() -> ProxyResult<()> {
-    let mut proxy = Proxy::parse_env()?;
+    let option = ProxyOption::parse_env()?;
+    let mut proxy = Proxy::new(option);
     proxy.start_serve().await?;
     Ok(())
 }

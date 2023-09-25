@@ -20,6 +20,7 @@ where
     T: AsyncRead + AsyncWrite + Unpin,
 {
     stream: T,
+    id: u32,
     read: BinaryMut,
     write: BinaryMut,
     in_sender: Option<Sender<ProtFrame>>,
@@ -32,11 +33,13 @@ where
 {
     pub fn new(
         stream: T,
+        id: u32,
         in_sender: Option<Sender<ProtFrame>>,
         out_receiver: Option<Receiver<ProtFrame>>,
     ) -> Self {
         Self {
             stream,
+            id,
             read: BinaryMut::new(),
             write: BinaryMut::new(),
             in_sender,
