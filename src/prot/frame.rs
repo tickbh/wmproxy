@@ -70,6 +70,7 @@ impl ProtFrameHeader {
         size += buffer.put_u32(self.sock_map);
         Ok(size)
     }
+
 }
 
 impl ProtFrame {
@@ -98,4 +99,24 @@ impl ProtFrame {
         Ok(size)
     }
 
+    pub fn is_create(&self) -> bool {
+        match self {
+            ProtFrame::Create(_) => true,
+            _ => false
+        }
+    }
+
+    pub fn is_close(&self) -> bool {
+        match self {
+            ProtFrame::Close(_) => true,
+            _ => false
+        }
+    }
+
+    pub fn is_data(&self) -> bool {
+        match self {
+            ProtFrame::Data(_) => true,
+            _ => false
+        }
+    }
 }

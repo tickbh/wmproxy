@@ -24,12 +24,12 @@ use crate::{
 pub struct Proxy {
     option: ProxyOption,
     center_client: Option<CenterClient>,
-    center_server: Option<CenterServer>,
+    // center_server: Option<CenterServer>,
 }
 
 impl Proxy {
     pub fn new(option: ProxyOption) -> Proxy {
-        Self { option, center_client: None, center_server: None }
+        Self { option, center_client: None }
     }
 
     async fn process_http<T>(flag: Flag, inbound: T) -> ProxyTypeResult<(), T>
@@ -65,7 +65,6 @@ impl Proxy {
     async fn deal_center_stream<T>(
         &mut self,
         inbound: T,
-        tls_client: Option<Arc<rustls::ClientConfig>>,
     ) -> ProxyResult<()>
     where
         T: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static,
@@ -113,11 +112,16 @@ impl Proxy {
     {
         // 转发到服务端
         if self.center_client.is_some() {
-            return self.deal_center_stream(inbound, tls_client).await;
+            return self.deal_center_stream(inbound).await;
+        }
+
+        // 服务端开代理
+        if self.option.proxy {
+
         }
 
         if self.option.center {
-            return self.deal_center_stream(inbound, tls_client).await;
+            return self.deal_center_stream(inbound).await;
         }
         println!(
             "server = {:?} tc = {:?} ts = {:?} tls_client = {:?}",
@@ -165,6 +169,7 @@ impl Proxy {
                     process::exit(1);
                 },
             }
+            center_client.serve().await;
             self.center_client = Some(center_client);
         }
         let listener = TcpListener::bind(addr).await?;

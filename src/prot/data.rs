@@ -34,4 +34,8 @@ impl ProtData {
         size += self.data.serialize(buf)?;
         Ok(size)
     }
+
+    pub fn data(&self) -> &Binary {
+        &self.data
+    }
 }
