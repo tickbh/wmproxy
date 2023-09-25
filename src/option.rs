@@ -142,6 +142,7 @@ impl Builder {
     }
 }
 
+#[derive(Debug, Clone)]
 /// 代理类, 一个代理类启动一种类型的代理
 pub struct ProxyOption {
     pub(crate) flag: Flag,

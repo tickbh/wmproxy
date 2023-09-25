@@ -37,4 +37,8 @@ impl ProtData {
     pub fn data(&self) -> &Binary {
         &self.data
     }
+
+    pub fn sock_map(&self) -> u32 {
+        self.sock_map
+    }
 }

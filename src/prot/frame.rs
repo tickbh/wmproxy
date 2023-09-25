@@ -119,4 +119,13 @@ impl ProtFrame {
             _ => false
         }
     }
+
+    pub fn sock_map(&self) -> u32 {
+        match self {
+            ProtFrame::Data(s) => s.sock_map(),
+            ProtFrame::Create(s) => s.sock_map(),
+            ProtFrame::Close(s) => s.sock_map(),
+        }
+    }
+
 }

@@ -1,10 +1,9 @@
 use std::{
     io::{self},
     net::{IpAddr, SocketAddr},
-    sync::Arc, process,
+    process,
+    sync::Arc,
 };
-
-
 
 use tokio::{
     io::{AsyncRead, AsyncWrite},
@@ -15,9 +14,8 @@ use tokio_rustls::{rustls, TlsConnector};
 use webparse::BinaryMut;
 
 use crate::{
-    error::ProxyTypeResult,
-    prot::{ProtFrame},
-    Flag, ProxyError, ProxyHttp, ProxyResult, ProxySocks5, CenterClient, ProxyOption,
+    error::ProxyTypeResult, prot::ProtFrame, CenterClient, Flag, ProxyError, ProxyHttp,
+    ProxyOption, ProxyResult, ProxySocks5, CenterServer,
 };
 
 pub struct Proxy {
@@ -28,7 +26,10 @@ pub struct Proxy {
 
 impl Proxy {
     pub fn new(option: ProxyOption) -> Proxy {
-        Self { option, center_client: None }
+        Self {
+            option,
+            center_client: None,
+        }
     }
 
     async fn process_http<T>(flag: Flag, inbound: T) -> ProxyTypeResult<(), T>
@@ -61,10 +62,7 @@ impl Proxy {
         }
     }
 
-    async fn deal_center_stream<T>(
-        &mut self,
-        inbound: T,
-    ) -> ProxyResult<()>
+    async fn deal_center_stream<T>(&mut self, inbound: T) -> ProxyResult<()>
     where
         T: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static,
     {
@@ -73,7 +71,8 @@ impl Proxy {
         }
         // CenterServer
         if self.option.proxy {
-
+            let server = CenterServer::new(inbound, self.option.clone());
+            server.serve().await;
         }
         // CenterClient
         if let Some(_) = &self.option.server {
@@ -115,9 +114,7 @@ impl Proxy {
         }
 
         // 服务端开代理
-        if self.option.proxy {
-
-        }
+        if self.option.proxy {}
 
         if self.option.center {
             return self.deal_center_stream(inbound).await;
@@ -156,17 +153,22 @@ impl Proxy {
         let accept = self.option.get_tls_accept().await.ok();
         let client = self.option.get_tls_request().await.ok();
         if let Some(server) = self.option.server.clone() {
-            let mut center_client = CenterClient::new(server, client.clone(), self.option.domain.clone());
+            let mut center_client =
+                CenterClient::new(server, client.clone(), self.option.domain.clone());
             match center_client.connect().await {
                 Ok(true) => (),
                 Ok(false) => {
                     println!("未能正确连上服务端:{:?}", self.option.server.unwrap());
                     process::exit(1);
-                },
+                }
                 Err(err) => {
-                    println!("未能正确连上服务端:{:?}, 发生错误:{:?}", self.option.server.unwrap(), err);
+                    println!(
+                        "未能正确连上服务端:{:?}, 发生错误:{:?}",
+                        self.option.server.unwrap(),
+                        err
+                    );
                     process::exit(1);
-                },
+                }
             }
             center_client.serve().await;
             self.center_client = Some(center_client);
@@ -267,7 +269,7 @@ impl Proxy {
         Ok(())
     }
 
-    async fn deal_proxy<T>(
+    pub async fn deal_proxy<T>(
         inbound: T,
         flag: Flag,
         username: Option<String>,

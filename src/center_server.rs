@@ -1,6 +1,7 @@
-use std::{collections::HashMap};
+use std::collections::HashMap;
 use tokio::{
     io::{split, AsyncReadExt, AsyncWriteExt},
+    sync::mpsc::channel,
 };
 use tokio::{
     io::{AsyncRead, AsyncWrite},
@@ -8,12 +9,12 @@ use tokio::{
     sync::mpsc::Sender,
 };
 
-use webparse::BinaryMut;
 use webparse::Buf;
+use webparse::{http2::frame::read_u24, BinaryMut};
 
 use crate::{
-    prot::{ProtClose, ProtFrame},
-    ProxyResult,
+    prot::{ProtClose, ProtFrame, ProtFrameHeader},
+    ProxyOption, ProxyResult, VirtualStream, Proxy,
 };
 
 pub struct CenterServer<T>
@@ -21,40 +22,28 @@ where
     T: AsyncRead + AsyncWrite + Unpin,
 {
     stream: T,
-    sender: Option<Sender<ProtFrame>>,
-    receiver: Option<Receiver<ProtFrame>>,
+    option: ProxyOption,
 }
 
 impl<T> CenterServer<T>
 where
-    T: AsyncRead + AsyncWrite + Unpin,
+    T: AsyncRead + AsyncWrite + Unpin + Send + 'static
 {
-    pub fn new(stream: T) -> Self {
-        Self {
-            stream,
-            sender: None,
-            receiver: None,
-        }
+    pub fn new(stream: T, option: ProxyOption) -> Self {
+        Self { stream, option }
     }
 
-    pub async fn inner_serve(
-        stream: T,
-        receiver_work: &mut Receiver<(u32, Sender<ProtFrame>)>,
-        receiver: &mut Receiver<ProtFrame>,
-    ) -> ProxyResult<()> {
+    pub async fn inner_serve(stream: T, option: ProxyOption) -> ProxyResult<()> {
         let mut map = HashMap::<u32, Sender<ProtFrame>>::new();
         let mut read_buf = BinaryMut::new();
         let mut write_buf = BinaryMut::new();
+        let (sender, mut receiver) = channel::<ProtFrame>(10);
+
         let (mut reader, mut writer) = split(stream);
         let mut vec = vec![0u8; 4096];
         let is_closed;
         loop {
             let _ = tokio::select! {
-                r = receiver_work.recv() => {
-                    if let Some((sock, sender)) = r {
-                        map.insert(sock, sender);
-                    }
-                }
                 r = receiver.recv() => {
                     if let Some(p) = r {
                         let _ = p.encode(&mut write_buf);
@@ -86,8 +75,36 @@ where
                         Err(_) => todo!(),
                     }
                 }
-
             };
+
+            loop {
+                match Self::decode_frame(&mut read_buf)? {
+                    Some(p) => {
+                        if p.is_create() {
+                            let (virtual_sender, virtual_receiver) = channel::<ProtFrame>(10);
+                            map.insert(p.sock_map(), virtual_sender);
+                            let stream =
+                                VirtualStream::new(p.sock_map(), sender.clone(), virtual_receiver);
+
+                            let (flag, username, password, udp_bind) = (option.flag, option.username.clone(), option.password.clone(), option.udp_bind.clone());
+                            tokio::spawn(async move {
+                                let _ = Proxy::deal_proxy(stream, flag, username, password, udp_bind).await;
+                            });
+                        } else if p.is_close() {
+                            if let Some(sender) = map.get(&p.sock_map()) {
+                                sender.try_send(p);
+                            }
+                        } else if p.is_data() {
+                            if let Some(sender) = map.get(&p.sock_map()) {
+                                sender.try_send(p);
+                            }
+                        }
+                    }
+                    None => {
+                        break;
+                    }
+                }
+            }
         }
         if is_closed {
             for v in map {
@@ -97,11 +114,33 @@ where
         Ok(())
     }
 
-    pub async fn serve(&mut self) {
-        // let stream = self.stream;
+    pub fn decode_frame(read: &mut BinaryMut) -> ProxyResult<Option<ProtFrame>> {
+        let data_len = read.remaining();
+        if data_len < 8 {
+            return Ok(None);
+        }
+        let mut copy = read.clone();
+        let length = read_u24(&mut copy);
+        if length as usize > data_len {
+            return Ok(None);
+        }
+        copy.mark_len(length as usize - 3);
+        let header = match ProtFrameHeader::parse_by_len(&mut copy, length) {
+            Ok(v) => v,
+            Err(err) => return Err(err),
+        };
 
+        match ProtFrame::parse(header, copy) {
+            Ok(v) => return Ok(Some(v)),
+            Err(err) => return Err(err),
+        };
+    }
+
+    pub async fn serve(self) {
+        let stream = self.stream;
+        let option = self.option;
         tokio::spawn(async move {
-            // Self::inner_serve(stream, receiver_work, receiver);
+            let _ = Self::inner_serve(stream, option).await;
         });
     }
 }

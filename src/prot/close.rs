@@ -30,4 +30,8 @@ impl ProtClose {
         size += head.encode(buf)?;
         Ok(size)
     }
+
+    pub fn sock_map(&self) -> u32 {
+        self.sock_map
+    }
 }
