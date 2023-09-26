@@ -11,6 +11,7 @@ use tokio_rustls::{client::TlsStream, TlsConnector};
 use webparse::http2::frame::read_u24;
 use webparse::{BinaryMut, Buf};
 
+use crate::Helper;
 use crate::prot::{ProtFrameHeader, ProtClose, TransStream};
 use crate::{prot::ProtFrame, ProxyResult};
 
@@ -125,27 +126,6 @@ impl CenterClient {
     }
 
     
-    pub fn decode_frame(read: &mut BinaryMut) -> ProxyResult<Option<ProtFrame>> {
-        let data_len = read.remaining();
-        if data_len < 8 {
-            return Ok(None);
-        }
-        let mut copy = read.clone();
-        let length = read_u24(&mut copy);
-        if length as usize > data_len {
-            return Ok(None);
-        }
-        copy.mark_len(length as usize - 3);
-        let header = match ProtFrameHeader::parse_by_len(&mut copy, length) {
-            Ok(v) => v,
-            Err(err) => return Err(err),
-        };
-
-        match ProtFrame::parse(header, copy) {
-            Ok(v) => return Ok(Some(v)),
-            Err(err) => return Err(err),
-        };
-    }
 
     pub async fn inner_serve<T>(
         stream: T,
@@ -164,16 +144,21 @@ impl CenterClient {
         loop {
             let _ = tokio::select! {
                 r = receiver_work.recv() => {
+                    println!("center_client receiver = {:?}", r);
                     if let Some((sock, sender)) = r {
                         map.insert(sock, sender);
+                        println!("write create socket");
+                        let _ = ProtFrame::new_create(sock).encode(&mut write_buf);
                     }
                 }
                 r = receiver.recv() => {
+                    println!("center_client xxxx = {:?}", r);
                     if let Some(p) = r {
                         let _ = p.encode(&mut write_buf);
                     }
                 }
                 r = reader.read(&mut vec) => {
+                    println!("center_client rrrrr = {:?}", r);
                     match r {
                         Ok(0)=>{
                             is_closed=true;
@@ -182,13 +167,15 @@ impl CenterClient {
                         Ok(n) => {
                             read_buf.put_slice(&vec[..n]);
                         }
-                        Err(_) => {
+                        Err(_err) => {
+                            println!("error === {:?}", _err);
                             is_closed = true;
                             break;
                         },
                     }
                 }
                 r = writer.write(write_buf.chunk()), if write_buf.has_remaining() => {
+                    println!("center_client wwwww = {:?} len = {:?} remain = {:?}", r, write_buf.chunk(), write_buf.has_remaining());
                     match r {
                         Ok(n) => {
                             write_buf.advance(n);
@@ -196,11 +183,42 @@ impl CenterClient {
                                 write_buf.clear();
                             }
                         }
-                        Err(_) => todo!(),
+                        Err(e) => {
+                            println!("center_client errrrr = {:?}", e);
+                        },
                     }
                 }
-
             };
+
+            loop {
+                match Helper::decode_frame(&mut read_buf)? {
+                    Some(p) => {
+                        println!("server receiver = {:?}", p);
+                        if p.is_create() {
+                            // let (virtual_sender, virtual_receiver) = channel::<ProtFrame>(10);
+                            // map.insert(p.sock_map(), virtual_sender);
+                            // let stream =
+                            //     VirtualStream::new(p.sock_map(), sender.clone(), virtual_receiver);
+
+                            // let (flag, username, password, udp_bind) = (option.flag, option.username.clone(), option.password.clone(), option.udp_bind.clone());
+                            // tokio::spawn(async move {
+                            //     let _ = Proxy::deal_proxy(stream, flag, username, password, udp_bind).await;
+                            // });
+                        } else if p.is_close() {
+                            if let Some(sender) = map.get(&p.sock_map()) {
+                                let _ = sender.try_send(p);
+                            }
+                        } else if p.is_data() {
+                            if let Some(sender) = map.get(&p.sock_map()) {
+                                let _ = sender.try_send(p);
+                            }
+                        }
+                    }
+                    None => {
+                        break;
+                    }
+                }
+            }
         }
         if is_closed {
             for v in map {
@@ -229,7 +247,7 @@ impl CenterClient {
                 if stream.is_some() {
                     let _ = Self::inner_serve(stream.take().unwrap(), &mut receiver_work, &mut client_receiver).await;
                 } else if tls_stream.is_some() {
-                    let _ = Self::inner_serve(stream.take().unwrap(), &mut receiver_work, &mut client_receiver).await;
+                    let _ = Self::inner_serve(tls_stream.take().unwrap(), &mut receiver_work, &mut client_receiver).await;
                 };
                 match Self::inner_connect(tls_client.clone(), server.clone(), domain.clone()).await {
                     Ok((s, tls)) => {

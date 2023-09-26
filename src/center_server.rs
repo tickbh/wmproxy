@@ -14,7 +14,7 @@ use webparse::{http2::frame::read_u24, BinaryMut};
 
 use crate::{
     prot::{ProtClose, ProtFrame, ProtFrameHeader},
-    ProxyOption, ProxyResult, VirtualStream, Proxy,
+    ProxyOption, ProxyResult, VirtualStream, Proxy, Helper,
 };
 
 pub struct CenterServer<T>
@@ -34,6 +34,7 @@ where
     }
 
     pub async fn inner_serve(stream: T, option: ProxyOption) -> ProxyResult<()> {
+        println!("center_server {:?}", "aaaa");
         let mut map = HashMap::<u32, Sender<ProtFrame>>::new();
         let mut read_buf = BinaryMut::new();
         let mut write_buf = BinaryMut::new();
@@ -45,11 +46,13 @@ where
         loop {
             let _ = tokio::select! {
                 r = receiver.recv() => {
+                    println!("receiver = {:?}", r);
                     if let Some(p) = r {
                         let _ = p.encode(&mut write_buf);
                     }
                 }
                 r = reader.read(&mut vec) => {
+                    println!("read = {:?}", r);
                     match r {
                         Ok(0)=>{
                             is_closed=true;
@@ -65,6 +68,7 @@ where
                     }
                 }
                 r = writer.write(write_buf.chunk()), if write_buf.has_remaining() => {
+                    println!("write = {:?}", r);
                     match r {
                         Ok(n) => {
                             write_buf.advance(n);
@@ -78,8 +82,9 @@ where
             };
 
             loop {
-                match Self::decode_frame(&mut read_buf)? {
+                match Helper::decode_frame(&mut read_buf)? {
                     Some(p) => {
+                        println!("server receiver = {:?}", p);
                         if p.is_create() {
                             let (virtual_sender, virtual_receiver) = channel::<ProtFrame>(10);
                             map.insert(p.sock_map(), virtual_sender);
@@ -92,11 +97,11 @@ where
                             });
                         } else if p.is_close() {
                             if let Some(sender) = map.get(&p.sock_map()) {
-                                sender.try_send(p);
+                                let _ = sender.try_send(p);
                             }
                         } else if p.is_data() {
                             if let Some(sender) = map.get(&p.sock_map()) {
-                                sender.try_send(p);
+                                let _ = sender.try_send(p);
                             }
                         }
                     }
@@ -112,28 +117,6 @@ where
             }
         }
         Ok(())
-    }
-
-    pub fn decode_frame(read: &mut BinaryMut) -> ProxyResult<Option<ProtFrame>> {
-        let data_len = read.remaining();
-        if data_len < 8 {
-            return Ok(None);
-        }
-        let mut copy = read.clone();
-        let length = read_u24(&mut copy);
-        if length as usize > data_len {
-            return Ok(None);
-        }
-        copy.mark_len(length as usize - 3);
-        let header = match ProtFrameHeader::parse_by_len(&mut copy, length) {
-            Ok(v) => v,
-            Err(err) => return Err(err),
-        };
-
-        match ProtFrame::parse(header, copy) {
-            Ok(v) => return Ok(Some(v)),
-            Err(err) => return Err(err),
-        };
     }
 
     pub async fn serve(self) {

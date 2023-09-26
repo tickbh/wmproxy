@@ -56,7 +56,25 @@
                     "kind": "bin"
                 }
             },
-            "args": ["-b", "0.0.0.0", "--user", "proxy", "--pass", "proxy", "-p", "8091", "--tc"],
+            "args": ["-b", "0.0.0.0", "--user", "proxy", "--pass", "proxy", "--proxy", "-p", "8091", "--tc"],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "client",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=wmproxy",
+                    "--package=wmproxy"
+                ],
+                "filter": {
+                    "name": "wmproxy",
+                    "kind": "bin"
+                }
+            },
+            "args": ["-b", "0.0.0.0", "-S", "127.0.0.1:8091", "--ts"],
             "cwd": "${workspaceFolder}"
         },
         {

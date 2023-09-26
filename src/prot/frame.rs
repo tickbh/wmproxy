@@ -1,11 +1,12 @@
-use webparse::{Buf, http2::frame::{read_u24, encode_u24}, BufMut};
+
+use webparse::{Buf, http2::frame::{read_u24, encode_u24}, BufMut, Binary};
 
 use crate::ProxyResult;
 
 use super::{ProtCreate, ProtClose, ProtData, ProtFlag, ProtKind};
 
-pub const FRAME_HEADER_BYTES: usize = 8;
 
+#[derive(Debug)]
 pub struct ProtFrameHeader {
     pub length: u32,
     kind: ProtKind,
@@ -13,6 +14,7 @@ pub struct ProtFrameHeader {
     sock_map: u32,
 }
 
+#[derive(Debug)]
 pub enum ProtFrame {
     Create(ProtCreate),
     Close(ProtClose),
@@ -20,6 +22,8 @@ pub enum ProtFrame {
 }
 
 impl ProtFrameHeader {
+    pub const FRAME_HEADER_BYTES: usize = 8;
+
     pub fn new(kind: ProtKind, flag: ProtFlag, sock_map: u32) -> ProtFrameHeader {
         ProtFrameHeader {
             length: 0,
@@ -39,7 +43,7 @@ impl ProtFrameHeader {
 
     #[inline]
     pub fn parse<T: Buf>(buffer: &mut T) -> ProxyResult<ProtFrameHeader> {
-        if buffer.remaining() < FRAME_HEADER_BYTES {
+        if buffer.remaining() < Self::FRAME_HEADER_BYTES {
             return Err(crate::ProxyError::TooShort);
         }
         let length = read_u24(buffer);
@@ -48,7 +52,7 @@ impl ProtFrameHeader {
 
     #[inline]
     pub fn parse_by_len<T: Buf>(buffer: &mut T, length: u32) -> ProxyResult<ProtFrameHeader> {
-        if buffer.remaining() < FRAME_HEADER_BYTES - 3 {
+        if buffer.remaining() < Self::FRAME_HEADER_BYTES - 3 {
             return Err(crate::ProxyError::TooShort);
         }
         let kind = buffer.get_u8();
@@ -66,8 +70,9 @@ impl ProtFrameHeader {
     pub fn encode<B: Buf + BufMut>(&self, buffer: &mut B) -> ProxyResult<usize> {
         let mut size = 0;
         size += encode_u24(buffer, self.length);
+        size += buffer.put_u8(self.kind.encode());
         size += buffer.put_u8(self.flag.bits());
-        size += buffer.put_u32(self.sock_map);
+        size += encode_u24(buffer, self.sock_map);
         Ok(size)
     }
 
@@ -97,6 +102,18 @@ impl ProtFrame {
             ProtFrame::Close(s) => s.encode(buf)?,
         };
         Ok(size)
+    }
+
+    pub fn new_create(sock_map: u32) -> Self {
+        Self::Create(ProtCreate::new(sock_map))
+    }
+
+    pub fn new_close(sock_map: u32) -> Self {
+        Self::Close(ProtClose::new(sock_map))
+    }
+
+    pub fn new_data(sock_map: u32, data: Binary) -> Self {
+        Self::Data(ProtData::new(sock_map, data))
     }
 
     pub fn is_create(&self) -> bool {

@@ -52,14 +52,13 @@ impl AsyncRead for VirtualStream
                                 }
                                 _ => unreachable!(),
                             }
-                            // self.read.put_slice()
                         }
                     } else {
                         return Poll::Ready(Ok(()))
                     }
                 },
                 Poll::Pending => {
-                    if self.read.has_remaining() {
+                    if !self.read.has_remaining() {
                         return Poll::Pending;
                     }
                 },

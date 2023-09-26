@@ -1,16 +1,16 @@
 use std::{
     pin::Pin,
-    task::{ready, Context, Poll},
+    task::{ready, Context, Poll}, io, collections::LinkedList,
 };
 
 use futures_core::Stream;
 use tokio::{
-    io::{AsyncRead, AsyncReadExt, AsyncWrite, ReadBuf},
+    io::{AsyncRead, AsyncReadExt, AsyncWrite, ReadBuf, split, AsyncWriteExt},
     sync::mpsc::{Receiver, Sender},
 };
 use webparse::{http2::frame::read_u24, BinaryMut, Buf, BufMut};
 
-use crate::ProxyResult;
+use crate::{ProxyResult, Helper};
 
 use super::{ProtFrame, ProtFrameHeader};
 
@@ -45,22 +45,73 @@ where
             out_receiver,
         }
     }
-
-    pub async fn copy_wait(&mut self) -> Result<(), std::io::Error> {
+    pub async fn copy_wait(mut self) -> Result<(), std::io::Error> {
+        println!("copy wait!!!!");
         let mut buf = vec![0u8; 2048];
+        let mut link = LinkedList::<ProtFrame>::new();
+        let (mut reader, mut writer) = split(self.stream);
         loop {
             tokio::select! {
-                n = self.stream.read(&mut buf) => {
+                n = reader.read(&mut buf) => {
+                    println!("read = {:?}", n);
                     let n = n?;
-                    self.read.put_slice(&buf[..n]);
+                    if n == 0 {
+                        return Ok(())
+                    } else {
+                        self.read.put_slice(&buf[..n]);
+                    }
                 },
-                _r = self.out_receiver.as_mut().unwrap().recv() => {
-
+                r = writer.write(self.write.chunk()), if self.write.has_remaining() => {
+                    println!("write = {:?}", r);
+                    match r {
+                        Ok(n) => {
+                            self.write.advance(n);
+                            if !self.write.has_remaining() {
+                                self.write.clear();
+                            }
+                        }
+                        Err(_) => todo!(),
+                    }
                 }
-                _p = self.in_sender.as_mut().unwrap().reserve(), if self.read.remaining() > 0 => {
-
+                r = self.out_receiver.as_mut().unwrap().recv() => {
+                    println!("recv = {:?}", 1);
+                    if let Some(v) = r {
+                        if v.is_close() || v.is_create() {
+                            return Ok(())
+                        } else if v.is_data() {
+                            match v {
+                                ProtFrame::Data(d) => {
+                                    self.write.put_slice(&d.data().chunk());
+                                }
+                                _ => unreachable!(),
+                            }
+                        }
+                    } else {
+                        return Err(io::Error::new(io::ErrorKind::InvalidInput, "invalid frame"))
+                    }
+                }
+                p = self.in_sender.as_mut().unwrap().reserve(), if link.len() > 0 => {
+                    println!("send = {:?}", p);
+                    match p {
+                        Err(_)=>{
+                            return Err(io::Error::new(io::ErrorKind::InvalidInput, "invalid frame"))
+                        }
+                        Ok(p) => {
+                            p.send(link.pop_front().unwrap())
+                        }, 
+                    }
                 }
             }
+            println!("rad!!!!!!!!");
+            if self.read.has_remaining() {
+                link.push_back(ProtFrame::new_data(self.id, self.read.copy_to_binary()));
+                self.read.clear();
+            }
+            // while let Some(v) = Helper::decode_frame(&mut self.read).map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid frame"))? {
+            //     link.push_back(v);
+            // }
+
+            println!("rad!!!!!!!! 2222222");
             // let x = self.next().await;
             // self.next()
             // poll_fn(|cx| {
@@ -105,27 +156,6 @@ where
         Poll::Ready(Ok(size))
     }
 
-    pub fn decode_frame(&mut self) -> ProxyResult<Option<ProtFrame>> {
-        let data_len = self.read.remaining();
-        if data_len < 8 {
-            return Ok(None);
-        }
-        let mut copy = self.read.clone();
-        let length = read_u24(&mut copy);
-        if length as usize > data_len {
-            return Ok(None);
-        }
-        copy.mark_len(length as usize - 3);
-        let header = match ProtFrameHeader::parse_by_len(&mut copy, length) {
-            Ok(v) => v,
-            Err(err) => return Err(err),
-        };
-
-        match ProtFrame::parse(header, copy) {
-            Ok(v) => return Ok(Some(v)),
-            Err(err) => return Err(err),
-        };
-    }
 }
 
 impl<T> AsyncRead for TransStream<T>
@@ -186,7 +216,7 @@ where
         mut self: Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Option<Self::Item>> {
-        if let Some(v) = self.decode_frame()? {
+        if let Some(v) = Helper::decode_frame(&mut self.read)? {
             return Poll::Ready(Some(Ok(v)));
         }
         match ready!(self.poll_read_all(cx)?) {
@@ -195,7 +225,7 @@ where
                 return Poll::Ready(None);
             }
             _ => {
-                if let Some(v) = self.decode_frame()? {
+                if let Some(v) = Helper::decode_frame(&mut self.read)? {
                     return Poll::Ready(Some(Ok(v)));
                 } else {
                     return Poll::Pending;

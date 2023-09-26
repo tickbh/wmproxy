@@ -10,6 +10,7 @@ mod center_server;
 mod center_client;
 mod prot;
 mod virtual_stream;
+mod helper;
 
 pub use error::{ProxyResult, ProxyError};
 pub use flag::Flag;
@@ -20,3 +21,4 @@ pub use socks5::ProxySocks5;
 pub use center_server::CenterServer;
 pub use center_client::CenterClient;
 pub use virtual_stream::VirtualStream;
+pub use helper::Helper;

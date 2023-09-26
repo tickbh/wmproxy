@@ -7,7 +7,7 @@ use futures_core::Stream;
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use webparse::{http2::frame::read_u24, BinaryMut, Buf, BufMut};
 
-use crate::ProxyResult;
+use crate::{ProxyResult, Helper};
 
 use super::{ProtFrame, ProtFrameHeader};
 
@@ -66,27 +66,6 @@ where
         Poll::Ready(Ok(size))
     }
 
-    pub fn decode_frame(&mut self) -> ProxyResult<Option<ProtFrame>> {
-        let data_len = self.read.remaining();
-        if data_len < 8 {
-            return Ok(None);
-        }
-        let mut copy = self.read.clone();
-        let length = read_u24(&mut copy);
-        if length as usize > data_len {
-            return Ok(None);
-        }
-        copy.mark_len(length as usize - 3);
-        let header = match ProtFrameHeader::parse_by_len(&mut copy, length) {
-            Ok(v) => v,
-            Err(err) => return Err(err),
-        };
-
-        match ProtFrame::parse(header, copy) {
-            Ok(v) => return Ok(Some(v)),
-            Err(err) => return Err(err),
-        };
-    }
 }
 
 impl<T> AsyncRead for CenterStream<T>
@@ -147,7 +126,7 @@ where
         mut self: Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Option<Self::Item>> {
-        if let Some(v) = self.decode_frame()? {
+        if let Some(v) = Helper::decode_frame(&mut self.read)? {
             return Poll::Ready(Some(Ok(v)));
         }
         match ready!(self.poll_read_all(cx)?) {
@@ -156,7 +135,7 @@ where
                 return Poll::Ready(None);
             }
             _ => {
-                if let Some(v) = self.decode_frame()? {
+                if let Some(v) = Helper::decode_frame(&mut self.read)? {
                     return Poll::Ready(Some(Ok(v)));
                 } else {
                     return Poll::Pending;

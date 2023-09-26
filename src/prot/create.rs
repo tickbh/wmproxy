@@ -1,9 +1,13 @@
 use webparse::{Buf, BufMut};
 
-use crate::{ProxyResult, prot::{ProtKind, ProtFlag}};
+use crate::{
+    prot::{ProtFlag, ProtKind},
+    ProxyResult,
+};
 
 use super::ProtFrameHeader;
 
+#[derive(Debug)]
 pub struct ProtCreate {
     sock_map: u32,
     mode: u8,
@@ -11,11 +15,14 @@ pub struct ProtCreate {
 }
 
 impl ProtCreate {
-    pub fn parse<T: Buf>(
-        header: ProtFrameHeader,
-        mut buf: T,
-    ) -> ProxyResult<ProtCreate> {
-        
+    pub fn new(sock_map: u32) -> Self {
+        Self {
+            sock_map,
+            mode: 0,
+            domain: None,
+        }
+    }
+    pub fn parse<T: Buf>(header: ProtFrameHeader, mut buf: T) -> ProxyResult<ProtCreate> {
         let mode = buf.get_u8();
         Ok(ProtCreate {
             sock_map: header.sock_map(),
@@ -24,10 +31,7 @@ impl ProtCreate {
         })
     }
 
-    pub fn encode<B: Buf + BufMut>(
-        self,
-        buf: &mut B,
-    ) -> ProxyResult<usize> {
+    pub fn encode<B: Buf + BufMut>(self, buf: &mut B) -> ProxyResult<usize> {
         let mut head = ProtFrameHeader::new(ProtKind::Create, ProtFlag::zero(), self.sock_map);
         head.length = 1;
         let mut size = 0;

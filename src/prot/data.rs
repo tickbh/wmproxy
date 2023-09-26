@@ -7,6 +7,7 @@ use crate::{
 
 use super::ProtFrameHeader;
 
+#[derive(Debug)]
 pub struct ProtData {
     sock_map: u32,
     data: Binary,

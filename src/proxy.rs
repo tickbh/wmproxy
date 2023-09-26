@@ -75,11 +75,11 @@ impl Proxy {
             server.serve().await;
         }
         // CenterClient
-        if let Some(_) = &self.option.server {
-            tokio::spawn(async move {
-                let _ = Self::transfer_center_server(None, None, inbound).await;
-            });
-        }
+        // if let Some(_) = &self.option.server {
+        //     tokio::spawn(async move {
+        //         let _ = Self::transfer_center_server(None, None, inbound).await;
+        //     });
+        // }
         // let flag = self.flag;
         // let domain = self.domain.clone();
         // if let Some(server) = self.server.clone() {
@@ -114,7 +114,9 @@ impl Proxy {
         }
 
         // 服务端开代理
-        if self.option.proxy {}
+        if self.option.proxy {
+            return self.deal_center_stream(inbound).await;
+        }
 
         if self.option.center {
             return self.deal_center_stream(inbound).await;
