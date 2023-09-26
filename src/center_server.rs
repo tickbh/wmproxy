@@ -109,6 +109,10 @@ where
                         break;
                     }
                 }
+                
+                if !read_buf.has_remaining() {
+                    read_buf.clear();
+                }
             }
         }
         if is_closed {
@@ -119,11 +123,12 @@ where
         Ok(())
     }
 
-    pub async fn serve(self) {
+    pub async fn serve(self) -> ProxyResult<()> {
         let stream = self.stream;
         let option = self.option;
         tokio::spawn(async move {
             let _ = Self::inner_serve(stream, option).await;
         });
+        Ok(())
     }
 }

@@ -10,10 +10,38 @@ use rustls::{Certificate, PrivateKey};
 
 use tokio_rustls::{rustls, TlsAcceptor};
 
+use crate::{Flag, ProxyError, ProxyResult};
 
-use crate::{
-    Flag, ProxyError, ProxyResult,
-};
+use bitflags::bitflags;
+
+bitflags! {
+    #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+    pub struct Mode: u8 {
+        /// 未知类型, 单进程模型
+        const NONE = 0x0;
+        /// 仅客户端类型
+        const CLIENT = 0x1;
+        /// 仅服务端类型
+        const SERVER = 0x2;
+        /// 中转客户端及服务端
+        const ALL = 0x3;
+    }
+}
+
+impl Mode {
+    pub fn is_none(&self) -> bool {
+        self.bits() == 0
+    }
+    
+    pub fn is_client(&self) -> bool {
+        self.contains(Self::CLIENT)
+    }
+    
+    pub fn is_server(&self) -> bool {
+        self.contains(Self::SERVER)
+    }
+}
+
 
 pub struct Builder {
     inner: ProxyResult<ProxyOption>,
@@ -30,6 +58,13 @@ impl Builder {
     pub fn flag(self, flag: Flag) -> Builder {
         self.and_then(|mut proxy| {
             proxy.flag = flag;
+            Ok(proxy)
+        })
+    }
+    
+    pub fn mode(self, mode: Mode) -> Builder {
+        self.and_then(|mut proxy| {
+            proxy.mode = mode;
             Ok(proxy)
         })
     }
@@ -65,13 +100,6 @@ impl Builder {
     pub fn ts(self, is_tls: bool) -> Builder {
         self.and_then(|mut proxy| {
             proxy.ts = is_tls;
-            Ok(proxy)
-        })
-    }
-
-    pub fn proxy(self, p: bool) -> Builder {
-        self.and_then(|mut proxy| {
-            proxy.proxy = p;
             Ok(proxy)
         })
     }
@@ -146,6 +174,7 @@ impl Builder {
 /// 代理类, 一个代理类启动一种类型的代理
 pub struct ProxyOption {
     pub(crate) flag: Flag,
+    pub(crate) mode: Mode,
     pub(crate) bind_addr: String,
     pub(crate) bind_port: u16,
     pub(crate) server: Option<SocketAddr>,
@@ -153,9 +182,7 @@ pub struct ProxyOption {
     pub(crate) password: Option<String>,
     pub(crate) udp_bind: Option<IpAddr>,
 
-    //// 是否只接收来自代理的连接
-    pub(crate) proxy: bool,
-    //// 是否启用一对多
+    //// 是否启用协议转发
     pub(crate) center: bool,
     /// 连接服务端是否启用tls
     pub(crate) ts: bool,
@@ -173,6 +200,7 @@ impl Default for ProxyOption {
     fn default() -> Self {
         Self {
             flag: Flag::HTTP | Flag::HTTPS,
+            mode: Mode::CLIENT,
             bind_addr: "127.0.0.1".to_string(),
             bind_port: 8090,
             server: None,
@@ -180,7 +208,6 @@ impl Default for ProxyOption {
             password: None,
             udp_bind: None,
 
-            proxy: false,
             center: false,
             ts: false,
             tc: false,
@@ -206,8 +233,9 @@ impl ProxyOption {
                 "可兼容的方法, 如http https socks5",
                 None,
             )
-            .option("--proxy value", "是否只接收来自代理的连接", Some(false))
-            .option("-c, --center value", "是否启用一对多", Some(false))
+            .option_int("-m, --mode value", "1.表示客户端,2表示服务端,3表示服务端及客户端", Some(8090))
+            // .option("--proxy value", "是否只接收来自代理的连接", Some(false))
+            .option("-c, --center value", "是否启用协议转发", Some(false))
             .option("--tc value", "接收客户端是否加密", Some(false))
             .option("--ts value", "连接服务端是否加密", Some(false))
             .option_str("--cert value", "证书的公钥", None)
@@ -242,12 +270,12 @@ impl ProxyOption {
             }
         };
         builder = builder.flag(Flag::HTTP | Flag::HTTPS | Flag::SOCKS5);
+        builder = builder.mode(Mode::from_bits(command.get_int("m").unwrap_or(0) as u8).unwrap_or(Mode::CLIENT));
         builder = builder.username(command.get_str("user"));
         builder = builder.password(command.get_str("pass"));
         builder = builder.tc(command.get("tc").unwrap_or(false));
         builder = builder.ts(command.get("ts").unwrap_or(false));
         builder = builder.center(command.get("c").unwrap_or(false));
-        builder = builder.proxy(command.get("proxy").unwrap_or(false));
         builder = builder.domain(command.get_str("domain"));
         builder = builder.cert(command.get_str("cert"));
         builder = builder.key(command.get_str("key"));

@@ -175,7 +175,7 @@ impl CenterClient {
                     }
                 }
                 r = writer.write(write_buf.chunk()), if write_buf.has_remaining() => {
-                    println!("center_client wwwww = {:?} len = {:?} remain = {:?}", r, write_buf.chunk(), write_buf.has_remaining());
+                    println!("center_client wwwww = {:?} len = {:?} ", r, write_buf.has_remaining());
                     match r {
                         Ok(n) => {
                             write_buf.advance(n);
@@ -217,6 +217,10 @@ impl CenterClient {
                     None => {
                         break;
                     }
+                }
+
+                if !read_buf.has_remaining() {
+                    read_buf.clear();
                 }
             }
         }

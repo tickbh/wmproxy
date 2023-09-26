@@ -21,7 +21,6 @@ use crate::{
 pub struct Proxy {
     option: ProxyOption,
     center_client: Option<CenterClient>,
-    // center_server: Option<CenterServer>,
 }
 
 impl Proxy {
@@ -62,44 +61,6 @@ impl Proxy {
         }
     }
 
-    async fn deal_center_stream<T>(&mut self, inbound: T) -> ProxyResult<()>
-    where
-        T: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static,
-    {
-        if let Some(client) = &mut self.center_client {
-            return client.deal_new_stream(inbound).await;
-        }
-        // CenterServer
-        if self.option.proxy {
-            let server = CenterServer::new(inbound, self.option.clone());
-            server.serve().await;
-        }
-        // CenterClient
-        // if let Some(_) = &self.option.server {
-        //     tokio::spawn(async move {
-        //         let _ = Self::transfer_center_server(None, None, inbound).await;
-        //     });
-        // }
-        // let flag = self.flag;
-        // let domain = self.domain.clone();
-        // if let Some(server) = self.server.clone() {
-        //     tokio::spawn(async move {
-        //         // 转到上层服务器进行处理
-        //         let _e = Self::transfer_server(domain, tls_client, inbound, server).await;
-        //     });
-        // } else {
-        //     let username = self.username.clone();
-        //     let password = self.password.clone();
-        //     let udp_bind = self.udp_bind.clone();
-        //     tokio::spawn(async move {
-        //         // tcp的连接被移动到该协程中，我们只要专注的处理该stream即可
-        //         let _ = Self::deal_proxy(inbound, flag, username, password, udp_bind).await;
-        //     });
-        // }
-
-        Ok(())
-    }
-
     async fn deal_stream<T>(
         &mut self,
         inbound: T,
@@ -109,18 +70,16 @@ impl Proxy {
         T: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static,
     {
         // 转发到服务端
-        if self.center_client.is_some() {
-            return self.deal_center_stream(inbound).await;
+        if let Some(client) = &mut self.center_client {
+            return client.deal_new_stream(inbound).await;
         }
 
-        // 服务端开代理
-        if self.option.proxy {
-            return self.deal_center_stream(inbound).await;
+        // 服务端开代理, 接收到客户端一律用协议处理
+        if self.option.center && self.option.mode.is_server() {
+            let server = CenterServer::new(inbound, self.option.clone());
+            return server.serve().await;
         }
 
-        if self.option.center {
-            return self.deal_center_stream(inbound).await;
-        }
         println!(
             "server = {:?} tc = {:?} ts = {:?} tls_client = {:?}",
             self.option.server,
@@ -154,27 +113,29 @@ impl Proxy {
             .map_err(|_| ProxyError::Extension("parse addr error"))?;
         let accept = self.option.get_tls_accept().await.ok();
         let client = self.option.get_tls_request().await.ok();
-        if let Some(server) = self.option.server.clone() {
-            let mut center_client =
-                CenterClient::new(server, client.clone(), self.option.domain.clone());
-            match center_client.connect().await {
-                Ok(true) => (),
-                Ok(false) => {
-                    println!("未能正确连上服务端:{:?}", self.option.server.unwrap());
-                    process::exit(1);
+        if self.option.center {
+            if let Some(server) = self.option.server.clone() {
+                let mut center_client =
+                    CenterClient::new(server, client.clone(), self.option.domain.clone());
+                match center_client.connect().await {
+                    Ok(true) => (),
+                    Ok(false) => {
+                        println!("未能正确连上服务端:{:?}", self.option.server.unwrap());
+                        process::exit(1);
+                    }
+                    Err(err) => {
+                        println!(
+                            "未能正确连上服务端:{:?}, 发生错误:{:?}",
+                            self.option.server.unwrap(),
+                            err
+                        );
+                        process::exit(1);
+                    }
                 }
-                Err(err) => {
-                    println!(
-                        "未能正确连上服务端:{:?}, 发生错误:{:?}",
-                        self.option.server.unwrap(),
-                        err
-                    );
-                    process::exit(1);
-                }
+                center_client.serve().await;
+                self.center_client = Some(center_client);
             }
-            center_client.serve().await;
-            self.center_client = Some(center_client);
-        }
+        } 
         let listener = TcpListener::bind(addr).await?;
         println!(
             "accept = {:?} client = {:?}",
@@ -194,43 +155,6 @@ impl Proxy {
                 let _ = self.deal_stream(inbound, client.clone()).await;
             };
         }
-        Ok(())
-    }
-
-    async fn transfer_center_server<T>(
-        _in_sender: Option<Sender<ProtFrame>>,
-        _out_receiver: Option<Receiver<ProtFrame>>,
-        _inbound: T,
-    ) -> ProxyResult<()>
-    where
-        T: AsyncRead + AsyncWrite + Unpin,
-    {
-        // let trans = TransStream::new(inbound, in_sender, out_receiver);
-        // if tls_client.is_some() {
-        //     println!("connect by tls");
-        //     let connector = TlsConnector::from(tls_client.unwrap());
-        //     let stream = TcpStream::connect(&server).await?;
-        //     // 这里的域名只为认证设置
-        //     let domain =
-        //         rustls::ServerName::try_from(&*domain.unwrap_or("soft.wm-proxy.com".to_string()))
-        //             .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid dnsname"))?;
-
-        //     if let Ok(mut outbound) = connector.connect(domain, stream).await {
-        //         // connect 之后的流跟正常内容一样读写, 在内部实现了自动加解密
-        //         let _ = tokio::io::copy_bidirectional(&mut inbound, &mut outbound).await?;
-        //     } else {
-        //         // TODO 返回对应协议的错误
-        //         // let _ = Self::deal_proxy(inbound, flag, None, None, None).await;
-        //     }
-        // } else {
-        //     println!("connect by normal");
-        //     if let Ok(mut outbound) = TcpStream::connect(server).await {
-        //         let _ = tokio::io::copy_bidirectional(&mut inbound, &mut outbound).await?;
-        //     } else {
-        //         // TODO 返回对应协议的错误
-        //         // let _ = Self::deal_proxy(inbound, flag, None, None, None).await;
-        //     }
-        // }
         Ok(())
     }
 
