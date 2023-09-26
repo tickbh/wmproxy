@@ -8,11 +8,11 @@ use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWrite, ReadBuf, split, AsyncWriteExt},
     sync::mpsc::{Receiver, Sender},
 };
-use webparse::{http2::frame::read_u24, BinaryMut, Buf, BufMut};
+use webparse::{BinaryMut, Buf, BufMut};
 
 use crate::{ProxyResult, Helper};
 
-use super::{ProtFrame, ProtFrameHeader};
+use super::{ProtFrame};
 
 pub struct TransStream<T>
 where

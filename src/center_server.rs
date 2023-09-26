@@ -5,15 +5,14 @@ use tokio::{
 };
 use tokio::{
     io::{AsyncRead, AsyncWrite},
-    sync::mpsc::Receiver,
     sync::mpsc::Sender,
 };
 
 use webparse::Buf;
-use webparse::{http2::frame::read_u24, BinaryMut};
+use webparse::{BinaryMut};
 
 use crate::{
-    prot::{ProtClose, ProtFrame, ProtFrameHeader},
+    prot::{ProtClose, ProtFrame},
     ProxyOption, ProxyResult, VirtualStream, Proxy, Helper,
 };
 

@@ -8,13 +8,12 @@ use std::{
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::{TcpListener, TcpStream},
-    sync::mpsc::{Receiver, Sender},
 };
 use tokio_rustls::{rustls, TlsConnector};
 use webparse::BinaryMut;
 
 use crate::{
-    error::ProxyTypeResult, prot::ProtFrame, CenterClient, Flag, ProxyError, ProxyHttp,
+    error::ProxyTypeResult, CenterClient, Flag, ProxyError, ProxyHttp,
     ProxyOption, ProxyResult, ProxySocks5, CenterServer,
 };
 
@@ -181,7 +180,6 @@ impl Proxy {
                 let _ = tokio::io::copy_bidirectional(&mut inbound, &mut outbound).await?;
             } else {
                 // TODO 返回对应协议的错误
-                // let _ = Self::deal_proxy(inbound, flag, None, None, None).await;
             }
         } else {
             println!("connect by normal");
@@ -189,7 +187,6 @@ impl Proxy {
                 let _ = tokio::io::copy_bidirectional(&mut inbound, &mut outbound).await?;
             } else {
                 // TODO 返回对应协议的错误
-                // let _ = Self::deal_proxy(inbound, flag, None, None, None).await;
             }
         }
         Ok(())

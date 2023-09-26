@@ -5,11 +5,11 @@ use std::{
 
 use futures_core::Stream;
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
-use webparse::{http2::frame::read_u24, BinaryMut, Buf, BufMut};
+use webparse::{BinaryMut, Buf, BufMut};
 
 use crate::{ProxyResult, Helper};
 
-use super::{ProtFrame, ProtFrameHeader};
+use super::{ProtFrame};
 
 pub struct CenterStream<T>
 where

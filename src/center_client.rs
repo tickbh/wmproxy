@@ -8,11 +8,11 @@ use tokio::{
     sync::mpsc::Sender,
 };
 use tokio_rustls::{client::TlsStream, TlsConnector};
-use webparse::http2::frame::read_u24;
+
 use webparse::{BinaryMut, Buf};
 
 use crate::Helper;
-use crate::prot::{ProtFrameHeader, ProtClose, TransStream};
+use crate::prot::{ProtClose, TransStream};
 use crate::{prot::ProtFrame, ProxyResult};
 
 // pub struct Builder {
@@ -280,37 +280,8 @@ impl CenterClient {
         let (stream_sender, stream_receiver) = channel::<ProtFrame>(10);
         let _ = self.sender_work.as_mut().unwrap().send((id, stream_sender)).await;
         tokio::spawn(async move {
-            let mut trans = TransStream::new(inbound, id, sender, Some(stream_receiver));
+            let trans = TransStream::new(inbound, id, sender, Some(stream_receiver));
             let _ = trans.copy_wait().await;
-            // let (reader, writer) = split(inbound);
-            // loop {
-
-            // }
-            // if self.tls_client.is_some() {
-            //     println!("connect by tls");
-            //     let connector = TlsConnector::from(tls_client.unwrap());
-            //     let stream = TcpStream::connect(&server).await?;
-            //     // 这里的域名只为认证设置
-            //     let domain =
-            //         rustls::ServerName::try_from(&*domain.unwrap_or("soft.wm-proxy.com".to_string()))
-            //             .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid dnsname"))?;
-
-            //     if let Ok(mut outbound) = connector.connect(domain, stream).await {
-            //         // connect 之后的流跟正常内容一样读写, 在内部实现了自动加解密
-            //         let _ = tokio::io::copy_bidirectional(&mut inbound, &mut outbound).await?;
-            //     } else {
-            //         // TODO 返回对应协议的错误
-            //         // let _ = Self::deal_proxy(inbound, flag, None, None, None).await;
-            //     }
-            // } else {
-            //     println!("connect by normal");
-            //     if let Ok(mut outbound) = TcpStream::connect(server).await {
-            //         let _ = tokio::io::copy_bidirectional(&mut inbound, &mut outbound).await?;
-            //     } else {
-            //         // TODO 返回对应协议的错误
-            //         // let _ = Self::deal_proxy(inbound, flag, None, None, None).await;
-            //     }
-            // }
         });
         Ok(())
     }
