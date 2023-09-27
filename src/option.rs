@@ -32,16 +32,15 @@ impl Mode {
     pub fn is_none(&self) -> bool {
         self.bits() == 0
     }
-    
+
     pub fn is_client(&self) -> bool {
         self.contains(Self::CLIENT)
     }
-    
+
     pub fn is_server(&self) -> bool {
         self.contains(Self::SERVER)
     }
 }
-
 
 pub struct Builder {
     inner: ProxyResult<ProxyOption>,
@@ -61,7 +60,7 @@ impl Builder {
             Ok(proxy)
         })
     }
-    
+
     pub fn mode(self, mode: Mode) -> Builder {
         self.and_then(|mut proxy| {
             proxy.mode = mode;
@@ -160,6 +159,27 @@ impl Builder {
         })
     }
 
+    pub fn http_bind(self, http_bind: Option<SocketAddr>) -> Builder {
+        self.and_then(|mut proxy| {
+            proxy.http_bind = http_bind;
+            Ok(proxy)
+        })
+    }
+
+    pub fn https_bind(self, https_bind: Option<SocketAddr>) -> Builder {
+        self.and_then(|mut proxy| {
+            proxy.https_bind = https_bind;
+            Ok(proxy)
+        })
+    }
+
+    pub fn tcp_bind(self, tcp_bind: Option<SocketAddr>) -> Builder {
+        self.and_then(|mut proxy| {
+            proxy.tcp_bind = tcp_bind;
+            Ok(proxy)
+        })
+    }
+
     fn and_then<F>(self, func: F) -> Self
     where
         F: FnOnce(ProxyOption) -> ProxyResult<ProxyOption>,
@@ -181,6 +201,10 @@ pub struct ProxyOption {
     pub(crate) username: Option<String>,
     pub(crate) password: Option<String>,
     pub(crate) udp_bind: Option<IpAddr>,
+
+    pub(crate) http_bind: Option<SocketAddr>,
+    pub(crate) https_bind: Option<SocketAddr>,
+    pub(crate) tcp_bind: Option<SocketAddr>,
 
     //// 是否启用协议转发
     pub(crate) center: bool,
@@ -207,6 +231,9 @@ impl Default for ProxyOption {
             username: None,
             password: None,
             udp_bind: None,
+            http_bind: None,
+            https_bind: None,
+            tcp_bind: None,
 
             center: false,
             ts: false,
@@ -233,7 +260,14 @@ impl ProxyOption {
                 "可兼容的方法, 如http https socks5",
                 None,
             )
-            .option_int("-m, --mode value", "1.表示客户端,2表示服务端,3表示服务端及客户端", Some(8090))
+            .option_int(
+                "-m, --mode value",
+                "1.表示客户端,2表示服务端,3表示服务端及客户端",
+                Some(8090),
+            )
+            .option_str("--http value", "内网穿透的http代理监听地址", None)
+            .option_str("--https value", "内网穿透的https代理监听地址", None)
+            .option_str("--tcp value", "内网穿透的tcp代理监听地址", None)
             // .option("--proxy value", "是否只接收来自代理的连接", Some(false))
             .option("-c, --center value", "是否启用协议转发", Some(false))
             .option("--tc value", "接收客户端是否加密", Some(false))
@@ -270,7 +304,8 @@ impl ProxyOption {
             }
         };
         builder = builder.flag(Flag::HTTP | Flag::HTTPS | Flag::SOCKS5);
-        builder = builder.mode(Mode::from_bits(command.get_int("m").unwrap_or(0) as u8).unwrap_or(Mode::CLIENT));
+        builder = builder
+            .mode(Mode::from_bits(command.get_int("m").unwrap_or(0) as u8).unwrap_or(Mode::CLIENT));
         builder = builder.username(command.get_str("user"));
         builder = builder.password(command.get_str("pass"));
         builder = builder.tc(command.get("tc").unwrap_or(false));
@@ -282,7 +317,15 @@ impl ProxyOption {
         if let Some(udp) = command.get_str("udp") {
             builder = builder.udp_bind(udp.parse::<IpAddr>().ok());
         };
-
+        if let Some(http) = command.get_str("http") {
+            builder = builder.http_bind(http.parse::<SocketAddr>().ok());
+        };
+        if let Some(https) = command.get_str("https") {
+            builder = builder.https_bind(https.parse::<SocketAddr>().ok());
+        };
+        if let Some(tcp) = command.get_str("tcp") {
+            builder = builder.tcp_bind(tcp.parse::<SocketAddr>().ok());
+        };
         if let Some(s) = command.get_str("S") {
             builder = builder.server(s.parse::<SocketAddr>().ok());
         };

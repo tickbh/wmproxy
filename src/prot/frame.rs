@@ -104,8 +104,8 @@ impl ProtFrame {
         Ok(size)
     }
 
-    pub fn new_create(sock_map: u32) -> Self {
-        Self::Create(ProtCreate::new(sock_map))
+    pub fn new_create(sock_map: u32, domain: Option<String>) -> Self {
+        Self::Create(ProtCreate::new(sock_map, domain))
     }
 
     pub fn new_close(sock_map: u32) -> Self {

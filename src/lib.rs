@@ -11,6 +11,7 @@ mod center_client;
 mod prot;
 mod virtual_stream;
 mod helper;
+mod trans;
 
 pub use error::{ProxyResult, ProxyError};
 pub use flag::Flag;

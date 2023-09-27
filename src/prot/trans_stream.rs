@@ -45,6 +45,16 @@ where
             out_receiver,
         }
     }
+
+    pub fn reader_mut(&mut self) -> &mut BinaryMut {
+        &mut self.read
+    }
+
+    
+    pub fn write_mut(&mut self) -> &mut BinaryMut {
+        &mut self.read
+    }
+
     pub async fn copy_wait(mut self) -> Result<(), std::io::Error> {
         println!("copy wait!!!!");
         let mut buf = vec![0u8; 2048];

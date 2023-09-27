@@ -5,21 +5,24 @@ use std::{
     sync::Arc,
 };
 
+use futures_core::Future;
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::{TcpListener, TcpStream},
+    sync::mpsc::Sender,
 };
 use tokio_rustls::{rustls, TlsConnector};
 use webparse::BinaryMut;
 
 use crate::{
-    error::ProxyTypeResult, CenterClient, Flag, ProxyError, ProxyHttp,
-    ProxyOption, ProxyResult, ProxySocks5, CenterServer,
+    error::ProxyTypeResult, prot::ProtFrame, CenterClient, CenterServer, Flag, ProxyError,
+    ProxyHttp, ProxyOption, ProxyResult, ProxySocks5, trans::TransHttp,
 };
 
 pub struct Proxy {
     option: ProxyOption,
     center_client: Option<CenterClient>,
+    center_servers: Vec<CenterServer>,
 }
 
 impl Proxy {
@@ -27,6 +30,7 @@ impl Proxy {
         Self {
             option,
             center_client: None,
+            center_servers: vec![],
         }
     }
 
@@ -75,8 +79,9 @@ impl Proxy {
 
         // 服务端开代理, 接收到客户端一律用协议处理
         if self.option.center && self.option.mode.is_server() {
-            let server = CenterServer::new(inbound, self.option.clone());
-            return server.serve().await;
+            let server = CenterServer::new(self.option.clone());
+            self.center_servers.push(server);
+            return self.center_servers.last_mut().unwrap().serve(inbound).await;
         }
 
         println!(
@@ -134,26 +139,89 @@ impl Proxy {
                 center_client.serve().await;
                 self.center_client = Some(center_client);
             }
-        } 
-        let listener = TcpListener::bind(addr).await?;
+        }
+        let center_listener = TcpListener::bind(addr).await?;
         println!(
             "accept = {:?} client = {:?}",
             accept.is_some(),
             client.is_some()
         );
-        while let Ok((inbound, _)) = listener.accept().await {
-            if let Some(a) = accept.clone() {
-                let inbound = a.accept(inbound).await;
-                // 获取的流跟正常内容一样读写, 在内部实现了自动加解密
-                if let Ok(inbound) = inbound {
-                    let _ = self.deal_stream(inbound, client.clone()).await;
-                } else {
-                    println!("accept error = {:?}", inbound.err());
+        let http_listener = if let Some(ls) = &self.option.http_bind {
+            Some(TcpListener::bind(ls).await?)
+        } else {
+            None
+        };
+        async fn tcp_listen_work(listen: &Option<TcpListener>) -> Option<TcpStream> {
+            if listen.is_some() {
+                match listen.as_ref().unwrap().accept().await {
+                    Ok((tcp, _)) => Some(tcp),
+                    Err(_e) => None,
                 }
             } else {
-                let _ = self.deal_stream(inbound, client.clone()).await;
-            };
+                None
+            }
+            // do work
         }
+
+        let has_http = http_listener.is_some();
+        println!("has http = {:?}", has_http);
+
+        let https_listener = if let Some(ls) = &self.option.https_bind {
+            Some(TcpListener::bind(ls).await?)
+        } else {
+            None
+        };
+        let tcp_listener = if let Some(ls) = &self.option.tcp_bind {
+            Some(TcpListener::bind(ls).await?)
+        } else {
+            None
+        };
+
+        // let pending = std::future::pending();
+        // let fut: &mut dyn Future<Output = ()> = option_fut.as_mut().unwrap_or(&mut pending);
+
+        loop {
+            tokio::select! {
+                v = center_listener.accept() => {
+                    let (inbound, _) = v?;
+                    if let Some(a) = accept.clone() {
+                        let inbound = a.accept(inbound).await;
+                        // 获取的流跟正常内容一样读写, 在内部实现了自动加解密
+                        if let Ok(inbound) = inbound {
+                            let _ = self.deal_stream(inbound, client.clone()).await;
+                        } else {
+                            println!("accept error = {:?}", inbound.err());
+                        }
+                    } else {
+                        let _ = self.deal_stream(inbound, client.clone()).await;
+                    };
+                }
+                Some(inbound) = tcp_listen_work(&http_listener) => {
+                    self.server_new_http(inbound).await?;
+                }
+                Some(inbound) = tcp_listen_work(&https_listener) => {
+    
+                }
+                Some(inbound) = tcp_listen_work(&tcp_listener) => {
+    
+                }
+            }
+            println!("aaaaaaaaaaaaaa");
+    
+        }
+        // while let Ok((inbound, _)) = center_listener.accept().await {
+        //     if let Some(a) = accept.clone() {
+        //         let inbound = a.accept(inbound).await;
+        //         // 获取的流跟正常内容一样读写, 在内部实现了自动加解密
+        //         if let Ok(inbound) = inbound {
+        //             let _ = self.deal_stream(inbound, client.clone()).await;
+        //         } else {
+        //             println!("accept error = {:?}", inbound.err());
+        //         }
+        //     } else {
+        //         let _ = self.deal_stream(inbound, client.clone()).await;
+        //     };
+        // }
         Ok(())
     }
 
@@ -221,6 +289,20 @@ impl Proxy {
                     return Err(err);
                 }
             };
+        Ok(())
+    }
+
+
+    pub async fn server_new_http(&mut self, stream: TcpStream) -> ProxyResult<()> {
+        for server in &mut self.center_servers {
+            if !server.is_close() {
+                let trans = TransHttp::new(server.sender(), server.sender_work(), server.calc_next_id());
+                tokio::spawn(async move {
+                    let _ = trans.process(stream).await;
+                });
+                return Ok(());
+            }
+        }
         Ok(())
     }
 }

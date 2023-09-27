@@ -148,7 +148,7 @@ impl CenterClient {
                     if let Some((sock, sender)) = r {
                         map.insert(sock, sender);
                         println!("write create socket");
-                        let _ = ProtFrame::new_create(sock).encode(&mut write_buf);
+                        let _ = ProtFrame::new_create(sock, None).encode(&mut write_buf);
                     }
                 }
                 r = receiver.recv() => {
