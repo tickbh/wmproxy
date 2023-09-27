@@ -22,8 +22,8 @@ where
     id: u32,
     read: BinaryMut,
     write: BinaryMut,
-    in_sender: Option<Sender<ProtFrame>>,
-    out_receiver: Option<Receiver<ProtFrame>>,
+    in_sender: Sender<ProtFrame>,
+    out_receiver: Receiver<ProtFrame>,
 }
 
 impl<T> TransStream<T>
@@ -33,8 +33,8 @@ where
     pub fn new(
         stream: T,
         id: u32,
-        in_sender: Option<Sender<ProtFrame>>,
-        out_receiver: Option<Receiver<ProtFrame>>,
+        in_sender: Sender<ProtFrame>,
+        out_receiver: Receiver<ProtFrame>,
     ) -> Self {
         Self {
             stream,
@@ -55,7 +55,7 @@ where
         &mut self.read
     }
 
-    pub async fn copy_wait(mut self) -> Result<(), std::io::Error> {
+    pub async fn inner_copy_wait(mut self) -> Result<(), std::io::Error> {
         println!("copy wait!!!!");
         let mut buf = vec![0u8; 2048];
         let mut link = LinkedList::<ProtFrame>::new();
@@ -92,7 +92,7 @@ where
                         Err(_) => todo!(),
                     }
                 }
-                r = self.out_receiver.as_mut().unwrap().recv() => {
+                r = self.out_receiver.recv() => {
                     println!("recv = {:?}", r);
                     if let Some(v) = r {
                         if v.is_close() || v.is_create() {
@@ -109,7 +109,7 @@ where
                         return Err(io::Error::new(io::ErrorKind::InvalidInput, "invalid frame"))
                     }
                 }
-                p = self.in_sender.as_mut().unwrap().reserve(), if link.len() > 0 => {
+                p = self.in_sender.reserve(), if link.len() > 0 => {
                     println!("send = {:?}", p);
                     match p {
                         Err(_)=>{
@@ -134,6 +134,14 @@ where
             // self.stream.po
             // self.stream.ready(Interest::READABLE | Interest::WRITABLE).await;
         }
+    }
+
+    pub async fn copy_wait(self) -> Result<(), std::io::Error> {
+        let sender = self.in_sender.clone();
+        let id = self.id;
+        let ret = self.inner_copy_wait().await;
+        let _ = sender.send(ProtFrame::new_close(id)).await;
+        ret
     }
 
     pub fn stream_read(&mut self, cx: &mut Context<'_>) -> Poll<std::io::Result<usize>> {

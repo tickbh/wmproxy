@@ -29,7 +29,7 @@ pub struct CenterServer {
 impl CenterServer {
     pub fn new(option: ProxyOption) -> Self {
         let (sender, receiver) = channel::<ProtFrame>(100);
-        let (sender_work, mut receiver_work) = channel::<(ProtFrame, Sender<ProtFrame>)>(10);
+        let (sender_work, receiver_work) = channel::<(ProtFrame, Sender<ProtFrame>)>(10);
 
         Self {
             option,
@@ -79,8 +79,9 @@ impl CenterServer {
         let is_closed;
         loop {
             let _ = tokio::select! {
+                biased;
                 r = receiver_work.recv() => {
-                    println!("center_client receiver = {:?}", r);
+                    println!("center_server receiver = {:?}", r);
                     if let Some((create, sender)) = r {
                         map.insert(create.sock_map(), sender);
                         println!("write create socket");

@@ -1,9 +1,8 @@
 use tokio::{
-    io::{copy_bidirectional, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf},
-    net::TcpStream,
+    io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf},
     sync::mpsc::{Sender, channel},
 };
-use webparse::{BinaryMut, Buf, BufMut, HttpError, Method, WebError};
+use webparse::{BinaryMut, Buf, BufMut, HttpError, WebError};
 
 use crate::{prot::{ProtFrame, TransStream}, ProxyError};
 
@@ -35,12 +34,12 @@ impl TransHttp {
         Ok(())
     }
 
-    pub async fn process<T>(mut self, mut inbound: T) -> Result<(), ProxyError<T>>
+    pub async fn process<T>(self, mut inbound: T) -> Result<(), ProxyError<T>>
     where
         T: AsyncRead + AsyncWrite + Unpin,
     {
         let mut request;
-        let mut host_name;
+        let host_name;
         let mut buffer = BinaryMut::new();
         let mut cost_size = 0;
         loop {
@@ -78,6 +77,7 @@ impl TransHttp {
                     continue;
                 }
                 Err(_) => {
+                    println!("buffer === {:?}", String::from_utf8_lossy(buffer.chunk()));
                     return Err(ProxyError::Continue((Some(buffer), inbound)));
                 }
             }
@@ -87,9 +87,11 @@ impl TransHttp {
         let (stream_sender, stream_receiver) = channel::<ProtFrame>(10);
         let _ = self.sender_work.send((create, stream_sender)).await;
         
-        let mut trans = TransStream::new(inbound, self.sock_map, Some(self.sender), Some(stream_receiver));
+        println!("ending!!!!!! create");
+        let mut trans = TransStream::new(inbound, self.sock_map, self.sender, stream_receiver);
         trans.reader_mut().put_slice(buffer.chunk());
         trans.copy_wait().await?;
+        println!("ending!!!!!! copy");
         // let _ = copy_bidirectional(&mut inbound, &mut outbound).await?;
         Ok(())
     }

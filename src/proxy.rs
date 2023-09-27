@@ -5,17 +5,16 @@ use std::{
     sync::Arc,
 };
 
-use futures_core::Future;
+
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::{TcpListener, TcpStream},
-    sync::mpsc::Sender,
 };
 use tokio_rustls::{rustls, TlsConnector};
 use webparse::BinaryMut;
 
 use crate::{
-    error::ProxyTypeResult, prot::ProtFrame, CenterClient, CenterServer, Flag, ProxyError,
+    error::ProxyTypeResult, CenterClient, CenterServer, Flag, ProxyError,
     ProxyHttp, ProxyOption, ProxyResult, ProxySocks5, trans::TransHttp,
 };
 
@@ -182,7 +181,7 @@ impl Proxy {
 
         loop {
             tokio::select! {
-                v = center_listener.accept() => {
+                v = center_listener.accept() => {println!("!!!");
                     let (inbound, _) = v?;
                     if let Some(a) = accept.clone() {
                         let inbound = a.accept(inbound).await;
@@ -197,12 +196,14 @@ impl Proxy {
                     };
                 }
                 Some(inbound) = tcp_listen_work(&http_listener) => {
+                    println!("??????????????? = {:?}", inbound);
                     self.server_new_http(inbound).await?;
+                    println!("!!!!!!!!!!!");
                 }
-                Some(inbound) = tcp_listen_work(&https_listener) => {
+                Some(_inbound) = tcp_listen_work(&https_listener) => {
     
                 }
-                Some(inbound) = tcp_listen_work(&tcp_listener) => {
+                Some(_inbound) = tcp_listen_work(&tcp_listener) => {
     
                 }
             }
@@ -298,11 +299,14 @@ impl Proxy {
             if !server.is_close() {
                 let trans = TransHttp::new(server.sender(), server.sender_work(), server.calc_next_id());
                 tokio::spawn(async move {
-                    let _ = trans.process(stream).await;
+                    println!("tokio::spawn start!");
+                    let e = trans.process(stream).await;
+                    println!("tokio::spawn end! = {:?}", e);
                 });
                 return Ok(());
             }
         }
+        println!("no any clinet!!!!!!!!!!!!!!");
         Ok(())
     }
 }

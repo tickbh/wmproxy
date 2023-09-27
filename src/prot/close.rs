@@ -18,15 +18,15 @@ impl ProtClose {
     }
 
     pub fn parse<T: Buf>(header: ProtFrameHeader, mut buf: T) -> ProxyResult<ProtClose> {
-        let _mode = buf.get_u8();
+        // let _mode = buf.get_u8();
         Ok(ProtClose {
             sock_map: header.sock_map(),
         })
     }
 
     pub fn encode<B: Buf + BufMut>(self, buf: &mut B) -> ProxyResult<usize> {
-        let mut head = ProtFrameHeader::new(ProtKind::Create, ProtFlag::zero(), self.sock_map);
-        head.length = 1;
+        let mut head = ProtFrameHeader::new(ProtKind::Close, ProtFlag::zero(), self.sock_map);
+        head.length = 0;
         let mut size = 0;
         size += head.encode(buf)?;
         Ok(size)
