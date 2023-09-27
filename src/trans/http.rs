@@ -9,14 +9,14 @@ use crate::{prot::{ProtFrame, TransStream}, ProxyError};
 
 pub struct TransHttp {
     sender: Sender<ProtFrame>,
-    sender_work: Sender<(u32, Sender<ProtFrame>)>,
+    sender_work: Sender<(ProtFrame, Sender<ProtFrame>)>,
     sock_map: u32,
 }
 
 impl TransHttp {
     pub fn new(
         sender: Sender<ProtFrame>,
-        sender_work: Sender<(u32, Sender<ProtFrame>)>,
+        sender_work: Sender<(ProtFrame, Sender<ProtFrame>)>,
         sock_map: u32,
     ) -> Self {
         Self {
@@ -85,8 +85,7 @@ impl TransHttp {
 
         let create = ProtFrame::new_create(self.sock_map, Some(host_name));
         let (stream_sender, stream_receiver) = channel::<ProtFrame>(10);
-        let _ = self.sender_work.send((self.sock_map, stream_sender)).await;
-        let _ = self.sender.send(create).await;
+        let _ = self.sender_work.send((create, stream_sender)).await;
         
         let mut trans = TransStream::new(inbound, self.sock_map, Some(self.sender), Some(stream_receiver));
         trans.reader_mut().put_slice(buffer.chunk());

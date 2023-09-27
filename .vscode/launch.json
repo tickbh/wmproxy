@@ -56,7 +56,7 @@
                     "kind": "bin"
                 }
             },
-            "args": ["-b", "0.0.0.0", "--user", "proxy", "--pass", "proxy", "--proxy", "-p", "8091", "--tc", "-c", "-m", "2"],
+            "args": ["-b", "0.0.0.0", "--user", "proxy", "--pass", "proxy", "--proxy", "-p", "8091", "--tc", "-c", "-m", "2", "--http", "127.0.0.1:80"],
             "cwd": "${workspaceFolder}"
         },
         {

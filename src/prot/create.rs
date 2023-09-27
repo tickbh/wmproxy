@@ -56,4 +56,8 @@ impl ProtCreate {
     pub fn sock_map(&self) -> u32 {
         self.sock_map
     }
+
+    pub fn domain(&self) -> &Option<String> {
+        &self.domain
+    }
 }

@@ -21,15 +21,15 @@ pub struct CenterServer {
     sender: Sender<ProtFrame>,
     receiver: Option<Receiver<ProtFrame>>,
 
-    sender_work: Sender<(u32, Sender<ProtFrame>)>,
-    receiver_work: Option<Receiver<(u32, Sender<ProtFrame>)>>,
+    sender_work: Sender<(ProtFrame, Sender<ProtFrame>)>,
+    receiver_work: Option<Receiver<(ProtFrame, Sender<ProtFrame>)>>,
     next_id: u32,
 }
 
 impl CenterServer {
     pub fn new(option: ProxyOption) -> Self {
         let (sender, receiver) = channel::<ProtFrame>(100);
-        let (sender_work, mut receiver_work) = channel::<(u32, Sender<ProtFrame>)>(10);
+        let (sender_work, mut receiver_work) = channel::<(ProtFrame, Sender<ProtFrame>)>(10);
 
         Self {
             option,
@@ -45,7 +45,7 @@ impl CenterServer {
         self.sender.clone()
     }
     
-    pub fn sender_work(&self) -> Sender<(u32, Sender<ProtFrame>)> {
+    pub fn sender_work(&self) -> Sender<(ProtFrame, Sender<ProtFrame>)> {
         self.sender_work.clone()
     }
 
@@ -64,7 +64,7 @@ impl CenterServer {
         option: ProxyOption,
         sender: Sender<ProtFrame>,
         mut receiver: Receiver<ProtFrame>,
-        mut receiver_work: Receiver<(u32, Sender<ProtFrame>)>,
+        mut receiver_work: Receiver<(ProtFrame, Sender<ProtFrame>)>,
     ) -> ProxyResult<()>
     where
         T: AsyncRead + AsyncWrite + Unpin,
@@ -81,10 +81,10 @@ impl CenterServer {
             let _ = tokio::select! {
                 r = receiver_work.recv() => {
                     println!("center_client receiver = {:?}", r);
-                    if let Some((sock, sender)) = r {
-                        map.insert(sock, sender);
+                    if let Some((create, sender)) = r {
+                        map.insert(create.sock_map(), sender);
                         println!("write create socket");
-                        let _ = ProtFrame::new_create(sock, None).encode(&mut write_buf);
+                        let _ = create.encode(&mut write_buf);
                     }
                 }
                 r = receiver.recv() => {
@@ -94,7 +94,7 @@ impl CenterServer {
                     }
                 }
                 r = reader.read(&mut vec) => {
-                    println!("read = {:?}", r);
+                    println!("read from client = {:?}", r);
                     match r {
                         Ok(0)=>{
                             is_closed=true;
@@ -126,7 +126,7 @@ impl CenterServer {
             loop {
                 match Helper::decode_frame(&mut read_buf)? {
                     Some(p) => {
-                        println!("server receiver = {:?}", p);
+                        println!("server decode receiver = {:?}", p);
                         if p.is_create() {
                             let (virtual_sender, virtual_receiver) = channel::<ProtFrame>(10);
                             map.insert(p.sock_map(), virtual_sender);
@@ -146,11 +146,11 @@ impl CenterServer {
                             });
                         } else if p.is_close() {
                             if let Some(sender) = map.get(&p.sock_map()) {
-                                let _ = sender.try_send(p);
+                                let _ = sender.send(p).await;
                             }
                         } else if p.is_data() {
                             if let Some(sender) = map.get(&p.sock_map()) {
-                                let _ = sender.try_send(p);
+                                let _ = sender.send(p).await;
                             }
                         }
                     }

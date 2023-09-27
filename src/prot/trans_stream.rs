@@ -61,6 +61,12 @@ where
         let mut link = LinkedList::<ProtFrame>::new();
         let (mut reader, mut writer) = split(self.stream);
         loop {
+            println!("rad!!!!!!!!");
+            if self.read.has_remaining() {
+                link.push_back(ProtFrame::new_data(self.id, self.read.copy_to_binary()));
+                self.read.clear();
+            }
+
             tokio::select! {
                 n = reader.read(&mut buf) => {
                     println!("read = {:?}", n);
@@ -68,14 +74,17 @@ where
                     if n == 0 {
                         return Ok(())
                     } else {
+                        println!("read content xxxx = {:?}", String::from_utf8_lossy(&buf[..n]));
                         self.read.put_slice(&buf[..n]);
                     }
                 },
                 r = writer.write(self.write.chunk()), if self.write.has_remaining() => {
                     println!("write = {:?}", r);
+                    println!("write content = {:?}", String::from_utf8_lossy(self.write.chunk()));
                     match r {
                         Ok(n) => {
                             self.write.advance(n);
+                            println!("write remain len = {:?}", self.write.remaining());
                             if !self.write.has_remaining() {
                                 self.write.clear();
                             }
@@ -84,7 +93,7 @@ where
                     }
                 }
                 r = self.out_receiver.as_mut().unwrap().recv() => {
-                    println!("recv = {:?}", 1);
+                    println!("recv = {:?}", r);
                     if let Some(v) = r {
                         if v.is_close() || v.is_create() {
                             return Ok(())
@@ -111,11 +120,6 @@ where
                         }, 
                     }
                 }
-            }
-            println!("rad!!!!!!!!");
-            if self.read.has_remaining() {
-                link.push_back(ProtFrame::new_data(self.id, self.read.copy_to_binary()));
-                self.read.clear();
             }
             // while let Some(v) = Helper::decode_frame(&mut self.read).map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid frame"))? {
             //     link.push_back(v);
