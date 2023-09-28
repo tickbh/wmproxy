@@ -4,7 +4,7 @@ use tokio::{
 };
 use webparse::{BinaryMut, Buf, BufMut, HttpError, WebError};
 
-use crate::{prot::{ProtFrame, TransStream}, ProxyError};
+use crate::{ProtFrame, TransStream, ProxyError};
 
 pub struct TransHttp {
     sender: Sender<ProtFrame>,

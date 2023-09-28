@@ -8,16 +8,23 @@ use super::{ProtCreate, ProtClose, ProtData, ProtFlag, ProtKind};
 
 #[derive(Debug)]
 pub struct ProtFrameHeader {
+    /// 包体的长度, 3个字节, 最大为16m
     pub length: u32,
+    /// 包体的类型, 如Create, Data等
     kind: ProtKind,
+    /// 包体的标识, 如是否为响应包等
     flag: ProtFlag,
+    /// 3个字节, socket在内存中相应的句柄, 客户端发起为单数, 服务端发起为双数
     sock_map: u32,
 }
 
 #[derive(Debug)]
 pub enum ProtFrame {
+    /// 收到新的Socket连接
     Create(ProtCreate),
+    /// 收到旧的Socket连接关闭
     Close(ProtClose),
+    /// 收到Socket的相关数据
     Data(ProtData),
 }
 
@@ -79,6 +86,7 @@ impl ProtFrameHeader {
 }
 
 impl ProtFrame {
+    /// 把字节流转化成数据对象
     pub fn parse<T: Buf>(
         header: ProtFrameHeader,
         buf: T,
@@ -92,6 +100,7 @@ impl ProtFrame {
         Ok(v)
     }
 
+    /// 把数据对象转化成字节流
     pub fn encode<B: Buf + BufMut>(
         self,
         buf: &mut B,

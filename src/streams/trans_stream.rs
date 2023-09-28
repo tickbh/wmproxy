@@ -10,9 +10,8 @@ use tokio::{
 };
 use webparse::{BinaryMut, Buf, BufMut};
 
-use crate::{ProxyResult, Helper};
+use crate::{ProxyResult, Helper, ProtFrame};
 
-use super::{ProtFrame};
 
 pub struct TransStream<T>
 where
