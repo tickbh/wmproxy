@@ -11,20 +11,32 @@ use tokio_rustls::{client::TlsStream, TlsConnector};
 
 use webparse::{BinaryMut, Buf};
 
-use crate::{ProtClose, TransStream, ProtFrame, ProxyResult, Helper};
+use crate::{Helper, ProtClose, ProtCreate, ProtFrame, ProxyResult, TransStream};
 
+/// 中心客户端
+/// 负责与服务端建立连接，断开后自动再重连
 pub struct CenterClient {
+    /// tls的客户端连接信息
     tls_client: Option<Arc<rustls::ClientConfig>>,
+    /// tls的客户端连接域名
     domain: Option<String>,
+    /// 连接中心服务器的地址
     server_addr: SocketAddr,
+    /// 存在普通连接和加密连接，此处不为None则表示普通连接
     stream: Option<TcpStream>,
+    /// 存在普通连接和加密连接，此处不为None则表示加密连接
     tls_stream: Option<TlsStream<TcpStream>>,
+    /// 绑定的下一个sock_map映射，为单数
     next_id: u32,
 
-    sender_work: Sender<(ProtFrame, Sender<ProtFrame>)>,
-    receiver_work: Option<Receiver<(ProtFrame, Sender<ProtFrame>)>>,
+    /// 发送Create，并将绑定的Sender发到做绑定
+    sender_work: Sender<(ProtCreate, Sender<ProtFrame>)>,
+    /// 接收的Sender绑定，开始服务时这值move到工作协程中，所以不能二次调用服务
+    receiver_work: Option<Receiver<(ProtCreate, Sender<ProtFrame>)>>,
 
+    /// 发送协议数据，接收到服务端的流数据，转发给相应的Stream
     sender: Sender<ProtFrame>,
+    /// 接收协议数据，并转发到服务端。
     receiver: Option<Receiver<ProtFrame>>,
 }
 
@@ -35,8 +47,7 @@ impl CenterClient {
         domain: Option<String>,
     ) -> Self {
         let (sender, receiver) = channel::<ProtFrame>(100);
-        let (sender_work, receiver_work) = channel::<(ProtFrame, Sender<ProtFrame>)>(10);
-
+        let (sender_work, receiver_work) = channel::<(ProtCreate, Sender<ProtFrame>)>(10);
 
         Self {
             tls_client,
@@ -51,12 +62,6 @@ impl CenterClient {
             sender,
             receiver: Some(receiver),
         }
-    }
-
-    pub async fn transfer<T>()
-    where
-        T: AsyncRead + AsyncWrite + Unpin,
-    {
     }
 
     async fn inner_connect(
@@ -93,10 +98,10 @@ impl CenterClient {
         Ok(self.stream.is_some() || self.tls_stream.is_some())
     }
 
-    pub async fn inner_serve<T>(
+    async fn inner_serve<T>(
         stream: T,
         sender: &mut Sender<ProtFrame>,
-        receiver_work: &mut Receiver<(ProtFrame, Sender<ProtFrame>)>,
+        receiver_work: &mut Receiver<(ProtCreate, Sender<ProtFrame>)>,
         receiver: &mut Receiver<ProtFrame>,
     ) -> ProxyResult<()>
     where
@@ -110,23 +115,23 @@ impl CenterClient {
         let is_closed;
         loop {
             let _ = tokio::select! {
+                // 严格的顺序流
                 biased;
+                // 新的流建立，这里接收Create并进行绑定
                 r = receiver_work.recv() => {
-                    println!("center_client receiver = {:?}", r);
                     if let Some((create, sender)) = r {
                         map.insert(create.sock_map(), sender);
-                        println!("write create socket");
                         let _ = create.encode(&mut write_buf);
                     }
                 }
+                // 数据的接收，并将数据写入给远程端
                 r = receiver.recv() => {
-                    println!("center_client xxxx = {:?}", r);
                     if let Some(p) = r {
                         let _ = p.encode(&mut write_buf);
                     }
                 }
+                // 数据的等待读取，一旦流可读则触发，读到0则关闭主动关闭所有连接
                 r = reader.read(&mut vec) => {
-                    println!("center_client rrrrr = {:?}", r);
                     match r {
                         Ok(0)=>{
                             is_closed=true;
@@ -136,14 +141,13 @@ impl CenterClient {
                             read_buf.put_slice(&vec[..n]);
                         }
                         Err(_err) => {
-                            println!("error === {:?}", _err);
                             is_closed = true;
                             break;
                         },
                     }
                 }
+                // 一旦有写数据，则尝试写入数据，写入成功后扣除相应的数据
                 r = writer.write(write_buf.chunk()), if write_buf.has_remaining() => {
-                    println!("center_client wwwww = {:?} len = {:?} ", r, write_buf.has_remaining());
                     match r {
                         Ok(n) => {
                             write_buf.advance(n);
@@ -159,27 +163,30 @@ impl CenterClient {
             };
 
             loop {
+                // 将读出来的数据全部解析成ProtFrame并进行相应的处理，如果是0则是自身消息，其它进行转发
                 match Helper::decode_frame(&mut read_buf)? {
                     Some(p) => {
-                        println!("server receiver = {:?}", p);
                         match p {
                             ProtFrame::Create(p) => {
                                 let (virtual_sender, virtual_receiver) = channel::<ProtFrame>(10);
                                 map.insert(p.sock_map(), virtual_sender);
-                                // let mut stream =
-                                //     VirtualStream::new(p.sock_map(), sender.clone(), virtual_receiver);
                                 let _domain = p.domain().clone().unwrap_or(String::new());
                                 let domain = "127.0.0.1:8080";
                                 let sock_map = p.sock_map();
                                 let sender = sender.clone();
-                                
+
                                 // let (flag, username, password, udp_bind) = (option.flag, option.username.clone(), option.password.clone(), option.udp_bind.clone());
                                 tokio::spawn(async move {
                                     let tcpsteam = TcpStream::connect(domain).await;
                                     println!("connect server {:?}", tcpsteam);
                                     if let Ok(tcp) = tcpsteam {
-                                        let trans = TransStream::new(tcp, sock_map, sender, virtual_receiver);
-                                        trans.copy_wait().await;
+                                        let trans = TransStream::new(
+                                            tcp,
+                                            sock_map,
+                                            sender,
+                                            virtual_receiver,
+                                        );
+                                        let _ = trans.copy_wait().await;
                                         // let _ = copy_bidirectional(&mut tcp, &mut stream).await;
                                     }
                                 });
@@ -188,17 +195,16 @@ impl CenterClient {
                                 if let Some(sender) = map.get(&p.sock_map()) {
                                     let _ = sender.try_send(p);
                                 }
-                            },
+                            }
                         }
                     }
                     None => {
                         break;
                     }
                 }
-
-                if !read_buf.has_remaining() {
-                    read_buf.clear();
-                }
+            }
+            if !read_buf.has_remaining() {
+                read_buf.clear();
             }
         }
         if is_closed {
@@ -220,23 +226,34 @@ impl CenterClient {
         let mut client_receiver = self.receiver.take().unwrap();
         let mut receiver_work = self.receiver_work.take().unwrap();
 
-
         tokio::spawn(async move {
             let mut stream = stream;
             let mut tls_stream = tls_stream;
             loop {
                 if stream.is_some() {
-                    let _ = Self::inner_serve(stream.take().unwrap(), &mut client_sender, &mut receiver_work, &mut client_receiver).await;
+                    let _ = Self::inner_serve(
+                        stream.take().unwrap(),
+                        &mut client_sender,
+                        &mut receiver_work,
+                        &mut client_receiver,
+                    )
+                    .await;
                 } else if tls_stream.is_some() {
-                    let _ = Self::inner_serve(tls_stream.take().unwrap(), &mut client_sender, &mut receiver_work, &mut client_receiver).await;
+                    let _ = Self::inner_serve(
+                        tls_stream.take().unwrap(),
+                        &mut client_sender,
+                        &mut receiver_work,
+                        &mut client_receiver,
+                    )
+                    .await;
                 };
-                match Self::inner_connect(tls_client.clone(), server.clone(), domain.clone()).await {
+                match Self::inner_connect(tls_client.clone(), server.clone(), domain.clone()).await
+                {
                     Ok((s, tls)) => {
                         stream = s;
                         tls_stream = tls;
                     }
-                    Err(_err) => {
-                    },
+                    Err(_err) => {}
                 }
             }
         });
@@ -257,7 +274,10 @@ impl CenterClient {
         let id = self.calc_next_id();
         let sender = self.sender.clone();
         let (stream_sender, stream_receiver) = channel::<ProtFrame>(10);
-        let _ = self.sender_work.send((ProtFrame::new_create(id, None), stream_sender)).await;
+        let _ = self
+            .sender_work
+            .send((ProtCreate::new(id, None), stream_sender))
+            .await;
         tokio::spawn(async move {
             let trans = TransStream::new(inbound, id, sender, stream_receiver);
             let _ = trans.copy_wait().await;

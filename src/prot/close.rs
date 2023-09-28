@@ -7,6 +7,7 @@ use crate::{
 
 use super::ProtFrameHeader;
 
+/// 旧的Socket连接关闭, 接收到则关闭掉当前的连接
 #[derive(Debug)]
 pub struct ProtClose {
     sock_map: u32,
@@ -17,7 +18,7 @@ impl ProtClose {
         ProtClose { sock_map }
     }
 
-    pub fn parse<T: Buf>(header: ProtFrameHeader, mut buf: T) -> ProxyResult<ProtClose> {
+    pub fn parse<T: Buf>(header: ProtFrameHeader, _buf: T) -> ProxyResult<ProtClose> {
         // let _mode = buf.get_u8();
         Ok(ProtClose {
             sock_map: header.sock_map(),

@@ -4,18 +4,18 @@ use tokio::{
 };
 use webparse::{BinaryMut, Buf, BufMut, HttpError, WebError};
 
-use crate::{ProtFrame, TransStream, ProxyError};
+use crate::{ProtFrame, TransStream, ProxyError, ProtCreate};
 
 pub struct TransHttp {
     sender: Sender<ProtFrame>,
-    sender_work: Sender<(ProtFrame, Sender<ProtFrame>)>,
+    sender_work: Sender<(ProtCreate, Sender<ProtFrame>)>,
     sock_map: u32,
 }
 
 impl TransHttp {
     pub fn new(
         sender: Sender<ProtFrame>,
-        sender_work: Sender<(ProtFrame, Sender<ProtFrame>)>,
+        sender_work: Sender<(ProtCreate, Sender<ProtFrame>)>,
         sock_map: u32,
     ) -> Self {
         Self {
@@ -83,7 +83,7 @@ impl TransHttp {
             }
         }
 
-        let create = ProtFrame::new_create(self.sock_map, Some(host_name));
+        let create = ProtCreate::new(self.sock_map, Some(host_name));
         let (stream_sender, stream_receiver) = channel::<ProtFrame>(10);
         let _ = self.sender_work.send((create, stream_sender)).await;
         

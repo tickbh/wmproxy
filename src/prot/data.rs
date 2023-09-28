@@ -7,6 +7,7 @@ use crate::{
 
 use super::ProtFrameHeader;
 
+/// Socket的数据消息包
 #[derive(Debug)]
 pub struct ProtData {
     sock_map: u32,

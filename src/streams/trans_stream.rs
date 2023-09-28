@@ -12,16 +12,23 @@ use webparse::{BinaryMut, Buf, BufMut};
 
 use crate::{ProxyResult, Helper, ProtFrame};
 
-
+/// 转发流量端
+/// 提供与中心端绑定的读出写入功能
 pub struct TransStream<T>
 where
     T: AsyncRead + AsyncWrite + Unpin,
 {
+    // 流有相应的AsyncRead + AsyncWrite + Unpin均可
     stream: T,
+    // sock绑定的句柄
     id: u32,
+    // 读取的数据缓存，将转发成ProtFrame
     read: BinaryMut,
+    // 写的数据缓存，直接写入到stream下，从ProtFrame转化而来
     write: BinaryMut,
+    // 收到数据通过sender发送给中心端
     in_sender: Sender<ProtFrame>,
+    // 收到中心端的写入请求，转成write
     out_receiver: Receiver<ProtFrame>,
 }
 
@@ -54,13 +61,12 @@ where
         &mut self.read
     }
 
-    pub async fn inner_copy_wait(mut self) -> Result<(), std::io::Error> {
-        println!("copy wait!!!!");
+    async fn inner_copy_wait(mut self) -> Result<(), std::io::Error> {
         let mut buf = vec![0u8; 2048];
         let mut link = LinkedList::<ProtFrame>::new();
         let (mut reader, mut writer) = split(self.stream);
         loop {
-            println!("rad!!!!!!!!");
+            // 有剩余数据，优先转化成Prot，因为数据可能从外部直接带入
             if self.read.has_remaining() {
                 link.push_back(ProtFrame::new_data(self.id, self.read.copy_to_binary()));
                 self.read.clear();
@@ -68,22 +74,17 @@ where
 
             tokio::select! {
                 n = reader.read(&mut buf) => {
-                    println!("read = {:?}", n);
                     let n = n?;
                     if n == 0 {
                         return Ok(())
                     } else {
-                        println!("read content xxxx = {:?}", String::from_utf8_lossy(&buf[..n]));
                         self.read.put_slice(&buf[..n]);
                     }
                 },
                 r = writer.write(self.write.chunk()), if self.write.has_remaining() => {
-                    println!("write = {:?}", r);
-                    println!("write content = {:?}", String::from_utf8_lossy(self.write.chunk()));
                     match r {
                         Ok(n) => {
                             self.write.advance(n);
-                            println!("write remain len = {:?}", self.write.remaining());
                             if !self.write.has_remaining() {
                                 self.write.clear();
                             }
@@ -92,7 +93,6 @@ where
                     }
                 }
                 r = self.out_receiver.recv() => {
-                    println!("recv = {:?}", r);
                     if let Some(v) = r {
                         if v.is_close() || v.is_create() {
                             return Ok(())
@@ -109,7 +109,6 @@ where
                     }
                 }
                 p = self.in_sender.reserve(), if link.len() > 0 => {
-                    println!("send = {:?}", p);
                     match p {
                         Err(_)=>{
                             return Err(io::Error::new(io::ErrorKind::InvalidInput, "invalid frame"))

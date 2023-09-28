@@ -135,7 +135,7 @@ impl Proxy {
                         process::exit(1);
                     }
                 }
-                center_client.serve().await;
+                let _ = center_client.serve().await;
                 self.center_client = Some(center_client);
             }
         }

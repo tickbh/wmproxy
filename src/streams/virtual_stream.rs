@@ -5,17 +5,24 @@ use std::{
 use tokio_util::sync::PollSender;
 
 use tokio::{io::{AsyncRead, AsyncWrite}, sync::mpsc::{Sender, Receiver}};
-use webparse::{Binary, BinaryMut, Buf, BufMut};
+use webparse::{Binary, BinaryMut, Buf};
 
 use crate::prot::ProtData;
 use crate::{prot::ProtFrame};
 
+/// 虚拟端
+/// 虚拟出一个流连接，并实现AsyncRead及AsyncRead，可以和流一样正常操作
 pub struct VirtualStream
 {
+    // sock绑定的句柄
     id: u32,
+    // 收到数据通过sender发送给中心端
     sender: PollSender<ProtFrame>,
+    // 收到中心端的写入请求，转成write
     receiver: Receiver<ProtFrame>,
+    // 读取的数据缓存，将转发成ProtFrame
     read: BinaryMut,
+    // 写的数据缓存，直接写入到stream下，从ProtFrame转化而来
     write: BinaryMut,
 }
 
@@ -34,6 +41,7 @@ impl VirtualStream
 
 impl AsyncRead for VirtualStream
 {
+    // 有读取出数据，则返回数据，返回数据0的Ready状态则表示已关闭
     fn poll_read(
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
@@ -63,7 +71,6 @@ impl AsyncRead for VirtualStream
                     }
                 },
             }
-
 
             if self.read.has_remaining() {
                 let copy = std::cmp::min(self.read.remaining(), buf.remaining());

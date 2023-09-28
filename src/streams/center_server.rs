@@ -13,23 +13,32 @@ use webparse::Buf;
 
 use crate::{
     prot::{ProtClose, ProtFrame},
-    Helper, Proxy, ProxyOption, ProxyResult, VirtualStream,
+    Helper, ProtCreate, Proxy, ProxyOption, ProxyResult, VirtualStream,
 };
 
+/// 中心服务端
+/// 接受中心客户端的连接，并且将信息处理或者转发
 pub struct CenterServer {
+    /// 代理的详情信息，如用户密码这类
     option: ProxyOption,
+
+    /// 发送协议数据，接收到服务端的流数据，转发给相应的Stream
     sender: Sender<ProtFrame>,
+    /// 接收协议数据，并转发到服务端。
     receiver: Option<Receiver<ProtFrame>>,
 
-    sender_work: Sender<(ProtFrame, Sender<ProtFrame>)>,
-    receiver_work: Option<Receiver<(ProtFrame, Sender<ProtFrame>)>>,
+    /// 发送Create，并将绑定的Sender发到做绑定
+    sender_work: Sender<(ProtCreate, Sender<ProtFrame>)>,
+    /// 接收的Sender绑定，开始服务时这值move到工作协程中，所以不能二次调用服务
+    receiver_work: Option<Receiver<(ProtCreate, Sender<ProtFrame>)>>,
+    /// 绑定的下一个sock_map映射，为双数
     next_id: u32,
 }
 
 impl CenterServer {
     pub fn new(option: ProxyOption) -> Self {
         let (sender, receiver) = channel::<ProtFrame>(100);
-        let (sender_work, receiver_work) = channel::<(ProtFrame, Sender<ProtFrame>)>(10);
+        let (sender_work, receiver_work) = channel::<(ProtCreate, Sender<ProtFrame>)>(10);
 
         Self {
             option,
@@ -44,8 +53,8 @@ impl CenterServer {
     pub fn sender(&self) -> Sender<ProtFrame> {
         self.sender.clone()
     }
-    
-    pub fn sender_work(&self) -> Sender<(ProtFrame, Sender<ProtFrame>)> {
+
+    pub fn sender_work(&self) -> Sender<(ProtCreate, Sender<ProtFrame>)> {
         self.sender_work.clone()
     }
 
@@ -64,7 +73,7 @@ impl CenterServer {
         option: ProxyOption,
         sender: Sender<ProtFrame>,
         mut receiver: Receiver<ProtFrame>,
-        mut receiver_work: Receiver<(ProtFrame, Sender<ProtFrame>)>,
+        mut receiver_work: Receiver<(ProtCreate, Sender<ProtFrame>)>,
     ) -> ProxyResult<()>
     where
         T: AsyncRead + AsyncWrite + Unpin,
@@ -79,23 +88,23 @@ impl CenterServer {
         let is_closed;
         loop {
             let _ = tokio::select! {
+                // 严格的顺序流
                 biased;
+                // 新的流建立，这里接收Create并进行绑定
                 r = receiver_work.recv() => {
-                    println!("center_server receiver = {:?}", r);
                     if let Some((create, sender)) = r {
                         map.insert(create.sock_map(), sender);
-                        println!("write create socket");
                         let _ = create.encode(&mut write_buf);
                     }
                 }
+                // 数据的接收，并将数据写入给远程端
                 r = receiver.recv() => {
-                    println!("receiver = {:?}", r);
                     if let Some(p) = r {
                         let _ = p.encode(&mut write_buf);
                     }
                 }
+                // 数据的等待读取，一旦流可读则触发，读到0则关闭主动关闭所有连接
                 r = reader.read(&mut vec) => {
-                    println!("read from client = {:?}", r);
                     match r {
                         Ok(0)=>{
                             is_closed=true;
@@ -110,6 +119,7 @@ impl CenterServer {
                         },
                     }
                 }
+                // 一旦有写数据，则尝试写入数据，写入成功后扣除相应的数据
                 r = writer.write(write_buf.chunk()), if write_buf.has_remaining() => {
                     println!("write = {:?}", r);
                     match r {
@@ -125,6 +135,7 @@ impl CenterServer {
             };
 
             loop {
+                // 将读出来的数据全部解析成ProtFrame并进行相应的处理，如果是0则是自身消息，其它进行转发
                 match Helper::decode_frame(&mut read_buf)? {
                     Some(p) => {
                         println!("server decode receiver = {:?}", p);
@@ -141,6 +152,7 @@ impl CenterServer {
                                 option.udp_bind.clone(),
                             );
                             tokio::spawn(async move {
+                                // 处理代理的能力
                                 let _ =
                                     Proxy::deal_proxy(stream, flag, username, password, udp_bind)
                                         .await;
@@ -159,10 +171,9 @@ impl CenterServer {
                         break;
                     }
                 }
-
-                if !read_buf.has_remaining() {
-                    read_buf.clear();
-                }
+            }
+            if !read_buf.has_remaining() {
+                read_buf.clear();
             }
         }
         if is_closed {
