@@ -1,6 +1,6 @@
-use crate::{ProxyError};
+use crate::ProxyError;
 use tokio::{
-    io::{copy_bidirectional, AsyncReadExt, AsyncWriteExt, ReadBuf, AsyncRead, AsyncWrite},
+    io::{copy_bidirectional, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf},
     net::TcpStream,
 };
 use webparse::{BinaryMut, Buf, BufMut, HttpError, Method, WebError};
@@ -10,7 +10,8 @@ pub struct ProxyHttp {}
 impl ProxyHttp {
     async fn err_server_status<T>(mut inbound: T, status: u16) -> Result<(), ProxyError<T>>
     where
-        T: AsyncRead + AsyncWrite + Unpin, {
+        T: AsyncRead + AsyncWrite + Unpin,
+    {
         let mut res = webparse::Response::builder().status(status).body(())?;
         inbound.write_all(&res.httpdata()?).await?;
         Ok(())
@@ -47,7 +48,7 @@ impl ProxyHttp {
                             Ok(v) => outbound = v,
                             Err(e) => {
                                 Self::err_server_status(inbound, 503).await?;
-                                return Err(ProxyError::from(e))
+                                return Err(ProxyError::from(e));
                             }
                         }
                         break;

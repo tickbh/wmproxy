@@ -17,7 +17,7 @@ use webparse::Buf;
 
 use crate::{
     prot::{ProtClose, ProtFrame},
-    trans::TransHttp,
+    trans::{TransHttp, TransTcp},
     Helper, MappingConfig, ProtCreate, Proxy, ProxyOption, ProxyResult, VirtualStream,
 };
 
@@ -224,6 +224,17 @@ impl CenterServer {
 
     pub async fn server_new_http(&mut self, stream: TcpStream) -> ProxyResult<()> {
         let trans = TransHttp::new(self.sender(), self.sender_work(), self.calc_next_id(), self.mappings.clone());
+        tokio::spawn(async move {
+            println!("tokio::spawn start!");
+            let e = trans.process(stream).await;
+            println!("tokio::spawn end! = {:?}", e);
+        });
+        return Ok(());
+    }
+
+
+    pub async fn server_new_tcp(&mut self, stream: TcpStream) -> ProxyResult<()> {
+        let trans = TransTcp::new(self.sender(), self.sender_work(), self.calc_next_id(), self.mappings.clone());
         tokio::spawn(async move {
             println!("tokio::spawn start!");
             let e = trans.process(stream).await;

@@ -181,18 +181,30 @@ impl CenterClient {
                     Some(p) => {
                         match p {
                             ProtFrame::Create(p) => {
+                                let domain = p.domain().clone().unwrap_or(String::new());
+                                let mut local_addr = None;
+                                for m in &*mappings {
+                                    if m.domain == domain {
+                                        local_addr = m.local_addr.clone();
+                                    } else if domain.len() == 0 && m.is_tcp() {
+                                        local_addr = m.local_addr.clone();
+                                    }
+                                }
+                                if local_addr.is_none() {
+                                    log::warn!("local addr is none, can't mapping");
+                                    continue;
+                                }
                                 let (virtual_sender, virtual_receiver) = channel::<ProtFrame>(10);
                                 map.insert(p.sock_map(), virtual_sender);
-                                let _domain = p.domain().clone().unwrap_or(String::new());
-                                let domain = "127.0.0.1:8080";
+                                
+                                let domain = local_addr.unwrap();
                                 let sock_map = p.sock_map();
                                 let sender = sender.clone();
-
                                 // let (flag, username, password, udp_bind) = (option.flag, option.username.clone(), option.password.clone(), option.udp_bind.clone());
                                 tokio::spawn(async move {
-                                    let tcpsteam = TcpStream::connect(domain).await;
-                                    println!("connect server {:?}", tcpsteam);
-                                    if let Ok(tcp) = tcpsteam {
+                                    let stream = TcpStream::connect(domain).await;
+                                    println!("connect server {:?}", stream);
+                                    if let Ok(tcp) = stream {
                                         let trans = TransStream::new(
                                             tcp,
                                             sock_map,

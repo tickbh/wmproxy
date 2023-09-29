@@ -12,6 +12,10 @@ mappings:
     mode: http
     local_addr: 127.0.0.1:8080
     domain: localhost1
+  - name: web2
+    mode: tcp
+    local_addr: 127.0.0.1:8080
+    domain: 
 # #[serde(default)]
 #     pub(crate) flag: Flag,
 #     #[serde(default)]

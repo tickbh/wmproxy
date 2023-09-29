@@ -203,8 +203,8 @@ impl Proxy {
                 Some(_inbound) = tcp_listen_work(&https_listener) => {
     
                 }
-                Some(_inbound) = tcp_listen_work(&tcp_listener) => {
-    
+                Some(inbound) = tcp_listen_work(&tcp_listener) => {
+                    self.server_new_tcp(inbound).await?;
                 }
             }
             println!("aaaaaaaaaaaaaa");
@@ -298,6 +298,17 @@ impl Proxy {
         for server in &mut self.center_servers {
             if !server.is_close() {
                 return server.server_new_http(stream).await;
+            }
+        }
+        println!("no any clinet!!!!!!!!!!!!!!");
+        Ok(())
+    }
+
+
+    pub async fn server_new_tcp(&mut self, stream: TcpStream) -> ProxyResult<()> {
+        for server in &mut self.center_servers {
+            if !server.is_close() {
+                return server.server_new_tcp(stream).await;
             }
         }
         println!("no any clinet!!!!!!!!!!!!!!");
