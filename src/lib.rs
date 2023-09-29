@@ -10,6 +10,7 @@ mod streams;
 mod prot;
 mod helper;
 mod trans;
+mod mapping;
 
 pub use error::{ProxyResult, ProxyError};
 pub use flag::Flag;
@@ -20,3 +21,4 @@ pub use socks5::ProxySocks5;
 pub use streams::*;
 pub use helper::Helper;
 pub use prot::{ProtFrame, ProtFrameHeader, ProtClose, ProtData, ProtCreate};
+pub use mapping::*;

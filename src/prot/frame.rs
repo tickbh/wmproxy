@@ -3,7 +3,7 @@ use webparse::{Buf, http2::frame::{read_u24, encode_u24}, BufMut, Binary};
 
 use crate::ProxyResult;
 
-use super::{ProtCreate, ProtClose, ProtData, ProtFlag, ProtKind};
+use super::{ProtCreate, ProtClose, ProtData, ProtFlag, ProtKind, ProtMapping};
 
 
 #[derive(Debug)]
@@ -26,6 +26,8 @@ pub enum ProtFrame {
     Close(ProtClose),
     /// 收到Socket的相关数据
     Data(ProtData),
+    /// 收到内网映射的相关消息
+    Mapping(ProtMapping),
 }
 
 impl ProtFrameHeader {
@@ -95,6 +97,7 @@ impl ProtFrame {
             ProtKind::Data => ProtFrame::Data(ProtData::parse(header, buf)?) ,
             ProtKind::Create => ProtFrame::Create(ProtCreate::parse(header, buf)?),
             ProtKind::Close => ProtFrame::Close(ProtClose::parse(header, buf)?),
+            ProtKind::Mapping => ProtFrame::Mapping(ProtMapping::parse(header, buf)?),
             ProtKind::Unregistered => todo!(),
         };
         Ok(v)
@@ -109,6 +112,7 @@ impl ProtFrame {
             ProtFrame::Data(s) => s.encode(buf)?,
             ProtFrame::Create(s) => s.encode(buf)?,
             ProtFrame::Close(s) => s.encode(buf)?,
+            ProtFrame::Mapping(s) => s.encode(buf)?,
         };
         Ok(size)
     }
@@ -151,6 +155,7 @@ impl ProtFrame {
             ProtFrame::Data(s) => s.sock_map(),
             ProtFrame::Create(s) => s.sock_map(),
             ProtFrame::Close(s) => s.sock_map(),
+            ProtFrame::Mapping(s) => s.sock_map(),
         }
     }
 

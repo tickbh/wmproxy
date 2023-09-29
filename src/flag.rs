@@ -1,4 +1,5 @@
 use bitflags::bitflags;
+use serde::{Serialize, Deserialize};
 
 bitflags! {
     #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
@@ -13,6 +14,24 @@ bitflags! {
         const TCP = 0x8;
         /// 纯UDP转发
         const UDP = 0x16;
+    }
+}
+
+
+impl Serialize for Flag {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer {
+        serializer.serialize_u8(self.bits())
+    }
+}
+
+impl<'a> Deserialize<'a> for Flag {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'a> {
+        let v = u8::deserialize(deserializer)?;
+        Ok(Flag::from_bits(v).unwrap_or(Flag::HTTP))
     }
 }
 

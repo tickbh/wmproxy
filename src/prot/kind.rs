@@ -4,6 +4,7 @@ pub enum ProtKind {
     Data = 0,
     Create = 1,
     Close = 2,
+    Mapping = 3,
     Unregistered
 }
 
@@ -13,6 +14,7 @@ impl ProtKind {
             0 => ProtKind::Data,
             1 => ProtKind::Create,
             2 => ProtKind::Close,
+            3 => ProtKind::Mapping,
             _ => ProtKind::Unregistered
         }
     }
@@ -22,6 +24,7 @@ impl ProtKind {
             ProtKind::Data => 0,
             ProtKind::Create => 1,
             ProtKind::Close => 2,
+            ProtKind::Mapping => 3,
             ProtKind::Unregistered => 255
         }
     }

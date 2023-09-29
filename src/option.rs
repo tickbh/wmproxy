@@ -8,9 +8,10 @@ use std::{
 use commander::Commander;
 use rustls::{Certificate, PrivateKey};
 
+use serde::{Serialize, Deserialize};
 use tokio_rustls::{rustls, TlsAcceptor};
 
-use crate::{Flag, ProxyError, ProxyResult};
+use crate::{Flag, ProxyError, ProxyResult, MappingConfig};
 
 use bitflags::bitflags;
 
@@ -39,6 +40,24 @@ impl Mode {
 
     pub fn is_server(&self) -> bool {
         self.contains(Self::SERVER)
+    }
+}
+
+
+impl Serialize for Mode {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer {
+        serializer.serialize_u8(self.bits())
+    }
+}
+
+impl<'a> Deserialize<'a> for Mode {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'a> {
+        let v = u8::deserialize(deserializer)?;
+        Ok(Mode::from_bits(v).unwrap_or(Mode::NONE))
     }
 }
 
@@ -190,8 +209,8 @@ impl Builder {
     }
 }
 
-#[derive(Debug, Clone)]
 /// 代理类, 一个代理类启动一种类型的代理
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ProxyOption {
     pub(crate) flag: Flag,
     pub(crate) mode: Mode,
@@ -201,7 +220,6 @@ pub struct ProxyOption {
     pub(crate) username: Option<String>,
     pub(crate) password: Option<String>,
     pub(crate) udp_bind: Option<IpAddr>,
-
     pub(crate) http_bind: Option<SocketAddr>,
     pub(crate) https_bind: Option<SocketAddr>,
     pub(crate) tcp_bind: Option<SocketAddr>,
@@ -218,6 +236,8 @@ pub struct ProxyOption {
     pub(crate) cert: Option<String>,
     /// 隐私的证书私钥文件
     pub(crate) key: Option<String>,
+
+    pub(crate) mappings: Vec<MappingConfig>,
 }
 
 impl Default for ProxyOption {
@@ -241,6 +261,8 @@ impl Default for ProxyOption {
             domain: None,
             cert: None,
             key: None,
+
+            mappings: vec![],
         }
     }
 }

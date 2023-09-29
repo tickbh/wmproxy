@@ -196,6 +196,9 @@ impl CenterClient {
                                     let _ = sender.try_send(p);
                                 }
                             }
+                            ProtFrame::Mapping(_) => {
+
+                            }
                         }
                     }
                     None => {

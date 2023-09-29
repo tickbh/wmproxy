@@ -85,6 +85,8 @@ impl AsyncRead for VirtualStream
 
 impl AsyncWrite for VirtualStream
 {
+    /// 将数据直接写入到write缓冲里, 可以设定一个最大值
+    /// 最大的缓冲值不超过这个数值, 防止无限往缓冲区里发送该值
     fn poll_write(
         mut self: Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
