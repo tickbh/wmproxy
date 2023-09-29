@@ -46,7 +46,7 @@ impl ProtMapping {
         for m in self.mappings {
             write_short_string(buf, &m.name)?;
             write_short_string(buf, &m.mode)?;
-            write_short_string(buf, m.domain.as_ref().map(|s| &**s).unwrap_or(""))?;
+            write_short_string(buf, &m.domain)?;
         }
         head.length = cache_buf.remaining() as u32;
         let mut size = 0;
@@ -61,5 +61,10 @@ impl ProtMapping {
 
     pub fn mappings(&self) -> &Vec<MappingConfig> {
         &self.mappings
+    }
+
+
+    pub fn into_mappings(self) -> Vec<MappingConfig> {
+        self.mappings
     }
 }

@@ -1,7 +1,11 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 use tokio::{
     io::{split, AsyncReadExt, AsyncWriteExt},
-    sync::mpsc::{channel, Receiver},
+    net::TcpStream,
+    sync::{
+        mpsc::{channel, Receiver},
+        RwLock,
+    },
 };
 use tokio::{
     io::{AsyncRead, AsyncWrite},
@@ -13,7 +17,8 @@ use webparse::Buf;
 
 use crate::{
     prot::{ProtClose, ProtFrame},
-    Helper, ProtCreate, Proxy, ProxyOption, ProxyResult, VirtualStream,
+    trans::TransHttp,
+    Helper, MappingConfig, ProtCreate, Proxy, ProxyOption, ProxyResult, VirtualStream,
 };
 
 /// 中心服务端
@@ -33,6 +38,9 @@ pub struct CenterServer {
     receiver_work: Option<Receiver<(ProtCreate, Sender<ProtFrame>)>>,
     /// 绑定的下一个sock_map映射，为双数
     next_id: u32,
+
+    /// 内网映射的相关消息, 需要读写分离需加锁
+    mappings: Arc<RwLock<Vec<MappingConfig>>>,
 }
 
 impl CenterServer {
@@ -47,6 +55,7 @@ impl CenterServer {
             sender_work,
             receiver_work: Some(receiver_work),
             next_id: 2,
+            mappings: Arc::new(RwLock::new(vec![])),
         }
     }
 
@@ -74,6 +83,7 @@ impl CenterServer {
         sender: Sender<ProtFrame>,
         mut receiver: Receiver<ProtFrame>,
         mut receiver_work: Receiver<(ProtCreate, Sender<ProtFrame>)>,
+        mut mappings: Arc<RwLock<Vec<MappingConfig>>>,
     ) -> ProxyResult<()>
     where
         T: AsyncRead + AsyncWrite + Unpin,
@@ -139,31 +149,38 @@ impl CenterServer {
                 match Helper::decode_frame(&mut read_buf)? {
                     Some(p) => {
                         println!("server decode receiver = {:?}", p);
-                        if p.is_create() {
-                            let (virtual_sender, virtual_receiver) = channel::<ProtFrame>(10);
-                            map.insert(p.sock_map(), virtual_sender);
-                            let stream =
-                                VirtualStream::new(p.sock_map(), sender.clone(), virtual_receiver);
+                        match p {
+                            ProtFrame::Create(p) => {
+                                let (virtual_sender, virtual_receiver) = channel::<ProtFrame>(10);
+                                map.insert(p.sock_map(), virtual_sender);
+                                let stream = VirtualStream::new(
+                                    p.sock_map(),
+                                    sender.clone(),
+                                    virtual_receiver,
+                                );
 
-                            let (flag, username, password, udp_bind) = (
-                                option.flag,
-                                option.username.clone(),
-                                option.password.clone(),
-                                option.udp_bind.clone(),
-                            );
-                            tokio::spawn(async move {
-                                // 处理代理的能力
-                                let _ =
-                                    Proxy::deal_proxy(stream, flag, username, password, udp_bind)
-                                        .await;
-                            });
-                        } else if p.is_close() {
-                            if let Some(sender) = map.get(&p.sock_map()) {
-                                let _ = sender.send(p).await;
+                                let (flag, username, password, udp_bind) = (
+                                    option.flag,
+                                    option.username.clone(),
+                                    option.password.clone(),
+                                    option.udp_bind.clone(),
+                                );
+                                tokio::spawn(async move {
+                                    // 处理代理的能力
+                                    let _ = Proxy::deal_proxy(
+                                        stream, flag, username, password, udp_bind,
+                                    )
+                                    .await;
+                                });
                             }
-                        } else if p.is_data() {
-                            if let Some(sender) = map.get(&p.sock_map()) {
-                                let _ = sender.send(p).await;
+                            ProtFrame::Close(_) | ProtFrame::Data(_) => {
+                                if let Some(sender) = map.get(&p.sock_map()) {
+                                    let _ = sender.send(p).await;
+                                }
+                            }
+                            ProtFrame::Mapping(p) => {
+                                let mut guard = mappings.write().await;
+                                *guard = p.into_mappings();
                             }
                         }
                     }
@@ -196,10 +213,21 @@ impl CenterServer {
         let sender = self.sender.clone();
         let receiver = self.receiver.take().unwrap();
         let receiver_work = self.receiver_work.take().unwrap();
-
+        let mapping = self.mappings.clone();
         tokio::spawn(async move {
-            let _ = Self::inner_serve(stream, option, sender, receiver, receiver_work).await;
+            let _ =
+                Self::inner_serve(stream, option, sender, receiver, receiver_work, mapping).await;
         });
         Ok(())
+    }
+
+    pub async fn server_new_http(&mut self, stream: TcpStream) -> ProxyResult<()> {
+        let trans = TransHttp::new(self.sender(), self.sender_work(), self.calc_next_id(), self.mappings.clone());
+        tokio::spawn(async move {
+            println!("tokio::spawn start!");
+            let e = trans.process(stream).await;
+            println!("tokio::spawn end! = {:?}", e);
+        });
+        return Ok(());
     }
 }

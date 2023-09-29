@@ -1,15 +1,18 @@
+use std::sync::Arc;
+
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf},
-    sync::mpsc::{Sender, channel},
+    sync::{mpsc::{Sender, channel}, RwLock},
 };
-use webparse::{BinaryMut, Buf, BufMut, HttpError, WebError};
+use webparse::{BinaryMut, Buf, BufMut, HttpError, WebError, http::{response, StatusCode}, Response};
 
-use crate::{ProtFrame, TransStream, ProxyError, ProtCreate};
+use crate::{ProtFrame, TransStream, ProxyError, ProtCreate, MappingConfig};
 
 pub struct TransHttp {
     sender: Sender<ProtFrame>,
     sender_work: Sender<(ProtCreate, Sender<ProtFrame>)>,
     sock_map: u32,
+    mappings: Arc<RwLock<Vec<MappingConfig>>>,
 }
 
 impl TransHttp {
@@ -17,11 +20,13 @@ impl TransHttp {
         sender: Sender<ProtFrame>,
         sender_work: Sender<(ProtCreate, Sender<ProtFrame>)>,
         sock_map: u32,
+        mappings: Arc<RwLock<Vec<MappingConfig>>>,
     ) -> Self {
         Self {
             sender,
             sender_work,
             sock_map,
+            mappings,
         }
     }
 
@@ -60,7 +65,7 @@ impl TransHttp {
             // 若解析失败, 则表示非http协议能处理, 则抛出错误
             // 此处clone为浅拷贝，不确定是否一定能解析成功，不能影响偏移
             match request.parse_buffer(&mut buffer.clone()) {
-                Ok(s) => match request.get_connect_url() {
+                Ok(s) => match request.get_host() {
                     Some(host) => {
                         host_name = host;
                         cost_size = s;
@@ -80,6 +85,22 @@ impl TransHttp {
                     println!("buffer === {:?}", String::from_utf8_lossy(buffer.chunk()));
                     return Err(ProxyError::Continue((Some(buffer), inbound)));
                 }
+            }
+        }
+
+        {
+            let mut is_find = false;
+            let read = self.mappings.read().await;
+            for v in &*read {
+                if v.domain == host_name {
+                    is_find = true;
+                }
+            }
+            if !is_find {
+                let mut res = Response::builder().status(404).body("no found ")?;
+                let data = res.httpdata()?;
+                inbound.write_all(&data).await?;
+                return Ok(());
             }
         }
 

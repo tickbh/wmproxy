@@ -77,7 +77,7 @@ impl Proxy {
         }
 
         // 服务端开代理, 接收到客户端一律用协议处理
-        if self.option.center && self.option.mode.is_server() {
+        if self.option.center && self.option.is_server() {
             let server = CenterServer::new(self.option.clone());
             self.center_servers.push(server);
             return self.center_servers.last_mut().unwrap().serve(inbound).await;
@@ -119,7 +119,7 @@ impl Proxy {
         if self.option.center {
             if let Some(server) = self.option.server.clone() {
                 let mut center_client =
-                    CenterClient::new(server, client.clone(), self.option.domain.clone());
+                    CenterClient::new(server, client.clone(), self.option.domain.clone(), self.option.mappings.clone());
                 match center_client.connect().await {
                     Ok(true) => (),
                     Ok(false) => {
@@ -297,13 +297,7 @@ impl Proxy {
     pub async fn server_new_http(&mut self, stream: TcpStream) -> ProxyResult<()> {
         for server in &mut self.center_servers {
             if !server.is_close() {
-                let trans = TransHttp::new(server.sender(), server.sender_work(), server.calc_next_id());
-                tokio::spawn(async move {
-                    println!("tokio::spawn start!");
-                    let e = trans.process(stream).await;
-                    println!("tokio::spawn end! = {:?}", e);
-                });
-                return Ok(());
+                return server.server_new_http(stream).await;
             }
         }
         println!("no any clinet!!!!!!!!!!!!!!");

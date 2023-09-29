@@ -1,7 +1,7 @@
 
 use webparse::{Buf, http2::frame::{read_u24, encode_u24}, BufMut, Binary};
 
-use crate::ProxyResult;
+use crate::{ProxyResult, MappingConfig};
 
 use super::{ProtCreate, ProtClose, ProtData, ProtFlag, ProtKind, ProtMapping};
 
@@ -129,6 +129,10 @@ impl ProtFrame {
         Self::Data(ProtData::new(sock_map, data))
     }
 
+    pub fn new_mapping(sock_map: u32, mappings: Vec<MappingConfig>) -> Self {
+        Self::Mapping(ProtMapping::new(sock_map, mappings))
+    }
+
     pub fn is_create(&self) -> bool {
         match self {
             ProtFrame::Create(_) => true,
@@ -146,6 +150,13 @@ impl ProtFrame {
     pub fn is_data(&self) -> bool {
         match self {
             ProtFrame::Data(_) => true,
+            _ => false
+        }
+    }
+
+    pub fn is_mapping(&self) -> bool {
+        match self {
+            ProtFrame::Mapping(_) => true,
             _ => false
         }
     }

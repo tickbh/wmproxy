@@ -2,7 +2,7 @@ use bitflags::bitflags;
 use serde::{Serialize, Deserialize};
 
 bitflags! {
-    #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+    #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Default)]
     pub struct Flag: u8 {
         /// 使用HTTP代理类型
         const HTTP = 0x1;

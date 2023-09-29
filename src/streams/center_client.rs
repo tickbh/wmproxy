@@ -11,7 +11,9 @@ use tokio_rustls::{client::TlsStream, TlsConnector};
 
 use webparse::{BinaryMut, Buf};
 
-use crate::{Helper, ProtClose, ProtCreate, ProtFrame, ProxyResult, TransStream};
+use crate::{
+    Helper, MappingConfig, ProtClose, ProtCreate, ProtFrame, ProxyOption, ProxyResult, TransStream, mapping,
+};
 
 /// 中心客户端
 /// 负责与服务端建立连接，断开后自动再重连
@@ -22,6 +24,9 @@ pub struct CenterClient {
     domain: Option<String>,
     /// 连接中心服务器的地址
     server_addr: SocketAddr,
+    /// 内网映射的相关消息
+    mappings: Vec<MappingConfig>,
+
     /// 存在普通连接和加密连接，此处不为None则表示普通连接
     stream: Option<TcpStream>,
     /// 存在普通连接和加密连接，此处不为None则表示加密连接
@@ -45,6 +50,7 @@ impl CenterClient {
         server_addr: SocketAddr,
         tls_client: Option<Arc<rustls::ClientConfig>>,
         domain: Option<String>,
+        mappings: Vec<MappingConfig>,
     ) -> Self {
         let (sender, receiver) = channel::<ProtFrame>(100);
         let (sender_work, receiver_work) = channel::<(ProtCreate, Sender<ProtFrame>)>(10);
@@ -53,6 +59,7 @@ impl CenterClient {
             tls_client,
             domain,
             server_addr,
+            mappings,
             stream: None,
             tls_stream: None,
             next_id: 1,
@@ -103,6 +110,7 @@ impl CenterClient {
         sender: &mut Sender<ProtFrame>,
         receiver_work: &mut Receiver<(ProtCreate, Sender<ProtFrame>)>,
         receiver: &mut Receiver<ProtFrame>,
+        mappings: &mut Vec<MappingConfig>,
     ) -> ProxyResult<()>
     where
         T: AsyncRead + AsyncWrite + Unpin,
@@ -113,6 +121,9 @@ impl CenterClient {
         let (mut reader, mut writer) = split(stream);
         let mut vec = vec![0u8; 4096];
         let is_closed;
+        if mappings.len() > 0 {
+            ProtFrame::new_mapping(0, mappings.clone()).encode(&mut write_buf)?;
+        }
         loop {
             let _ = tokio::select! {
                 // 严格的顺序流
@@ -196,9 +207,7 @@ impl CenterClient {
                                     let _ = sender.try_send(p);
                                 }
                             }
-                            ProtFrame::Mapping(_) => {
-
-                            }
+                            ProtFrame::Mapping(_) => {}
                         }
                     }
                     None => {
@@ -228,7 +237,7 @@ impl CenterClient {
         let mut client_sender = self.sender.clone();
         let mut client_receiver = self.receiver.take().unwrap();
         let mut receiver_work = self.receiver_work.take().unwrap();
-
+        let mut mappings = self.mappings.clone();
         tokio::spawn(async move {
             let mut stream = stream;
             let mut tls_stream = tls_stream;
@@ -239,6 +248,7 @@ impl CenterClient {
                         &mut client_sender,
                         &mut receiver_work,
                         &mut client_receiver,
+                        &mut mappings,
                     )
                     .await;
                 } else if tls_stream.is_some() {
@@ -247,6 +257,7 @@ impl CenterClient {
                         &mut client_sender,
                         &mut receiver_work,
                         &mut client_receiver,
+                        &mut mappings,
                     )
                     .await;
                 };

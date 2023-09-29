@@ -1,6 +1,6 @@
 use std::{
     fs::File,
-    io::{self, BufReader},
+    io::{self, BufReader, Read},
     net::{IpAddr, SocketAddr},
     sync::Arc,
 };
@@ -8,15 +8,15 @@ use std::{
 use commander::Commander;
 use rustls::{Certificate, PrivateKey};
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use tokio_rustls::{rustls, TlsAcceptor};
 
-use crate::{Flag, ProxyError, ProxyResult, MappingConfig};
+use crate::{Flag, MappingConfig, ProxyError, ProxyResult};
 
 use bitflags::bitflags;
 
 bitflags! {
-    #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+    #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Default)]
     pub struct Mode: u8 {
         /// 未知类型, 单进程模型
         const NONE = 0x0;
@@ -43,11 +43,11 @@ impl Mode {
     }
 }
 
-
 impl Serialize for Mode {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: serde::Serializer {
+        S: serde::Serializer,
+    {
         serializer.serialize_u8(self.bits())
     }
 }
@@ -55,7 +55,8 @@ impl Serialize for Mode {
 impl<'a> Deserialize<'a> for Mode {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serde::Deserializer<'a> {
+        D: serde::Deserializer<'a>,
+    {
         let v = u8::deserialize(deserializer)?;
         Ok(Mode::from_bits(v).unwrap_or(Mode::NONE))
     }
@@ -80,7 +81,7 @@ impl Builder {
         })
     }
 
-    pub fn mode(self, mode: Mode) -> Builder {
+    pub fn mode(self, mode: String) -> Builder {
         self.and_then(|mut proxy| {
             proxy.mode = mode;
             Ok(proxy)
@@ -209,12 +210,24 @@ impl Builder {
     }
 }
 
+fn default_bind_addr() -> String {
+    "127.0.0.1".to_string()
+}
+
+fn default_bind_port() -> u16 {
+    8090
+}
+
 /// 代理类, 一个代理类启动一种类型的代理
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ProxyOption {
+    #[serde(default)]
     pub(crate) flag: Flag,
-    pub(crate) mode: Mode,
+    #[serde(default)]
+    pub(crate) mode: String,
+    #[serde(default = "default_bind_addr")]
     pub(crate) bind_addr: String,
+    #[serde(default = "default_bind_port")]
     pub(crate) bind_port: u16,
     pub(crate) server: Option<SocketAddr>,
     pub(crate) username: Option<String>,
@@ -225,10 +238,13 @@ pub struct ProxyOption {
     pub(crate) tcp_bind: Option<SocketAddr>,
 
     //// 是否启用协议转发
+    #[serde(default)]
     pub(crate) center: bool,
     /// 连接服务端是否启用tls
+    #[serde(default)]
     pub(crate) ts: bool,
     /// 接收客户端是否启用tls
+    #[serde(default)]
     pub(crate) tc: bool,
     /// tls证书所用的域名
     pub(crate) domain: Option<String>,
@@ -236,7 +252,7 @@ pub struct ProxyOption {
     pub(crate) cert: Option<String>,
     /// 隐私的证书私钥文件
     pub(crate) key: Option<String>,
-
+    #[serde(default)]
     pub(crate) mappings: Vec<MappingConfig>,
 }
 
@@ -244,7 +260,7 @@ impl Default for ProxyOption {
     fn default() -> Self {
         Self {
             flag: Flag::HTTP | Flag::HTTPS,
-            mode: Mode::CLIENT,
+            mode: "client".to_string(),
             bind_addr: "127.0.0.1".to_string(),
             bind_port: 8090,
             server: None,
@@ -282,16 +298,17 @@ impl ProxyOption {
                 "可兼容的方法, 如http https socks5",
                 None,
             )
-            .option_int(
+            .option_str(
                 "-m, --mode value",
-                "1.表示客户端,2表示服务端,3表示服务端及客户端",
-                Some(8090),
+                "client.表示客户端,server 表示服务端,all表示服务端及客户端",
+                None,
             )
+            .option_str("-c, --config", "配置文件", None)
             .option_str("--http value", "内网穿透的http代理监听地址", None)
             .option_str("--https value", "内网穿透的https代理监听地址", None)
             .option_str("--tcp value", "内网穿透的tcp代理监听地址", None)
             // .option("--proxy value", "是否只接收来自代理的连接", Some(false))
-            .option("-c, --center value", "是否启用协议转发", Some(false))
+            .option("--center value", "是否启用协议转发", Some(false))
             .option("--tc value", "接收客户端是否加密", Some(false))
             .option("--ts value", "连接服务端是否加密", Some(false))
             .option_str("--cert value", "证书的公钥", None)
@@ -313,6 +330,15 @@ impl ProxyOption {
             )
             .parse_env_or_exit();
 
+        if let Some(config) = command.get_str("c") {
+            let mut file = File::open(config)?;
+            let mut contents = String::new();
+            file.read_to_string(&mut contents)?;
+            let option = serde_yaml::from_str::<ProxyOption>(&contents).unwrap();
+            println!("option = {:?}", option);
+            return Ok(option);
+        }
+
         let listen_port: u16 = command.get_int("p").unwrap() as u16;
         let listen_host = command.get_str("b").unwrap();
         let mut builder = Self::builder().bind_port(listen_port);
@@ -325,14 +351,14 @@ impl ProxyOption {
                 builder = builder.bind_addr(listen_host);
             }
         };
+
         builder = builder.flag(Flag::HTTP | Flag::HTTPS | Flag::SOCKS5);
-        builder = builder
-            .mode(Mode::from_bits(command.get_int("m").unwrap_or(0) as u8).unwrap_or(Mode::CLIENT));
+        builder = builder.mode(command.get_str("m").unwrap_or(String::new()));
         builder = builder.username(command.get_str("user"));
         builder = builder.password(command.get_str("pass"));
         builder = builder.tc(command.get("tc").unwrap_or(false));
         builder = builder.ts(command.get("ts").unwrap_or(false));
-        builder = builder.center(command.get("c").unwrap_or(false));
+        builder = builder.center(command.get("center").unwrap_or(false));
         builder = builder.domain(command.get_str("domain"));
         builder = builder.cert(command.get_str("cert"));
         builder = builder.key(command.get_str("key"));
@@ -520,5 +546,14 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
             .with_root_certificates(root_cert_store)
             .with_no_client_auth();
         Ok(Arc::new(config))
+    }
+
+
+    pub fn is_client(&self) -> bool {
+        self.mode.eq_ignore_ascii_case("client")
+    }
+
+    pub fn is_server(&self) -> bool {
+        self.mode.eq_ignore_ascii_case("server")
     }
 }

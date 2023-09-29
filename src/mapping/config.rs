@@ -2,12 +2,16 @@ use std::net::SocketAddr;
 
 use serde::{Deserialize, Serialize};
 
+fn default_domain() -> String {
+    "".to_string()
+}
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct MappingConfig {
     pub name: String,
     pub mode: String,
     pub local_addr: Option<SocketAddr>,
-    pub domain: Option<String>,
+    #[serde(default="default_domain")]
+    pub domain: String,
 }
 
 impl MappingConfig {
@@ -16,7 +20,7 @@ impl MappingConfig {
             name,
             mode,
             local_addr: None,
-            domain: Some(domain),
+            domain,
         }
     }
 }
