@@ -1,6 +1,7 @@
 
 server: 127.0.0.1:8091
 center: true
+ts: true
 
 mappings:
   - name: web

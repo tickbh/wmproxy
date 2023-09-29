@@ -181,6 +181,7 @@ impl CenterServer {
                             ProtFrame::Mapping(p) => {
                                 let mut guard = mappings.write().await;
                                 *guard = p.into_mappings();
+                                println!("new mapping is =  {:?}", *guard);
                             }
                         }
                     }

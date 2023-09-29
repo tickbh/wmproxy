@@ -44,9 +44,9 @@ impl ProtMapping {
         let mut cache_buf = BinaryMut::with_capacity(100);
         cache_buf.put_u16(self.mappings.len() as u16);
         for m in self.mappings {
-            write_short_string(buf, &m.name)?;
-            write_short_string(buf, &m.mode)?;
-            write_short_string(buf, &m.domain)?;
+            write_short_string(&mut cache_buf, &m.name)?;
+            write_short_string(&mut cache_buf, &m.mode)?;
+            write_short_string(&mut cache_buf, &m.domain)?;
         }
         head.length = cache_buf.remaining() as u32;
         let mut size = 0;

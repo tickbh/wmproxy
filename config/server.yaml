@@ -1,5 +1,6 @@
 bind_addr: 127.0.0.1
 bind_port: 8091
 
+tc: true
 mode: server
 center: true

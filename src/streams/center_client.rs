@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::time::Duration;
 use std::{collections::HashMap, io, net::SocketAddr};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::mpsc::Receiver;
@@ -122,6 +123,7 @@ impl CenterClient {
         let mut vec = vec![0u8; 4096];
         let is_closed;
         if mappings.len() > 0 {
+            println!("encode mapping = {:?}", mappings);
             ProtFrame::new_mapping(0, mappings.clone()).encode(&mut write_buf)?;
         }
         loop {
@@ -267,7 +269,9 @@ impl CenterClient {
                         stream = s;
                         tls_stream = tls;
                     }
-                    Err(_err) => {}
+                    Err(_err) => {
+                        tokio::time::sleep(Duration::from_millis(1000)).await;
+                    }
                 }
             }
         });

@@ -56,7 +56,7 @@
                     "kind": "bin"
                 }
             },
-            "args": ["-b", "0.0.0.0", "--user", "proxy", "--pass", "proxy", "--proxy", "-p", "8091", "--tc", "-c", "-m", "2", "--http", "127.0.0.1:80"],
+            "args": ["-c", "config/server.yaml"],
             "cwd": "${workspaceFolder}"
         },
         {
@@ -74,7 +74,8 @@
                     "kind": "bin"
                 }
             },
-            "args": ["-b", "0.0.0.0", "-S", "127.0.0.1:8091", "--ts", "-c", "-m", "1"],
+            "args": ["-c", "config/client.yaml"],
+            "args1": ["-b", "0.0.0.0", "-S", "127.0.0.1:8091", "--ts", "-c", "-m", "1"],
             "cwd": "${workspaceFolder}"
         },
         {
