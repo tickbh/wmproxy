@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
 use tokio::{
-    io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf},
+    io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
     sync::{mpsc::{Sender, channel}, RwLock},
 };
-use webparse::{BinaryMut, Buf, BufMut, HttpError, WebError, http::{response, StatusCode}, Response};
+
 
 use crate::{ProtFrame, TransStream, ProxyError, ProtCreate, MappingConfig};
 
@@ -43,9 +43,12 @@ impl TransTcp {
     where
         T: AsyncRead + AsyncWrite + Unpin,
     {
+        println!("tcp!!!!!");
         {
             let mut is_find = false;
             let read = self.mappings.read().await;
+
+                println!("tcp!!!!! = {:?}", *read);
             for v in &*read {
                 if v.mode == "tcp" {
                     is_find = true;
@@ -56,6 +59,7 @@ impl TransTcp {
                 return Ok(());
             }
         }
+        println!("tcp!!!!!???");
 
         let create = ProtCreate::new(self.sock_map, None);
         let (stream_sender, stream_receiver) = channel::<ProtFrame>(10);

@@ -4,7 +4,7 @@ use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf},
     sync::{mpsc::{Sender, channel}, RwLock},
 };
-use webparse::{BinaryMut, Buf, BufMut, HttpError, WebError, http::{response, StatusCode}, Response};
+use webparse::{BinaryMut, Buf, BufMut, HttpError, WebError, Response};
 
 use crate::{ProtFrame, TransStream, ProxyError, ProtCreate, MappingConfig};
 

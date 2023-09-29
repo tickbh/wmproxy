@@ -12,5 +12,7 @@ async fn run_main() -> ProxyResult<()> {
 // #[forever_rs::main]
 #[tokio::main]
 async fn main() {
-    let _  = run_main().await;
+    if let Err(e) = run_main().await {
+        println!("运行wmproxy发生错误:{:?}", e);
+    }
 }

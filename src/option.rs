@@ -179,23 +179,23 @@ impl Builder {
         })
     }
 
-    pub fn http_bind(self, http_bind: Option<SocketAddr>) -> Builder {
+    pub fn map_http_bind(self, map_http_bind: Option<SocketAddr>) -> Builder {
         self.and_then(|mut proxy| {
-            proxy.http_bind = http_bind;
+            proxy.map_http_bind = map_http_bind;
             Ok(proxy)
         })
     }
 
-    pub fn https_bind(self, https_bind: Option<SocketAddr>) -> Builder {
+    pub fn map_https_bind(self, map_https_bind: Option<SocketAddr>) -> Builder {
         self.and_then(|mut proxy| {
-            proxy.https_bind = https_bind;
+            proxy.map_https_bind = map_https_bind;
             Ok(proxy)
         })
     }
 
-    pub fn tcp_bind(self, tcp_bind: Option<SocketAddr>) -> Builder {
+    pub fn map_tcp_bind(self, map_tcp_bind: Option<SocketAddr>) -> Builder {
         self.and_then(|mut proxy| {
-            proxy.tcp_bind = tcp_bind;
+            proxy.map_tcp_bind = map_tcp_bind;
             Ok(proxy)
         })
     }
@@ -233,9 +233,12 @@ pub struct ProxyOption {
     pub(crate) username: Option<String>,
     pub(crate) password: Option<String>,
     pub(crate) udp_bind: Option<IpAddr>,
-    pub(crate) http_bind: Option<SocketAddr>,
-    pub(crate) https_bind: Option<SocketAddr>,
-    pub(crate) tcp_bind: Option<SocketAddr>,
+    
+    pub(crate) map_http_bind: Option<SocketAddr>,
+    pub(crate) map_https_bind: Option<SocketAddr>,
+    pub(crate) map_tcp_bind: Option<SocketAddr>,
+    pub(crate) map_cert: Option<String>,
+    pub(crate) map_key: Option<String>,
 
     //// 是否启用协议转发
     #[serde(default)]
@@ -263,22 +266,26 @@ impl Default for ProxyOption {
             mode: "client".to_string(),
             bind_addr: "127.0.0.1".to_string(),
             bind_port: 8090,
-            server: None,
-            username: None,
-            password: None,
-            udp_bind: None,
-            http_bind: None,
-            https_bind: None,
-            tcp_bind: None,
 
-            center: false,
-            ts: false,
-            tc: false,
-            domain: None,
-            cert: None,
-            key: None,
+            .. Default::default()
+            // server: None,
+            // username: None,
+            // password: None,
+            // udp_bind: None,
+            // map_http_bind: None,
+            // map_https_bind: None,
+            // map_tcp_bind: None,
+            // map_cert: None,
+            // map_key: None,
 
-            mappings: vec![],
+            // center: false,
+            // ts: false,
+            // tc: false,
+            // domain: None,
+            // cert: None,
+            // key: None,
+
+            // mappings: vec![],
         }
     }
 }
@@ -335,14 +342,12 @@ impl ProxyOption {
             let mut contents = String::new();
             file.read_to_string(&mut contents)?;
             let option = serde_yaml::from_str::<ProxyOption>(&contents).unwrap();
-            println!("option = {:?}", option);
             return Ok(option);
         }
 
         let listen_port: u16 = command.get_int("p").unwrap() as u16;
         let listen_host = command.get_str("b").unwrap();
         let mut builder = Self::builder().bind_port(listen_port);
-        println!("listener bind {} {}", listen_host, listen_port);
         match format!("{}:{}", listen_host, listen_port).parse::<SocketAddr>() {
             Err(_) => {
                 builder = builder.bind_addr("127.0.0.1".to_string());
@@ -366,13 +371,13 @@ impl ProxyOption {
             builder = builder.udp_bind(udp.parse::<IpAddr>().ok());
         };
         if let Some(http) = command.get_str("http") {
-            builder = builder.http_bind(http.parse::<SocketAddr>().ok());
+            builder = builder.map_http_bind(http.parse::<SocketAddr>().ok());
         };
         if let Some(https) = command.get_str("https") {
-            builder = builder.https_bind(https.parse::<SocketAddr>().ok());
+            builder = builder.map_https_bind(https.parse::<SocketAddr>().ok());
         };
         if let Some(tcp) = command.get_str("tcp") {
-            builder = builder.tcp_bind(tcp.parse::<SocketAddr>().ok());
+            builder = builder.map_tcp_bind(tcp.parse::<SocketAddr>().ok());
         };
         if let Some(s) = command.get_str("S") {
             builder = builder.server(s.parse::<SocketAddr>().ok());
@@ -512,6 +517,25 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
     }
 
     /// 获取服务端https的证书信息
+    pub async fn get_map_tls_accept(&mut self) -> ProxyResult<TlsAcceptor> {
+        if !self.tc {
+            return Err(ProxyError::ProtNoSupport);
+        }
+        let certs = Self::load_certs(&self.map_cert)?;
+        let key = Self::load_keys(&self.map_key)?;
+
+        let config = rustls::ServerConfig::builder()
+            .with_safe_defaults()
+            .with_no_client_auth()
+            .with_single_cert(certs, key)
+            .map_err(|err| {
+                io::Error::new(io::ErrorKind::InvalidInput, err)
+            })?;
+        let acceptor = TlsAcceptor::from(Arc::new(config));
+        Ok(acceptor)
+    }
+
+    /// 获取服务端https的证书信息
     pub async fn get_tls_accept(&mut self) -> ProxyResult<TlsAcceptor> {
         if !self.tc {
             return Err(ProxyError::ProtNoSupport);
@@ -524,7 +548,6 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
             .with_no_client_auth()
             .with_single_cert(certs, key)
             .map_err(|err| {
-                println!("error = {:?}", err);
                 io::Error::new(io::ErrorKind::InvalidInput, err)
             })?;
         let acceptor = TlsAcceptor::from(Arc::new(config));

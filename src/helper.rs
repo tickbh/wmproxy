@@ -20,7 +20,6 @@ impl Helper {
         }
         read.advance(all_len);
         copy.mark_len(all_len - 3);
-        println!("all len = {:?} remain = {:?}", all_len, copy.remaining());
         let header = match ProtFrameHeader::parse_by_len(&mut copy, length) {
             Ok(v) => v,
             Err(err) => return Err(err),

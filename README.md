@@ -2,7 +2,6 @@
 http/https/socks5 proxy by rust
 一个同时支持http/https/socks5的代理
 
-
 ## 📦 Installation & 🏃 Usage
 
 ### Installation
@@ -75,5 +74,5 @@ http/https
 内网穿透
 
 - [x] Http Support
-- []  Https Support
+- [x] Https Support
 - [x] Tcp Support

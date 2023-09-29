@@ -1,8 +1,11 @@
 bind_addr: 127.0.0.1
 bind_port: 8091
 
-http_bind: 127.0.0.1:8001
-tcp_bind: 127.0.0.1:8002
+map_http_bind: 127.0.0.1:8001
+map_tcp_bind: 127.0.0.1:8002
+map_https_bind: 127.0.0.1:8003
+map_cert: 
+map_key:
 
 tc: true
 mode: server

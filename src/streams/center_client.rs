@@ -13,7 +13,7 @@ use tokio_rustls::{client::TlsStream, TlsConnector};
 use webparse::{BinaryMut, Buf};
 
 use crate::{
-    Helper, MappingConfig, ProtClose, ProtCreate, ProtFrame, ProxyOption, ProxyResult, TransStream, mapping,
+    Helper, MappingConfig, ProtClose, ProtCreate, ProtFrame, ProxyResult, TransStream,
 };
 
 /// 中心客户端
@@ -122,6 +122,7 @@ impl CenterClient {
         let (mut reader, mut writer) = split(stream);
         let mut vec = vec![0u8; 4096];
         let is_closed;
+        println!("mappings = {:?}", mappings);
         if mappings.len() > 0 {
             println!("encode mapping = {:?}", mappings);
             ProtFrame::new_mapping(0, mappings.clone()).encode(&mut write_buf)?;

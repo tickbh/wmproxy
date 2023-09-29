@@ -16,36 +16,3 @@ mappings:
     mode: tcp
     local_addr: 127.0.0.1:8080
     domain: 
-# #[serde(default)]
-#     pub(crate) flag: Flag,
-#     #[serde(default)]
-#     pub(crate) mode: Mode,
-#     #[serde(default="default_bind_addr")]
-#     pub(crate) bind_addr: String,
-#     #[serde(default="default_bind_port")]
-#     pub(crate) bind_port: u16,
-#     pub(crate) server: Option<SocketAddr>,
-#     pub(crate) username: Option<String>,
-#     pub(crate) password: Option<String>,
-#     pub(crate) udp_bind: Option<IpAddr>,
-#     pub(crate) http_bind: Option<SocketAddr>,
-#     pub(crate) https_bind: Option<SocketAddr>,
-#     pub(crate) tcp_bind: Option<SocketAddr>,
-
-#     //// 是否启用协议转发
-#     #[serde(default)]
-#     pub(crate) center: bool,
-#     /// 连接服务端是否启用tls
-#     #[serde(default)]
-#     pub(crate) ts: bool,
-#     /// 接收客户端是否启用tls
-#     #[serde(default)]
-#     pub(crate) tc: bool,
-#     /// tls证书所用的域名
-#     pub(crate) domain: Option<String>,
-#     /// 公开的证书公钥文件
-#     pub(crate) cert: Option<String>,
-#     /// 隐私的证书私钥文件
-#     pub(crate) key: Option<String>,
-#     #[serde(default)]
-#     pub(crate) mappings: Vec<MappingConfig>,

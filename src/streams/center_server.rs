@@ -12,6 +12,7 @@ use tokio::{
     sync::mpsc::Sender,
 };
 
+use tokio_rustls::TlsAcceptor;
 use webparse::BinaryMut;
 use webparse::Buf;
 
@@ -83,7 +84,7 @@ impl CenterServer {
         sender: Sender<ProtFrame>,
         mut receiver: Receiver<ProtFrame>,
         mut receiver_work: Receiver<(ProtCreate, Sender<ProtFrame>)>,
-        mut mappings: Arc<RwLock<Vec<MappingConfig>>>,
+        mappings: Arc<RwLock<Vec<MappingConfig>>>,
     ) -> ProxyResult<()>
     where
         T: AsyncRead + AsyncWrite + Unpin,
@@ -232,6 +233,17 @@ impl CenterServer {
         return Ok(());
     }
 
+    pub async fn server_new_https(&mut self, stream: TcpStream, accept: TlsAcceptor) -> ProxyResult<()> {
+        let trans = TransHttp::new(self.sender(), self.sender_work(), self.calc_next_id(), self.mappings.clone());
+        tokio::spawn(async move {
+            println!("tokio::spawn start!");
+            if let Ok(tls_stream) = accept.accept(stream).await {
+                let e = trans.process(tls_stream).await;
+                println!("tokio::spawn end! = {:?}", e);
+            }
+        });
+        return Ok(());
+    }
 
     pub async fn server_new_tcp(&mut self, stream: TcpStream) -> ProxyResult<()> {
         let trans = TransTcp::new(self.sender(), self.sender_work(), self.calc_next_id(), self.mappings.clone());

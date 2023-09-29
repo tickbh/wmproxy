@@ -5,17 +5,16 @@ use std::{
     sync::Arc,
 };
 
-
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::{TcpListener, TcpStream},
 };
-use tokio_rustls::{rustls, TlsConnector};
+use tokio_rustls::{rustls, TlsAcceptor, TlsConnector};
 use webparse::BinaryMut;
 
 use crate::{
     error::ProxyTypeResult, CenterClient, CenterServer, Flag, ProxyError,
-    ProxyHttp, ProxyOption, ProxyResult, ProxySocks5, trans::TransHttp,
+    ProxyHttp, ProxyOption, ProxyResult, ProxySocks5,
 };
 
 pub struct Proxy {
@@ -118,8 +117,12 @@ impl Proxy {
         let client = self.option.get_tls_request().await.ok();
         if self.option.center {
             if let Some(server) = self.option.server.clone() {
-                let mut center_client =
-                    CenterClient::new(server, client.clone(), self.option.domain.clone(), self.option.mappings.clone());
+                let mut center_client = CenterClient::new(
+                    server,
+                    client.clone(),
+                    self.option.domain.clone(),
+                    self.option.mappings.clone(),
+                );
                 match center_client.connect().await {
                     Ok(true) => (),
                     Ok(false) => {
@@ -145,11 +148,6 @@ impl Proxy {
             accept.is_some(),
             client.is_some()
         );
-        let http_listener = if let Some(ls) = &self.option.http_bind {
-            Some(TcpListener::bind(ls).await?)
-        } else {
-            None
-        };
         async fn tcp_listen_work(listen: &Option<TcpListener>) -> Option<TcpStream> {
             if listen.is_some() {
                 match listen.as_ref().unwrap().accept().await {
@@ -162,15 +160,28 @@ impl Proxy {
             // do work
         }
 
-        let has_http = http_listener.is_some();
-        println!("has http = {:?}", has_http);
-
-        let https_listener = if let Some(ls) = &self.option.https_bind {
+        let http_listener = if let Some(ls) = &self.option.map_http_bind {
             Some(TcpListener::bind(ls).await?)
         } else {
             None
         };
-        let tcp_listener = if let Some(ls) = &self.option.tcp_bind {
+        let mut https_listener = if let Some(ls) = &self.option.map_https_bind {
+            Some(TcpListener::bind(ls).await?)
+        } else {
+            None
+        };
+
+        let map_accept = if https_listener.is_some() {
+            let map_accept = self.option.get_map_tls_accept().await.ok();
+            if map_accept.is_none() {
+                let _ = https_listener.take();
+            }
+            map_accept
+        } else {
+            None
+        };
+
+        let tcp_listener = if let Some(ls) = &self.option.map_tcp_bind {
             Some(TcpListener::bind(ls).await?)
         } else {
             None
@@ -181,7 +192,7 @@ impl Proxy {
 
         loop {
             tokio::select! {
-                v = center_listener.accept() => {println!("!!!");
+                v = center_listener.accept() => {
                     let (inbound, _) = v?;
                     if let Some(a) = accept.clone() {
                         let inbound = a.accept(inbound).await;
@@ -200,15 +211,14 @@ impl Proxy {
                     self.server_new_http(inbound).await?;
                     println!("!!!!!!!!!!!");
                 }
-                Some(_inbound) = tcp_listen_work(&https_listener) => {
-    
+                Some(inbound) = tcp_listen_work(&https_listener) => {
+                    self.server_new_https(inbound, map_accept.clone().unwrap()).await?;
                 }
                 Some(inbound) = tcp_listen_work(&tcp_listener) => {
                     self.server_new_tcp(inbound).await?;
                 }
             }
             println!("aaaaaaaaaaaaaa");
-    
         }
         // while let Ok((inbound, _)) = center_listener.accept().await {
         //     if let Some(a) = accept.clone() {
@@ -293,7 +303,6 @@ impl Proxy {
         Ok(())
     }
 
-
     pub async fn server_new_http(&mut self, stream: TcpStream) -> ProxyResult<()> {
         for server in &mut self.center_servers {
             if !server.is_close() {
@@ -304,6 +313,19 @@ impl Proxy {
         Ok(())
     }
 
+    pub async fn server_new_https(
+        &mut self,
+        stream: TcpStream,
+        accept: TlsAcceptor,
+    ) -> ProxyResult<()> {
+        for server in &mut self.center_servers {
+            if !server.is_close() {
+                return server.server_new_https(stream, accept).await;
+            }
+        }
+        println!("no any clinet!!!!!!!!!!!!!!");
+        Ok(())
+    }
 
     pub async fn server_new_tcp(&mut self, stream: TcpStream) -> ProxyResult<()> {
         for server in &mut self.center_servers {
