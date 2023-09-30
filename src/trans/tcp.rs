@@ -30,15 +30,6 @@ impl TransTcp {
         }
     }
 
-    async fn err_server_status<T>(mut inbound: T, status: u16) -> Result<(), ProxyError<T>>
-    where
-        T: AsyncRead + AsyncWrite + Unpin,
-    {
-        let mut res = webparse::Response::builder().status(status).body(())?;
-        inbound.write_all(&res.httpdata()?).await?;
-        Ok(())
-    }
-
     pub async fn process<T>(self, inbound: T) -> Result<(), ProxyError<T>>
     where
         T: AsyncRead + AsyncWrite + Unpin,

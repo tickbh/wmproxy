@@ -119,18 +119,6 @@ where
                     }
                 }
             }
-            // while let Some(v) = Helper::decode_frame(&mut self.read).map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid frame"))? {
-            //     link.push_back(v);
-            // }
-
-            println!("rad!!!!!!!! 2222222");
-            // let x = self.next().await;
-            // self.next()
-            // poll_fn(|cx| {
-            //     Poll::Pending
-            // });
-            // self.stream.po
-            // self.stream.ready(Interest::READABLE | Interest::WRITABLE).await;
         }
     }
 
@@ -158,23 +146,6 @@ where
         Poll::Ready(Ok(n))
     }
 
-    pub fn poll_read_all(&mut self, cx: &mut Context<'_>) -> Poll<std::io::Result<usize>> {
-        let mut size = 0;
-        loop {
-            match self.stream_read(cx)? {
-                Poll::Ready(0) => return Poll::Ready(Ok(0)),
-                Poll::Ready(n) => size += n,
-                Poll::Pending => {
-                    if size == 0 {
-                        return Poll::Pending;
-                    } else {
-                        break;
-                    }
-                }
-            }
-        }
-        Poll::Ready(Ok(size))
-    }
 
 }
 
@@ -227,30 +198,3 @@ where
     }
 }
 
-impl<T> Stream for TransStream<T>
-where
-    T: AsyncRead + AsyncWrite + Unpin,
-{
-    type Item = ProxyResult<ProtFrame>;
-    fn poll_next(
-        mut self: Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Option<Self::Item>> {
-        if let Some(v) = Helper::decode_frame(&mut self.read)? {
-            return Poll::Ready(Some(Ok(v)));
-        }
-        match ready!(self.poll_read_all(cx)?) {
-            0 => {
-                println!("test:::: recv client end!!!");
-                return Poll::Ready(None);
-            }
-            _ => {
-                if let Some(v) = Helper::decode_frame(&mut self.read)? {
-                    return Poll::Ready(Some(Ok(v)));
-                } else {
-                    return Poll::Pending;
-                }
-            }
-        }
-    }
-}

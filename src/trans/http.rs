@@ -46,7 +46,6 @@ impl TransHttp {
         let mut request;
         let host_name;
         let mut buffer = BinaryMut::new();
-        let mut cost_size = 0;
         loop {
             let size = {
                 let mut buf = ReadBuf::uninit(buffer.chunk_mut());
@@ -65,10 +64,9 @@ impl TransHttp {
             // 若解析失败, 则表示非http协议能处理, 则抛出错误
             // 此处clone为浅拷贝，不确定是否一定能解析成功，不能影响偏移
             match request.parse_buffer(&mut buffer.clone()) {
-                Ok(s) => match request.get_host() {
+                Ok(_) => match request.get_host() {
                     Some(host) => {
                         host_name = host;
-                        cost_size = s;
                         break;
                     }
                     None => {
