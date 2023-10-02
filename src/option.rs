@@ -95,19 +95,13 @@ impl Builder {
         })
     }
 
-    pub fn bind_addr(self, addr: String) -> Builder {
+    pub fn bind_addr(self, addr: SocketAddr) -> Builder {
         self.and_then(|mut proxy| {
             proxy.bind_addr = addr;
             Ok(proxy)
         })
     }
 
-    pub fn bind_port(self, port: u16) -> Builder {
-        self.and_then(|mut proxy| {
-            proxy.bind_port = port;
-            Ok(proxy)
-        })
-    }
 
     pub fn server(self, addr: Option<SocketAddr>) -> Builder {
         self.and_then(|mut proxy| {
@@ -210,12 +204,12 @@ impl Builder {
     }
 }
 
-fn default_bind_addr() -> String {
-    "127.0.0.1".to_string()
+fn default_bind_addr() -> SocketAddr {
+    "127.0.0.1:8090".parse().unwrap()
 }
 
-fn default_bind_port() -> u16 {
-    8090
+fn default_bool_true() -> bool {
+    true
 }
 
 /// 代理类, 一个代理类启动一种类型的代理
@@ -226,9 +220,7 @@ pub struct ProxyOption {
     #[serde(default)]
     pub(crate) mode: String,
     #[serde(default = "default_bind_addr")]
-    pub(crate) bind_addr: String,
-    #[serde(default = "default_bind_port")]
-    pub(crate) bind_port: u16,
+    pub(crate) bind_addr: SocketAddr,
     pub(crate) server: Option<SocketAddr>,
     pub(crate) username: Option<String>,
     pub(crate) password: Option<String>,
@@ -241,7 +233,7 @@ pub struct ProxyOption {
     pub(crate) map_key: Option<String>,
 
     //// 是否启用协议转发
-    #[serde(default)]
+    #[serde(default="default_bool_true")]
     pub(crate) center: bool,
     /// 连接服务端是否启用tls
     #[serde(default)]
@@ -264,9 +256,7 @@ impl Default for ProxyOption {
         Self {
             flag: Flag::HTTP | Flag::HTTPS,
             mode: "client".to_string(),
-            bind_addr: "127.0.0.1".to_string(),
-            bind_port: 8090,
-
+            bind_addr: default_bind_addr(),
             .. Default::default()
             // server: None,
             // username: None,
@@ -298,8 +288,8 @@ impl ProxyOption {
     pub fn parse_env() -> ProxyResult<ProxyOption> {
         let command = Commander::new()
             .version(&env!("CARGO_PKG_VERSION").to_string())
-            .usage("-b 127.0.0.1 -p 8090")
-            .usage_desc("wmproxy -p 8090")
+            .usage("-b 127.0.0.1:8090")
+            .usage_desc("wmproxy -b 127.0.0.1:8090")
             .option_list(
                 "-f, --flag [value]",
                 "可兼容的方法, 如http https socks5",
@@ -321,11 +311,10 @@ impl ProxyOption {
             .option_str("--cert value", "证书的公钥", None)
             .option_str("--key value", "证书的私钥", None)
             .option_str("--domain value", "证书的域名", None)
-            .option_int("-p, --port value", "监听端口", Some(8090))
             .option_str(
                 "-b, --bind value",
-                "监听地址",
-                Some("127.0.0.1".to_string()),
+                "监听地址及端口",
+                Some("127.0.0.1:8090".to_string()),
             )
             .option_str("--user value", "auth的用户名", None)
             .option_str("-S value", "父级的监听端口地址,如127.0.0.1:8091", None)
@@ -345,17 +334,9 @@ impl ProxyOption {
             return Ok(option);
         }
 
-        let listen_port: u16 = command.get_int("p").unwrap() as u16;
         let listen_host = command.get_str("b").unwrap();
-        let mut builder = Self::builder().bind_port(listen_port);
-        match format!("{}:{}", listen_host, listen_port).parse::<SocketAddr>() {
-            Err(_) => {
-                builder = builder.bind_addr("127.0.0.1".to_string());
-            }
-            Ok(_) => {
-                builder = builder.bind_addr(listen_host);
-            }
-        };
+        let addr = listen_host.parse().unwrap();
+        let mut builder = Self::builder().bind_addr(addr);
 
         builder = builder.flag(Flag::HTTP | Flag::HTTPS | Flag::SOCKS5);
         builder = builder.mode(command.get_str("m").unwrap_or(String::new()));

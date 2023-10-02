@@ -110,9 +110,7 @@ impl Proxy {
     }
 
     pub async fn start_serve(&mut self) -> ProxyResult<()> {
-        let addr = format!("{}:{}", self.option.bind_addr, self.option.bind_port)
-            .parse::<SocketAddr>()
-            .map_err(|_| ProxyError::Extension("parse addr error"))?;
+        let addr = self.option.bind_addr.clone();
         let accept = self.option.get_tls_accept().await.ok();
         let client = self.option.get_tls_request().await.ok();
         if self.option.center {
@@ -207,9 +205,7 @@ impl Proxy {
                     };
                 }
                 Some(inbound) = tcp_listen_work(&http_listener) => {
-                    println!("??????????????? = {:?}", inbound);
                     self.server_new_http(inbound).await?;
-                    println!("!!!!!!!!!!!");
                 }
                 Some(inbound) = tcp_listen_work(&https_listener) => {
                     self.server_new_https(inbound, map_accept.clone().unwrap()).await?;

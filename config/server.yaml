@@ -1,12 +1,21 @@
-bind_addr: 127.0.0.1
-bind_port: 8091
+#绑定的ip地址
+bind_addr: 127.0.0.1:8091
 
+#代理支持的功能，1为http，2为https，4为socks5
+flag: 7
+
+#内网映射http绑定地址
 map_http_bind: 127.0.0.1:8001
+#内网映射tcp绑定地址
 map_tcp_bind: 127.0.0.1:8002
+#内网映射https绑定地址
 map_https_bind: 127.0.0.1:8003
+#内网映射的公钥证书，为空则是默认证书
 map_cert: 
+#内网映射的私钥证书，为空则是默认证书
 map_key:
 
+#接收客户端是为是加密客户端
 tc: true
+#当前服务模式，server为服务端，client为客户端
 mode: server
-center: true
