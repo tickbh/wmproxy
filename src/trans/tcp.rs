@@ -34,12 +34,11 @@ impl TransTcp {
     where
         T: AsyncRead + AsyncWrite + Unpin,
     {
-        println!("tcp!!!!!");
+        // 寻找是否有匹配的tcp转发协议，如果有，则进行转发，如果没有则丢弃数据
         {
             let mut is_find = false;
             let read = self.mappings.read().await;
 
-                println!("tcp!!!!! = {:?}", *read);
             for v in &*read {
                 if v.mode == "tcp" {
                     is_find = true;
@@ -50,17 +49,14 @@ impl TransTcp {
                 return Ok(());
             }
         }
-        println!("tcp!!!!!???");
 
+        // 通知客户端数据进行连接的建立，客户端的tcp配置只能存在有且只有一个，要不然无法确定转发源
         let create = ProtCreate::new(self.sock_map, None);
         let (stream_sender, stream_receiver) = channel::<ProtFrame>(10);
         let _ = self.sender_work.send((create, stream_sender)).await;
         
-        println!("ending!!!!!! create");
         let trans = TransStream::new(inbound, self.sock_map, self.sender, stream_receiver);
         trans.copy_wait().await?;
-        println!("ending!!!!!! copy");
-        // let _ = copy_bidirectional(&mut inbound, &mut outbound).await?;
         Ok(())
     }
 }

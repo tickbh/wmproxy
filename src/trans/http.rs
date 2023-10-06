@@ -1,10 +1,12 @@
-use std::sync::Arc;
+use std::{sync::Arc, io::{self, Read}};
 
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf},
     sync::{mpsc::{Sender, channel}, RwLock},
 };
-use webparse::{BinaryMut, Buf, BufMut, HttpError, WebError, Response};
+use webparse::{BinaryMut, Buf, BufMut, HttpError, WebError, Response, Request, Serialize, Binary};
+use wenmeng::{RecvStream, ProtResult, Server};
+
 
 use crate::{ProtFrame, TransStream, ProxyError, ProtCreate, MappingConfig};
 
@@ -35,6 +37,16 @@ impl TransHttp {
         T: AsyncRead + AsyncWrite + Unpin,
     {
         let mut res = webparse::Response::builder().status(status).body(())?;
+        inbound.write_all(&res.httpdata()?).await?;
+        Ok(())
+    }
+
+
+    async fn not_match_err_status<T>(mut inbound: T, body: String) -> Result<(), ProxyError<T>>
+    where
+        T: AsyncRead + AsyncWrite + Unpin,
+    {
+        let mut res = webparse::Response::builder().status(503).body(body)?;
         inbound.write_all(&res.httpdata()?).await?;
         Ok(())
     }
@@ -76,16 +88,18 @@ impl TransHttp {
                         }
                     }
                 },
+                // 数据不完整，还未解析完，等待传输
                 Err(WebError::Http(HttpError::Partial)) => {
                     continue;
                 }
-                Err(_) => {
-                    println!("buffer === {:?}", String::from_utf8_lossy(buffer.chunk()));
-                    return Err(ProxyError::Continue((Some(buffer), inbound)));
+                Err(e) => {
+                    Self::not_match_err_status(inbound, "not found".to_string()).await?;
+                    return Err(ProxyError::from(e));
                 }
             }
         }
 
+        // 取得相关的host数据，对内网的映射端做匹配，如果未匹配到返回错误，表示不支持
         {
             let mut is_find = false;
             let read = self.mappings.read().await;
@@ -95,23 +109,74 @@ impl TransHttp {
                 }
             }
             if !is_find {
-                let mut res = Response::builder().status(404).body("no found ")?;
-                let data = res.httpdata()?;
-                inbound.write_all(&data).await?;
+                Self::not_match_err_status(inbound, "no found".to_string()).await?;
                 return Ok(());
             }
         }
 
+        // 有新的内网映射消息到达，通知客户端建立对内网指向的连接进行双向绑定，后续做正规的http服务以支持拓展
         let create = ProtCreate::new(self.sock_map, Some(host_name));
         let (stream_sender, stream_receiver) = channel::<ProtFrame>(10);
         let _ = self.sender_work.send((create, stream_sender)).await;
         
-        println!("ending!!!!!! create");
         let mut trans = TransStream::new(inbound, self.sock_map, self.sender, stream_receiver);
         trans.reader_mut().put_slice(buffer.chunk());
         trans.copy_wait().await?;
-        println!("ending!!!!!! copy");
         // let _ = copy_bidirectional(&mut inbound, &mut outbound).await?;
+        Ok(())
+    }
+
+    async fn operate(mut req: Request<RecvStream>) -> ProtResult<Option<Response<RecvStream>>> {
+        let mut builder = Response::builder().version(req.version().clone());
+        let body = match &*req.url().path {
+            "/plaintext" | "/" => {
+                builder = builder.header("content-type", "text/plain");
+                "Hello, World!".to_string()
+            }
+            "/post" => {
+                let body = req.body_mut();
+                let mut buf = [0u8; 10];
+                if let Ok(len) = body.read(&mut buf) {
+                    println!("skip = {:?}", &buf[..len]);
+                }
+                let mut binary = BinaryMut::new();
+                body.read_all(&mut binary).await.unwrap();
+                println!("binary = {:?}", binary);
+    
+                builder = builder.header("content-type", "text/plain");
+                format!("Hello, World! {:?}", TryInto::<String>::try_into(binary)).to_string()
+            }
+            _ => {
+                builder = builder.status(404);
+                String::new()
+            }
+        };
+    
+        let (sender, receiver) = channel(10);
+        let recv = RecvStream::new(receiver, BinaryMut::from(body.into_bytes().to_vec()), false);
+        let response = builder
+            .body(recv)
+            .map_err(|_err| io::Error::new(io::ErrorKind::Other, ""))?;
+    
+        tokio::spawn(async move {
+            println!("send!!!!!");
+            for i in 1..2 {
+                sender
+                    .send((false, Binary::from(format!("hello{} ", i).into_bytes())))
+                    .await;
+            }
+            println!("send!!!!! end!!!!!!");
+            // sender.send((true, Binary::from_static("world\r\n".as_bytes()))).await;
+        });
+        Ok(Some(response))
+    }
+
+    pub async fn process1<T>(self, inbound: T) -> Result<(), ProxyError<T>>
+    where
+        T: AsyncRead + AsyncWrite + Unpin,
+    {
+        let mut server = Server::new(inbound);
+        let _ret = server.incoming(Self::operate).await;
         Ok(())
     }
 }
