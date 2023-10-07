@@ -2,7 +2,7 @@ use std::{sync::Arc, io::{self, Read}};
 
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf},
-    sync::{mpsc::{Sender, channel}, RwLock},
+    sync::{mpsc::{Sender, channel}, RwLock, Mutex},
 };
 use webparse::{BinaryMut, Buf, BufMut, HttpError, WebError, Response, Request, Serialize, Binary, http2::frame::Frame};
 use wenmeng::{RecvStream, ProtResult, Server, Client};
@@ -127,7 +127,7 @@ impl TransHttp {
     }
 
     //, client: &mut Client<VirtualStream>
-    async fn operate(mut req: Request<RecvStream>) -> ProtResult<Option<Response<RecvStream>>> { //, client: Client<VirtualStream>, sender: Sender<ProtFrame>
+    async fn operate(mut req: Request<RecvStream>, data: Arc<Mutex<(Client<VirtualStream>, Sender<ProtFrame>)>>) -> ProtResult<Option<Response<RecvStream>>> { //, client: Client<VirtualStream>, sender: Sender<ProtFrame>
         let mut builder = Response::builder().version(req.version().clone());
         let body = match &*req.url().path {
             "/plaintext" | "/" => {
@@ -176,7 +176,6 @@ impl TransHttp {
     where
         T: AsyncRead + AsyncWrite + Unpin,
     {
-        let mut server = Server::new(inbound);
         let build = Client::builder();
 
         // let create = ProtCreate::new(self.sock_map, Some(host_name));
@@ -191,15 +190,9 @@ impl TransHttp {
             virtual_receiver,
         );
         let mut client = Client::new(build.value().ok().unwrap(), stream);
-        
-        let _ret = server.incoming(move |req: Request<RecvStream>| {
-            // let a = client.split();
-            // let mut c = &mut client;
-            // println!("client {:?}", client);
-            Self::operate(req)
-        }
-            //  Self::operate(req, client, virtual_sender)
-            ).await;
+        let mut server = Server::new(inbound, (client, virtual_sender));
+
+        let _ret = server.incoming(Self::operate).await;
         Ok(())
     }
 }
