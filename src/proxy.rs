@@ -153,6 +153,8 @@ impl Proxy {
                     Err(_e) => None,
                 }
             } else {
+                let pend = std::future::pending();
+                let () = pend.await;
                 None
             }
             // do work
@@ -216,20 +218,6 @@ impl Proxy {
             }
             println!("aaaaaaaaaaaaaa");
         }
-        // while let Ok((inbound, _)) = center_listener.accept().await {
-        //     if let Some(a) = accept.clone() {
-        //         let inbound = a.accept(inbound).await;
-        //         // 获取的流跟正常内容一样读写, 在内部实现了自动加解密
-        //         if let Ok(inbound) = inbound {
-        //             let _ = self.deal_stream(inbound, client.clone()).await;
-        //         } else {
-        //             println!("accept error = {:?}", inbound.err());
-        //         }
-        //     } else {
-        //         let _ = self.deal_stream(inbound, client.clone()).await;
-        //     };
-        // }
-        Ok(())
     }
 
     async fn transfer_server<T>(
