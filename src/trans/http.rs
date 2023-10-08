@@ -145,7 +145,18 @@ impl TransHttp {
 
     //, client: &mut Client<VirtualStream>
     async fn operate(
-        mut req: Request<RecvStream>,
+        req: Request<RecvStream>,
+        data: Arc<Mutex<HttpOper>>,
+    ) -> ProtResult<Option<Response<RecvStream>>> {
+        let mut value = Self::inner_operate(req, data).await?;
+        if let Some(res) = &mut value {
+            res.headers_mut().insert("proxy-connection", "wmproxy");
+        }
+        Ok(value)
+    }
+
+    async fn inner_operate(
+        req: Request<RecvStream>,
         data: Arc<Mutex<HttpOper>>,
     ) -> ProtResult<Option<Response<RecvStream>>> {
         println!("receiver req = {:?}", req.url());
@@ -188,10 +199,6 @@ impl TransHttp {
     {
         println!("new process {:?}", inbound);
         let build = Client::builder();
-
-        // let create = ProtCreate::new(self.sock_map, Some(host_name));
-        // let (stream_sender, stream_receiver) = channel::<ProtFrame>(10);
-        // let _ = self.sender_work.send((create, stream_sender)).await;
 
         let (virtual_sender, virtual_receiver) = channel::<ProtFrame>(10);
         let stream = VirtualStream::new(self.sock_map, self.sender.clone(), virtual_receiver);
