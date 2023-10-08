@@ -257,25 +257,24 @@ impl Default for ProxyOption {
             flag: Flag::HTTP | Flag::HTTPS,
             mode: "client".to_string(),
             bind_addr: default_bind_addr(),
-            .. Default::default()
-            // server: None,
-            // username: None,
-            // password: None,
-            // udp_bind: None,
-            // map_http_bind: None,
-            // map_https_bind: None,
-            // map_tcp_bind: None,
-            // map_cert: None,
-            // map_key: None,
+            server: None,
+            username: None,
+            password: None,
+            udp_bind: None,
+            map_http_bind: None,
+            map_https_bind: None,
+            map_tcp_bind: None,
+            map_cert: None,
+            map_key: None,
 
-            // center: false,
-            // ts: false,
-            // tc: false,
-            // domain: None,
-            // cert: None,
-            // key: None,
+            center: false,
+            ts: false,
+            tc: false,
+            domain: None,
+            cert: None,
+            key: None,
 
-            // mappings: vec![],
+            mappings: vec![],
         }
     }
 }
@@ -331,6 +330,7 @@ impl ProxyOption {
             let mut contents = String::new();
             file.read_to_string(&mut contents)?;
             let option = serde_yaml::from_str::<ProxyOption>(&contents).unwrap();
+            println!("options = {:?}", option);
             return Ok(option);
         }
 

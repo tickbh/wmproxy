@@ -10,6 +10,10 @@ mappings:
     mode: http
     local_addr: 127.0.0.1:8080
     domain: localhost
+    header:
+      - [+, key, value]
+      - [-, cc]
+
   #将tcp的流量无条件转到127.0.0.1:8080
   - name: tcp
     mode: tcp

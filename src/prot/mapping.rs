@@ -30,7 +30,17 @@ impl ProtMapping {
             let name = read_short_string(&mut buf)?;
             let mode = read_short_string(&mut buf)?;
             let domain = read_short_string(&mut buf)?;
-            mappings.push(MappingConfig::new(name, mode, domain));
+            let mut headers = vec![];
+            let len = buf.get_u16();
+            for _ in 0 .. len {
+                let mut header = vec![];
+                let sub_len = buf.get_u8();
+                for _ in 0..sub_len {
+                    header.push(read_short_string(&mut buf)?);
+                }
+                headers.push(header);
+            }
+            mappings.push(MappingConfig::new(name, mode, domain, headers));
         }
         Ok(ProtMapping {
             sock_map: header.sock_map(),
@@ -47,6 +57,13 @@ impl ProtMapping {
             write_short_string(&mut cache_buf, &m.name)?;
             write_short_string(&mut cache_buf, &m.mode)?;
             write_short_string(&mut cache_buf, &m.domain)?;
+            cache_buf.put_u16(m.headers.len() as u16);
+            for value in m.headers {
+                cache_buf.put_u8(value.len() as u8);
+                for s in value {
+                    write_short_string(&mut cache_buf, &s)?;
+                }
+            }
         }
         head.length = cache_buf.remaining() as u32;
         let mut size = 0;
