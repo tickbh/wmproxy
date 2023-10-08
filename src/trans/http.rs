@@ -148,7 +148,7 @@ impl TransHttp {
         mut req: Request<RecvStream>,
         data: Arc<Mutex<HttpOper>>,
     ) -> ProtResult<Option<Response<RecvStream>>> {
-        // println!("receiver req = {:?}", req);
+        println!("receiver req = {:?}", req.url());
         let mut value = data.lock().await;
         let sender = value.virtual_sender.take();
         if sender.is_some() {
