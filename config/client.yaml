@@ -10,7 +10,7 @@ mappings:
     mode: http
     local_addr: 127.0.0.1:8080
     domain: localhost
-    header:
+    headers:
       - [+, key, value]
       - [-, cc]
 

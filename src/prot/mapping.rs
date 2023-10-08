@@ -1,4 +1,4 @@
-use webparse::{Buf, BufMut, BinaryMut};
+use webparse::{Buf, BufMut, BinaryMut, must_have};
 
 use crate::{
     prot::{ProtFlag, ProtKind},
@@ -26,14 +26,17 @@ impl ProtMapping {
     pub fn parse<T: Buf>(header: ProtFrameHeader, mut buf: T) -> ProxyResult<ProtMapping> {
         let len = buf.get_u16() as usize;
         let mut mappings = vec![];
+        
         for _ in 0..len {
             let name = read_short_string(&mut buf)?;
             let mode = read_short_string(&mut buf)?;
             let domain = read_short_string(&mut buf)?;
             let mut headers = vec![];
+            must_have!(buf, 2)?;
             let len = buf.get_u16();
             for _ in 0 .. len {
                 let mut header = vec![];
+                must_have!(buf, 1)?;
                 let sub_len = buf.get_u8();
                 for _ in 0..sub_len {
                     header.push(read_short_string(&mut buf)?);
