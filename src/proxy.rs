@@ -207,6 +207,7 @@ impl Proxy {
                     };
                 }
                 Some(inbound) = tcp_listen_work(&http_listener) => {
+                    println!("tcp_listen_work =====");
                     self.server_new_http(inbound).await?;
                 }
                 Some(inbound) = tcp_listen_work(&https_listener) => {

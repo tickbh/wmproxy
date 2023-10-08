@@ -1,6 +1,6 @@
 use std::{
     io::{self, Read},
-    sync::Arc,
+    sync::Arc, fmt::Debug,
 };
 
 use tokio::{
@@ -148,7 +148,7 @@ impl TransHttp {
         mut req: Request<RecvStream>,
         data: Arc<Mutex<HttpOper>>,
     ) -> ProtResult<Option<Response<RecvStream>>> {
-        println!("receiver req = {:?}", req);
+        // println!("receiver req = {:?}", req);
         let mut value = data.lock().await;
         let sender = value.virtual_sender.take();
         if sender.is_some() {
@@ -167,6 +167,8 @@ impl TransHttp {
                 }
             }
 
+            println!("do create prot {}, host = {:?}", value.sock_map, req.get_host());
+
             let create = ProtCreate::new(value.sock_map, Some(req.get_host().unwrap_or(String::new())));
             let _ = value.sender_work.send((create, sender.unwrap())).await;
         }
@@ -182,8 +184,9 @@ impl TransHttp {
 
     pub async fn process<T>(self, inbound: T) -> Result<(), ProxyError<T>>
     where
-        T: AsyncRead + AsyncWrite + Unpin,
+        T: AsyncRead + AsyncWrite + Unpin + Debug,
     {
+        println!("new process {:?}", inbound);
         let build = Client::builder();
 
         // let create = ProtCreate::new(self.sock_map, Some(host_name));
@@ -206,7 +209,6 @@ impl TransHttp {
         tokio::spawn( async move {
             let _ = client.wait_operate().await;
         });
-        println!("aaaaaaaaaaaaa");
         let _ret = server.incoming(Self::operate).await;
         if _ret.is_err() {
             println!("ret = {:?}", _ret);

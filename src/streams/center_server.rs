@@ -224,6 +224,7 @@ impl CenterServer {
     }
 
     pub async fn server_new_http(&mut self, stream: TcpStream) -> ProxyResult<()> {
+        println!("server_new_http!!!!!!!!!!!! =====");
         let trans = TransHttp::new(self.sender(), self.sender_work(), self.calc_next_id(), self.mappings.clone());
         tokio::spawn(async move {
             println!("tokio::spawn start!");
