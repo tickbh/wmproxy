@@ -201,6 +201,7 @@ impl CenterClient {
                                 let domain = local_addr.unwrap();
                                 let sock_map = p.sock_map();
                                 let sender = sender.clone();
+                                println!("receiver sock_map {}, domain = {}", sock_map, domain);
                                 // let (flag, username, password, udp_bind) = (option.flag, option.username.clone(), option.password.clone(), option.udp_bind.clone());
                                 tokio::spawn(async move {
                                     let stream = TcpStream::connect(domain).await;
