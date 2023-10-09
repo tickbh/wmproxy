@@ -11,6 +11,7 @@ mod prot;
 mod helper;
 mod trans;
 mod mapping;
+mod check;
 
 pub use error::{ProxyResult, ProxyError};
 pub use flag::Flag;
@@ -22,3 +23,4 @@ pub use streams::*;
 pub use helper::Helper;
 pub use prot::{ProtFrame, ProtFrameHeader, ProtClose, ProtData, ProtCreate};
 pub use mapping::*;
+pub use check::*;

@@ -40,6 +40,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "0.9"
 webparse = { version = "0.1.5"}
 wenmeng={version="0.1.1"}
+lazy_static = "1.4.0"
 
 # [dependencies.webparse]
 # path = "../webparse"

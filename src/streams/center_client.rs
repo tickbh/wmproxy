@@ -215,6 +215,8 @@ impl CenterClient {
                                         );
                                         let _ = trans.copy_wait().await;
                                         // let _ = copy_bidirectional(&mut tcp, &mut stream).await;
+                                    } else {
+                                        let _ = sender.send(ProtFrame::new_close(sock_map)).await;
                                     }
                                 });
                             }
