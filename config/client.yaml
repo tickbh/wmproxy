@@ -12,6 +12,7 @@ mappings:
     domain: localhost
     headers:
       - [proxy, +, x-forward-for, $client_ip]
+      - [proxy, +, from, $url]
       - [+, key, value]
       - [-, etag]
       - [+, last-modified, aaaa]

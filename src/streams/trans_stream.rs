@@ -62,7 +62,7 @@ where
     }
 
     async fn inner_copy_wait(mut self) -> Result<(), std::io::Error> {
-        let mut buf = vec![0u8; 2048];
+        let mut buf = vec![0u8; 20480];
         let mut link = LinkedList::<ProtFrame>::new();
         let (mut reader, mut writer) = split(self.stream);
         loop {
