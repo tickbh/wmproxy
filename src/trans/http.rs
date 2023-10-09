@@ -1,6 +1,6 @@
 use std::{
     io::{self, Read},
-    sync::Arc, fmt::Debug,
+    sync::Arc, fmt::Debug, net::SocketAddr,
 };
 
 use tokio::{
@@ -14,7 +14,7 @@ use webparse::{
     http2::frame::Frame, Binary, BinaryMut, Buf, BufMut, HttpError, Request, Response, Serialize,
     WebError,
 };
-use wenmeng::{Client, ProtResult, RecvStream, Server, ProtError};
+use wenmeng::{Client, ProtResult, RecvStream, Server, ProtError, HeaderHelper};
 
 use crate::{MappingConfig, ProtCreate, ProtFrame, ProxyError, TransStream, VirtualStream};
 
@@ -32,6 +32,7 @@ struct HttpOper {
     pub sender_work: Sender<(ProtCreate, Sender<ProtFrame>)>,
     pub sock_map: u32,
     pub mappings: Arc<RwLock<Vec<MappingConfig>>>,
+    pub http_map: Option<MappingConfig>,
 }
 
 
@@ -156,7 +157,7 @@ impl TransHttp {
     }
 
     async fn inner_operate(
-        req: Request<RecvStream>,
+        mut req: Request<RecvStream>,
         data: Arc<Mutex<HttpOper>>,
     ) -> ProtResult<Option<Response<RecvStream>>> {
         println!("receiver req = {:?}", req.url());
@@ -166,16 +167,21 @@ impl TransHttp {
             let host_name = req.get_host().unwrap_or(String::new());
             // 取得相关的host数据，对内网的映射端做匹配，如果未匹配到返回错误，表示不支持
             {
+                let mut config = None;
                 let mut is_find = false;
-                let read = value.mappings.read().await;
-                for v in &*read {
-                    if v.domain == host_name {
-                        is_find = true;
+                {
+                    let read = value.mappings.read().await;
+                    for v in &*read {
+                        if v.domain == host_name {
+                            is_find = true;
+                            config = Some(v.clone());
+                        }
                     }
                 }
                 if !is_find {
                     return Ok(Some(Response::builder().status(404).body("not found").ok().unwrap().into_type()));
                 }
+                value.http_map = config;
             }
 
             println!("do create prot {}, host = {:?}", value.sock_map, req.get_host());
@@ -184,22 +190,28 @@ impl TransHttp {
             let _ = value.sender_work.send((create, sender.unwrap())).await;
         }
 
+        if let Some(config) = &value.http_map {
+            HeaderHelper::rewrite_request(&mut req, &config.headers);
+        }
+
         value.sender.send(req).await?;
-        let res = value.receiver.recv().await;
+        let mut res = value.receiver.recv().await;
         if res.is_some() {
+            if let Some(config) = &value.http_map {
+                HeaderHelper::rewrite_response(res.as_mut().unwrap(), &config.headers);
+            }
             return Ok(res);
         } else {
             return Ok(Some(Response::builder().status(503).body("cant trans").ok().unwrap().into_type()));
         }
     }
 
-    pub async fn process<T>(self, inbound: T) -> Result<(), ProxyError<T>>
+    pub async fn process<T>(self, inbound: T, addr: SocketAddr) -> Result<(), ProxyError<T>>
     where
         T: AsyncRead + AsyncWrite + Unpin + Debug,
     {
         println!("new process {:?}", inbound);
         let build = Client::builder();
-
         let (virtual_sender, virtual_receiver) = channel::<ProtFrame>(10);
         let stream = VirtualStream::new(self.sock_map, self.sender.clone(), virtual_receiver);
         let mut client = Client::new(build.value().ok().unwrap(), stream);
@@ -211,8 +223,9 @@ impl TransHttp {
             virtual_sender: Some(virtual_sender),
             sock_map: self.sock_map,
             mappings: self.mappings.clone(),
+            http_map: None,
         };
-        let mut server = Server::new(inbound, oper);
+        let mut server = Server::new(inbound, Some(addr), oper);
         tokio::spawn( async move {
             let _ = client.wait_operate().await;
         });

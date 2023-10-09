@@ -146,10 +146,10 @@ impl Proxy {
             accept.is_some(),
             client.is_some()
         );
-        async fn tcp_listen_work(listen: &Option<TcpListener>) -> Option<TcpStream> {
+        async fn tcp_listen_work(listen: &Option<TcpListener>) -> Option<(TcpStream, SocketAddr)> {
             if listen.is_some() {
                 match listen.as_ref().unwrap().accept().await {
-                    Ok((tcp, _)) => Some(tcp),
+                    Ok((tcp, addr)) => Some((tcp, addr)),
                     Err(_e) => None,
                 }
             } else {
@@ -206,15 +206,15 @@ impl Proxy {
                         let _ = self.deal_stream(inbound, client.clone()).await;
                     };
                 }
-                Some(inbound) = tcp_listen_work(&http_listener) => {
+                Some((inbound, addr)) = tcp_listen_work(&http_listener) => {
                     println!("tcp_listen_work =====");
-                    self.server_new_http(inbound).await?;
+                    self.server_new_http(inbound, addr).await?;
                 }
-                Some(inbound) = tcp_listen_work(&https_listener) => {
-                    self.server_new_https(inbound, map_accept.clone().unwrap()).await?;
+                Some((inbound, addr)) = tcp_listen_work(&https_listener) => {
+                    self.server_new_https(inbound, addr, map_accept.clone().unwrap()).await?;
                 }
-                Some(inbound) = tcp_listen_work(&tcp_listener) => {
-                    self.server_new_tcp(inbound).await?;
+                Some((inbound, addr)) = tcp_listen_work(&tcp_listener) => {
+                    self.server_new_tcp(inbound, addr).await?;
                 }
             }
             println!("aaaaaaaaaaaaaa");
@@ -288,10 +288,10 @@ impl Proxy {
         Ok(())
     }
 
-    pub async fn server_new_http(&mut self, stream: TcpStream) -> ProxyResult<()> {
+    pub async fn server_new_http(&mut self, stream: TcpStream, addr: SocketAddr) -> ProxyResult<()> {
         for server in &mut self.center_servers {
             if !server.is_close() {
-                return server.server_new_http(stream).await;
+                return server.server_new_http(stream, addr).await;
             }
         }
         println!("no any clinet!!!!!!!!!!!!!!");
@@ -300,19 +300,19 @@ impl Proxy {
 
     pub async fn server_new_https(
         &mut self,
-        stream: TcpStream,
+        stream: TcpStream, addr: SocketAddr,
         accept: TlsAcceptor,
     ) -> ProxyResult<()> {
         for server in &mut self.center_servers {
             if !server.is_close() {
-                return server.server_new_https(stream, accept).await;
+                return server.server_new_https(stream, addr, accept).await;
             }
         }
         println!("no any clinet!!!!!!!!!!!!!!");
         Ok(())
     }
 
-    pub async fn server_new_tcp(&mut self, stream: TcpStream) -> ProxyResult<()> {
+    pub async fn server_new_tcp(&mut self, stream: TcpStream, _addr: SocketAddr) -> ProxyResult<()> {
         for server in &mut self.center_servers {
             if !server.is_close() {
                 return server.server_new_tcp(stream).await;

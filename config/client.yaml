@@ -11,8 +11,10 @@ mappings:
     local_addr: 127.0.0.1:8080
     domain: localhost
     headers:
+      - [proxy, +, x-forward-for, $client_ip]
       - [+, key, value]
-      - [-, cc]
+      - [-, etag]
+      - [+, last-modified, aaaa]
 
   #将tcp的流量无条件转到127.0.0.1:8080
   - name: tcp

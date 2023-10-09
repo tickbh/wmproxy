@@ -24,6 +24,7 @@ impl ProtMapping {
     }
 
     pub fn parse<T: Buf>(header: ProtFrameHeader, mut buf: T) -> ProxyResult<ProtMapping> {
+        must_have!(buf, 2)?;
         let len = buf.get_u16() as usize;
         let mut mappings = vec![];
         

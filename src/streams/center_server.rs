@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, sync::Arc, net::SocketAddr};
 use tokio::{
     io::{split, AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
@@ -223,23 +223,23 @@ impl CenterServer {
         Ok(())
     }
 
-    pub async fn server_new_http(&mut self, stream: TcpStream) -> ProxyResult<()> {
+    pub async fn server_new_http(&mut self, stream: TcpStream, addr: SocketAddr) -> ProxyResult<()> {
         println!("server_new_http!!!!!!!!!!!! =====");
         let trans = TransHttp::new(self.sender(), self.sender_work(), self.calc_next_id(), self.mappings.clone());
         tokio::spawn(async move {
             println!("tokio::spawn start!");
-            let e = trans.process(stream).await;
+            let e = trans.process(stream, addr).await;
             println!("tokio::spawn end! = {:?}", e);
         });
         return Ok(());
     }
 
-    pub async fn server_new_https(&mut self, stream: TcpStream, accept: TlsAcceptor) -> ProxyResult<()> {
+    pub async fn server_new_https(&mut self, stream: TcpStream, addr: SocketAddr, accept: TlsAcceptor) -> ProxyResult<()> {
         let trans = TransHttp::new(self.sender(), self.sender_work(), self.calc_next_id(), self.mappings.clone());
         tokio::spawn(async move {
             println!("tokio::spawn start!");
             if let Ok(tls_stream) = accept.accept(stream).await {
-                let e = trans.process(tls_stream).await;
+                let e = trans.process(tls_stream, addr).await;
                 println!("tokio::spawn end! = {:?}", e);
             }
         });
