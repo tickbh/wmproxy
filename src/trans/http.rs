@@ -1,22 +1,21 @@
 use std::{
-    io::{self, Read},
+    io::{Read},
     sync::Arc, fmt::Debug, net::SocketAddr,
 };
 
 use tokio::{
-    io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf},
+    io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
     sync::{
         mpsc::{channel, Sender, Receiver},
         Mutex, RwLock,
     },
 };
 use webparse::{
-    http2::frame::Frame, Binary, BinaryMut, Buf, BufMut, HttpError, Request, Response, Serialize,
-    WebError,
+    Request, Response,
 };
-use wenmeng::{Client, ProtResult, RecvStream, Server, ProtError, HeaderHelper};
+use wenmeng::{Client, ProtResult, RecvStream, Server, HeaderHelper};
 
-use crate::{MappingConfig, ProtCreate, ProtFrame, ProxyError, TransStream, VirtualStream};
+use crate::{MappingConfig, ProtCreate, ProtFrame, ProxyError, VirtualStream};
 
 pub struct TransHttp {
     sender: Sender<ProtFrame>,
@@ -151,7 +150,7 @@ impl TransHttp {
     ) -> ProtResult<Option<Response<RecvStream>>> {
         let mut value = Self::inner_operate(req, data).await?;
         if let Some(res) = &mut value {
-            res.headers_mut().insert("proxy-connection", "wmproxy");
+            res.headers_mut().insert("server", "wmproxy");
         }
         Ok(value)
     }
@@ -163,8 +162,10 @@ impl TransHttp {
         println!("receiver req = {:?}", req.url());
         let mut value = data.lock().await;
         let sender = value.virtual_sender.take();
+        // 传在该参数则为第一次, 第一次的时候发送Create创建绑定连接
         if sender.is_some() {
             let host_name = req.get_host().unwrap_or(String::new());
+            println!("host_name = {:?}", host_name);
             // 取得相关的host数据，对内网的映射端做匹配，如果未匹配到返回错误，表示不支持
             {
                 let mut config = None;
@@ -191,13 +192,17 @@ impl TransHttp {
         }
 
         if let Some(config) = &value.http_map {
+            // 复写Request的头文件信息
             HeaderHelper::rewrite_request(&mut req, &config.headers);
         }
 
+        // 将请求发送出去
         value.sender.send(req).await?;
+        // 等待返回数据的到来
         let mut res = value.receiver.recv().await;
         if res.is_some() {
             if let Some(config) = &value.http_map {
+                // 复写Response的头文件信息
                 HeaderHelper::rewrite_response(res.as_mut().unwrap(), &config.headers);
             }
             return Ok(res);

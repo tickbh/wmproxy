@@ -1,12 +1,12 @@
 [package]
 name = "wmproxy"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 authors = [ "tickbh <tickdream125@hotmail.com>" ]
 description = " http https proxy by rust"
-repository = "https://github.com/tickbh/qyproxy"
+repository = "https://github.com/tickbh/wmproxy"
 license = "Apache-2.0"
-keywords = ["http"]
+keywords = ["http2", "socks5", "nat","tunnel","https-proxy"]
 
 [dependencies]
 
@@ -38,11 +38,11 @@ futures-core = { version = "0.3", default-features = false }
 
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "0.9"
-# webparse = { version = "0.1.2"}
-# wenmeng={version="0.1"}
+webparse = { version = "0.1.5"}
+wenmeng={version="0.1.1"}
 
-[dependencies.webparse]
-path = "../webparse"
+# [dependencies.webparse]
+# path = "../webparse"
 
-[dependencies.wenmeng]
-path = "../wenmeng"
+# [dependencies.wenmeng]
+# path = "../wenmeng"

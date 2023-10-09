@@ -3,14 +3,14 @@ use std::{
     task::{ready, Context, Poll}, io, collections::LinkedList,
 };
 
-use futures_core::Stream;
+
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWrite, ReadBuf, split, AsyncWriteExt},
     sync::mpsc::{Receiver, Sender},
 };
 use webparse::{BinaryMut, Buf, BufMut};
 
-use crate::{ProxyResult, Helper, ProtFrame};
+use crate::{ProtFrame};
 
 /// 转发流量端
 /// 提供与中心端绑定的读出写入功能
