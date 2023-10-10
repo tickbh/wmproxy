@@ -102,7 +102,6 @@ impl Builder {
         })
     }
 
-
     pub fn server(self, addr: Option<SocketAddr>) -> Builder {
         self.and_then(|mut proxy| {
             proxy.server = addr;
@@ -225,7 +224,7 @@ pub struct ProxyOption {
     pub(crate) username: Option<String>,
     pub(crate) password: Option<String>,
     pub(crate) udp_bind: Option<IpAddr>,
-    
+
     pub(crate) map_http_bind: Option<SocketAddr>,
     pub(crate) map_https_bind: Option<SocketAddr>,
     pub(crate) map_tcp_bind: Option<SocketAddr>,
@@ -233,7 +232,7 @@ pub struct ProxyOption {
     pub(crate) map_key: Option<String>,
 
     //// 是否启用协议转发
-    #[serde(default="default_bool_true")]
+    #[serde(default = "default_bool_true")]
     pub(crate) center: bool,
     /// 连接服务端是否启用tls
     #[serde(default)]
@@ -241,6 +240,9 @@ pub struct ProxyOption {
     /// 接收客户端是否启用tls
     #[serde(default)]
     pub(crate) tc: bool,
+    /// 双向认证是否启用
+    #[serde(default)]
+    pub(crate) two_way_tls: bool,
     /// tls证书所用的域名
     pub(crate) domain: Option<String>,
     /// 公开的证书公钥文件
@@ -270,6 +272,7 @@ impl Default for ProxyOption {
             center: false,
             ts: false,
             tc: false,
+            two_way_tls: false,
             domain: None,
             cert: None,
             key: None,
@@ -505,13 +508,26 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
         let certs = Self::load_certs(&self.map_cert)?;
         let key = Self::load_keys(&self.map_key)?;
 
-        let config = rustls::ServerConfig::builder()
-            .with_safe_defaults()
-            .with_no_client_auth()
-            .with_single_cert(certs, key)
-            .map_err(|err| {
-                io::Error::new(io::ErrorKind::InvalidInput, err)
-            })?;
+        let config = rustls::ServerConfig::builder().with_safe_defaults();
+
+        let config = if self.two_way_tls {
+            let mut client_auth_roots = rustls::RootCertStore::empty();
+            for root in &certs {
+                client_auth_roots.add(&root).unwrap();
+            }
+            let client_auth = rustls::server::AllowAnyAuthenticatedClient::new(client_auth_roots);
+
+            config
+                .with_client_cert_verifier(client_auth.boxed())
+                .with_single_cert(certs, key)
+                .map_err(|err| io::Error::new(io::ErrorKind::InvalidInput, err))?
+        } else {
+            config
+                .with_no_client_auth()
+                .with_single_cert(certs, key)
+                .map_err(|err| io::Error::new(io::ErrorKind::InvalidInput, err))?
+        };
+
         let acceptor = TlsAcceptor::from(Arc::new(config));
         Ok(acceptor)
     }
@@ -528,9 +544,7 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
             .with_safe_defaults()
             .with_no_client_auth()
             .with_single_cert(certs, key)
-            .map_err(|err| {
-                io::Error::new(io::ErrorKind::InvalidInput, err)
-            })?;
+            .map_err(|err| io::Error::new(io::ErrorKind::InvalidInput, err))?;
         let acceptor = TlsAcceptor::from(Arc::new(config));
         Ok(acceptor)
     }
@@ -540,18 +554,24 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
         if !self.ts {
             return Err(ProxyError::ProtNoSupport);
         }
-        let certs = Self::load_certs(&self.cert)?;
+        let certs = Self::load_certs(&self.map_cert)?;
         let mut root_cert_store = rustls::RootCertStore::empty();
-        for cert in certs {
-            let _ = root_cert_store.add(&cert);
+        for cert in &certs {
+            let _ = root_cert_store.add(cert);
         }
         let config = rustls::ClientConfig::builder()
             .with_safe_defaults()
-            .with_root_certificates(root_cert_store)
-            .with_no_client_auth();
-        Ok(Arc::new(config))
-    }
+            .with_root_certificates(root_cert_store);
 
+        if self.two_way_tls {
+            let key = Self::load_keys(&self.map_key)?;
+            Ok(Arc::new(config.with_client_auth_cert(certs, key).map_err(
+                |err| io::Error::new(io::ErrorKind::InvalidInput, err),
+            )?))
+        } else {
+            Ok(Arc::new(config.with_no_client_auth()))
+        }
+    }
 
     pub fn is_client(&self) -> bool {
         self.mode.eq_ignore_ascii_case("client")
