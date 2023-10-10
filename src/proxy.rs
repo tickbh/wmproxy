@@ -14,7 +14,7 @@ use webparse::BinaryMut;
 
 use crate::{
     error::ProxyTypeResult, CenterClient, CenterServer, Flag, ProxyError,
-    ProxyHttp, ProxyOption, ProxyResult, ProxySocks5,
+    ProxyHttp, ProxyOption, ProxyResult, ProxySocks5, HealthCheck,
 };
 
 pub struct Proxy {
@@ -233,7 +233,7 @@ impl Proxy {
         if tls_client.is_some() {
             println!("connect by tls");
             let connector = TlsConnector::from(tls_client.unwrap());
-            let stream = TcpStream::connect(&server).await?;
+            let stream = HealthCheck::connect(&server).await?;
             // 这里的域名只为认证设置
             let domain =
                 rustls::ServerName::try_from(&*domain.unwrap_or("soft.wm-proxy.com".to_string()))
@@ -247,7 +247,7 @@ impl Proxy {
             }
         } else {
             println!("connect by normal");
-            if let Ok(mut outbound) = TcpStream::connect(server).await {
+            if let Ok(mut outbound) = HealthCheck::connect(&server).await {
                 let _ = tokio::io::copy_bidirectional(&mut inbound, &mut outbound).await?;
             } else {
                 // TODO 返回对应协议的错误

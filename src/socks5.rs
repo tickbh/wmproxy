@@ -3,7 +3,7 @@ use std::{
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, ToSocketAddrs},
 };
 
-use crate::{error::ProxyTypeResult, ProxyError, ProxyResult};
+use crate::{error::ProxyTypeResult, ProxyError, ProxyResult, HealthCheck};
 use tokio::{
     io::{copy_bidirectional, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf},
     net::{TcpStream, UdpSocket},
@@ -276,7 +276,7 @@ impl ProxySocks5 {
             .map_err(|e| e.to_type::<T>())?;
         match sock {
             SOCK_CONNECT => {
-                let mut target = match TcpStream::connect(addr.clone()).await {
+                let mut target = match HealthCheck::connect(&addr).await {
                     Ok(tcp) => {
                         stream.write_all(&[5, 0, 0, 1, 0, 0, 0, 0, 0, 0]).await?;
                         tcp

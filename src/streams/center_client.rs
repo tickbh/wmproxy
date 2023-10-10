@@ -13,7 +13,7 @@ use tokio_rustls::{client::TlsStream, TlsConnector};
 use webparse::{BinaryMut, Buf};
 
 use crate::{
-    Helper, MappingConfig, ProtClose, ProtCreate, ProtFrame, ProxyResult, TransStream,
+    Helper, MappingConfig, ProtClose, ProtCreate, ProtFrame, ProxyResult, TransStream, HealthCheck,
 };
 
 /// 中心客户端
@@ -80,7 +80,7 @@ impl CenterClient {
         if tls_client.is_some() {
             println!("connect by tls");
             let connector = TlsConnector::from(tls_client.unwrap());
-            let stream = TcpStream::connect(&server_addr).await?;
+            let stream = HealthCheck::connect(&server_addr).await?;
             // 这里的域名只为认证设置
             let domain =
                 rustls::ServerName::try_from(&*domain.unwrap_or("soft.wm-proxy.com".to_string()))
@@ -89,7 +89,7 @@ impl CenterClient {
             let outbound = connector.connect(domain, stream).await?;
             Ok((None, Some(outbound)))
         } else {
-            let outbound = TcpStream::connect(server_addr).await?;
+            let outbound = HealthCheck::connect(&server_addr).await?;
             Ok((Some(outbound), None))
         }
     }
@@ -204,7 +204,7 @@ impl CenterClient {
                                 println!("receiver sock_map {}, domain = {}", sock_map, domain);
                                 // let (flag, username, password, udp_bind) = (option.flag, option.username.clone(), option.password.clone(), option.udp_bind.clone());
                                 tokio::spawn(async move {
-                                    let stream = TcpStream::connect(domain).await;
+                                    let stream = HealthCheck::connect(&domain).await;
                                     println!("connect server {:?}", stream);
                                     if let Ok(tcp) = stream {
                                         let trans = TransStream::new(

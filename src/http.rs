@@ -1,4 +1,4 @@
-use crate::ProxyError;
+use crate::{ProxyError, HealthCheck};
 use tokio::{
     io::{copy_bidirectional, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf},
     net::TcpStream,
@@ -44,7 +44,7 @@ impl ProxyHttp {
             match request.parse_buffer(&mut buffer.clone()) {
                 Ok(_) => match request.get_connect_url() {
                     Some(host) => {
-                        match TcpStream::connect(host).await {
+                        match HealthCheck::connect(&host).await {
                             Ok(v) => outbound = v,
                             Err(e) => {
                                 Self::err_server_status(inbound, 503).await?;
