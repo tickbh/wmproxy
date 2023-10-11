@@ -3,7 +3,7 @@ use webparse::{Buf, http2::frame::{read_u24, encode_u24}, BufMut, Binary};
 
 use crate::{ProxyResult, MappingConfig};
 
-use super::{ProtCreate, ProtClose, ProtData, ProtFlag, ProtKind, ProtMapping};
+use super::{ProtCreate, ProtClose, ProtData, ProtFlag, ProtKind, ProtMapping, ProtToken};
 
 
 #[derive(Debug)]
@@ -26,6 +26,8 @@ pub enum ProtFrame {
     Close(ProtClose),
     /// 收到Socket的相关数据
     Data(ProtData),
+    /// 收到Token的相关数据
+    Token(ProtToken),
     /// 收到内网映射的相关消息
     Mapping(ProtMapping),
 }
@@ -98,6 +100,7 @@ impl ProtFrame {
             ProtKind::Create => ProtFrame::Create(ProtCreate::parse(header, buf)?),
             ProtKind::Close => ProtFrame::Close(ProtClose::parse(header, buf)?),
             ProtKind::Mapping => ProtFrame::Mapping(ProtMapping::parse(header, buf)?),
+            ProtKind::Token => ProtFrame::Token(ProtToken::parse(header, buf)?),
             ProtKind::Unregistered => todo!(),
         };
         Ok(v)
@@ -113,6 +116,7 @@ impl ProtFrame {
             ProtFrame::Create(s) => s.encode(buf)?,
             ProtFrame::Close(s) => s.encode(buf)?,
             ProtFrame::Mapping(s) => s.encode(buf)?,
+            ProtFrame::Token(s) => s.encode(buf)?,
         };
         Ok(size)
     }
@@ -125,12 +129,20 @@ impl ProtFrame {
         Self::Close(ProtClose::new(sock_map))
     }
 
+    pub fn new_close_reason(sock_map: u32, reason: String) -> Self {
+        Self::Close(ProtClose::new_by_reason(sock_map, reason))
+    }
+
     pub fn new_data(sock_map: u32, data: Binary) -> Self {
         Self::Data(ProtData::new(sock_map, data))
     }
 
     pub fn new_mapping(sock_map: u32, mappings: Vec<MappingConfig>) -> Self {
         Self::Mapping(ProtMapping::new(sock_map, mappings))
+    }
+
+    pub fn new_token(username: String, password: String) -> Self {
+        Self::Token(ProtToken::new(username, password))
     }
 
     pub fn is_create(&self) -> bool {
@@ -167,6 +179,7 @@ impl ProtFrame {
             ProtFrame::Create(s) => s.sock_map(),
             ProtFrame::Close(s) => s.sock_map(),
             ProtFrame::Mapping(s) => s.sock_map(),
+            ProtFrame::Token(s) => s.sock_map(),
         }
     }
 

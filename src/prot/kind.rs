@@ -5,6 +5,7 @@ pub enum ProtKind {
     Create = 1,
     Close = 2,
     Mapping = 3,
+    Token = 4,
     Unregistered
 }
 
@@ -15,6 +16,7 @@ impl ProtKind {
             1 => ProtKind::Create,
             2 => ProtKind::Close,
             3 => ProtKind::Mapping,
+            4 => ProtKind::Token,
             _ => ProtKind::Unregistered
         }
     }
@@ -25,6 +27,7 @@ impl ProtKind {
             ProtKind::Create => 1,
             ProtKind::Close => 2,
             ProtKind::Mapping => 3,
+            ProtKind::Token => 4,
             ProtKind::Unregistered => 255
         }
     }

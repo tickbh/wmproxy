@@ -221,7 +221,9 @@ pub struct ProxyOption {
     #[serde(default = "default_bind_addr")]
     pub(crate) bind_addr: SocketAddr,
     pub(crate) server: Option<SocketAddr>,
+    /// 用于socks验证及中心服务器验证
     pub(crate) username: Option<String>,
+    /// 用于socks验证及中心服务器验证
     pub(crate) password: Option<String>,
     pub(crate) udp_bind: Option<IpAddr>,
 
@@ -508,6 +510,24 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
         let certs = Self::load_certs(&self.map_cert)?;
         let key = Self::load_keys(&self.map_key)?;
 
+        let config = rustls::ServerConfig::builder()
+            .with_safe_defaults()
+            .with_no_client_auth()
+            .with_single_cert(certs, key)
+            .map_err(|err| io::Error::new(io::ErrorKind::InvalidInput, err))?;
+
+        let acceptor = TlsAcceptor::from(Arc::new(config));
+        Ok(acceptor)
+    }
+
+    /// 获取服务端https的证书信息
+    pub async fn get_tls_accept(&mut self) -> ProxyResult<TlsAcceptor> {
+        if !self.tc {
+            return Err(ProxyError::ProtNoSupport);
+        }
+        let certs = Self::load_certs(&self.cert)?;
+        let key = Self::load_keys(&self.key)?;
+
         let config = rustls::ServerConfig::builder().with_safe_defaults();
 
         let config = if self.two_way_tls {
@@ -532,30 +552,24 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
         Ok(acceptor)
     }
 
-    /// 获取服务端https的证书信息
-    pub async fn get_tls_accept(&mut self) -> ProxyResult<TlsAcceptor> {
-        if !self.tc {
-            return Err(ProxyError::ProtNoSupport);
-        }
-        let certs = Self::load_certs(&self.cert)?;
-        let key = Self::load_keys(&self.key)?;
-
-        let config = rustls::ServerConfig::builder()
-            .with_safe_defaults()
-            .with_no_client_auth()
-            .with_single_cert(certs, key)
-            .map_err(|err| io::Error::new(io::ErrorKind::InvalidInput, err))?;
-        let acceptor = TlsAcceptor::from(Arc::new(config));
-        Ok(acceptor)
-    }
-
     /// 获取客户端https的Config配置
     pub async fn get_tls_request(&mut self) -> ProxyResult<Arc<rustls::ClientConfig>> {
         if !self.ts {
             return Err(ProxyError::ProtNoSupport);
         }
-        let certs = Self::load_certs(&self.map_cert)?;
+        let certs = Self::load_certs(&self.cert)?;
         let mut root_cert_store = rustls::RootCertStore::empty();
+        root_cert_store.add_trust_anchors(
+            webpki_roots::TLS_SERVER_ROOTS
+                .iter()
+                .map(|ta| {
+                    rustls::OwnedTrustAnchor::from_subject_spki_name_constraints(
+                        ta.subject,
+                        ta.spki,
+                        ta.name_constraints,
+                    )
+                }),
+        );
         for cert in &certs {
             let _ = root_cert_store.add(cert);
         }
@@ -564,7 +578,7 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
             .with_root_certificates(root_cert_store);
 
         if self.two_way_tls {
-            let key = Self::load_keys(&self.map_key)?;
+            let key = Self::load_keys(&self.key)?;
             Ok(Arc::new(config.with_client_auth_cert(certs, key).map_err(
                 |err| io::Error::new(io::ErrorKind::InvalidInput, err),
             )?))

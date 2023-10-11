@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc, net::SocketAddr};
+use std::{collections::HashMap, net::SocketAddr, sync::Arc};
 use tokio::{
     io::{split, AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
@@ -39,7 +39,6 @@ pub struct CenterServer {
     receiver_work: Option<Receiver<(ProtCreate, Sender<ProtFrame>)>>,
     /// 绑定的下一个sock_map映射，为双数
     next_id: u32,
-
     /// 内网映射的相关消息, 需要读写分离需加锁
     mappings: Arc<RwLock<Vec<MappingConfig>>>,
 }
@@ -48,7 +47,6 @@ impl CenterServer {
     pub fn new(option: ProxyOption) -> Self {
         let (sender, receiver) = channel::<ProtFrame>(100);
         let (sender_work, receiver_work) = channel::<(ProtCreate, Sender<ProtFrame>)>(10);
-
         Self {
             option,
             sender,
@@ -93,10 +91,12 @@ impl CenterServer {
         let mut map = HashMap::<u32, Sender<ProtFrame>>::new();
         let mut read_buf = BinaryMut::new();
         let mut write_buf = BinaryMut::new();
+        let mut verify_succ = option.username.is_none() && option.password.is_none();
 
         let (mut reader, mut writer) = split(stream);
         let mut vec = vec![0u8; 4096];
         let is_closed;
+        let mut is_ready_shutdown = false;
         loop {
             let _ = tokio::select! {
                 // 严格的顺序流
@@ -138,18 +138,41 @@ impl CenterServer {
                             write_buf.advance(n);
                             if !write_buf.has_remaining() {
                                 write_buf.clear();
+
+                                if is_ready_shutdown {
+                                    return Ok(())
+                                }
                             }
                         }
                         Err(_) => todo!(),
                     }
                 }
             };
-
+            if is_ready_shutdown {
+                continue;
+            }
             loop {
                 // 将读出来的数据全部解析成ProtFrame并进行相应的处理，如果是0则是自身消息，其它进行转发
                 match Helper::decode_frame(&mut read_buf)? {
                     Some(p) => {
                         println!("server decode receiver = {:?}", p);
+                        match &p {
+                            ProtFrame::Token(p) => {
+                                if !verify_succ
+                                    && p.is_check_succ(&option.username, &option.password)
+                                {
+                                    verify_succ = true;
+                                    continue;
+                                }
+                            }
+                            _ => {}
+                        }
+                        if !verify_succ {
+                            ProtFrame::new_close_reason(0, "not verify so close".to_string())
+                                .encode(&mut write_buf)?;
+                            is_ready_shutdown = true;
+                            break;
+                        }
                         match p {
                             ProtFrame::Create(p) => {
                                 let (virtual_sender, virtual_receiver) = channel::<ProtFrame>(10);
@@ -184,6 +207,7 @@ impl CenterServer {
                                 *guard = p.into_mappings();
                                 println!("new mapping is =  {:?}", *guard);
                             }
+                            ProtFrame::Token(_) => unreachable!(),
                         }
                     }
                     None => {
@@ -223,9 +247,18 @@ impl CenterServer {
         Ok(())
     }
 
-    pub async fn server_new_http(&mut self, stream: TcpStream, addr: SocketAddr) -> ProxyResult<()> {
+    pub async fn server_new_http(
+        &mut self,
+        stream: TcpStream,
+        addr: SocketAddr,
+    ) -> ProxyResult<()> {
         println!("server_new_http!!!!!!!!!!!! =====");
-        let trans = TransHttp::new(self.sender(), self.sender_work(), self.calc_next_id(), self.mappings.clone());
+        let trans = TransHttp::new(
+            self.sender(),
+            self.sender_work(),
+            self.calc_next_id(),
+            self.mappings.clone(),
+        );
         tokio::spawn(async move {
             println!("tokio::spawn start!");
             let e = trans.process(stream, addr).await;
@@ -234,8 +267,18 @@ impl CenterServer {
         return Ok(());
     }
 
-    pub async fn server_new_https(&mut self, stream: TcpStream, addr: SocketAddr, accept: TlsAcceptor) -> ProxyResult<()> {
-        let trans = TransHttp::new(self.sender(), self.sender_work(), self.calc_next_id(), self.mappings.clone());
+    pub async fn server_new_https(
+        &mut self,
+        stream: TcpStream,
+        addr: SocketAddr,
+        accept: TlsAcceptor,
+    ) -> ProxyResult<()> {
+        let trans = TransHttp::new(
+            self.sender(),
+            self.sender_work(),
+            self.calc_next_id(),
+            self.mappings.clone(),
+        );
         tokio::spawn(async move {
             println!("tokio::spawn start!");
             if let Ok(tls_stream) = accept.accept(stream).await {
@@ -247,7 +290,12 @@ impl CenterServer {
     }
 
     pub async fn server_new_tcp(&mut self, stream: TcpStream) -> ProxyResult<()> {
-        let trans = TransTcp::new(self.sender(), self.sender_work(), self.calc_next_id(), self.mappings.clone());
+        let trans = TransTcp::new(
+            self.sender(),
+            self.sender_work(),
+            self.calc_next_id(),
+            self.mappings.clone(),
+        );
         tokio::spawn(async move {
             println!("tokio::spawn start!");
             let e = trans.process(stream).await;

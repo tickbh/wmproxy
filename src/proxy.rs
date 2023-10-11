@@ -116,6 +116,7 @@ impl Proxy {
         if self.option.center {
             if let Some(server) = self.option.server.clone() {
                 let mut center_client = CenterClient::new(
+                    self.option.clone(),
                     server,
                     client.clone(),
                     self.option.domain.clone(),

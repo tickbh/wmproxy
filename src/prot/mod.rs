@@ -6,6 +6,7 @@ mod data;
 mod frame;
 mod kind;
 mod mapping;
+mod token;
 
 pub use flag::ProtFlag;
 pub use kind::ProtKind;
@@ -13,6 +14,7 @@ pub use create::ProtCreate;
 pub use close::ProtClose;
 pub use data::ProtData;
 pub use mapping::ProtMapping;
+pub use token::ProtToken;
 pub use frame::{ProtFrame, ProtFrameHeader};
 
 use webparse::{Buf, BufMut};

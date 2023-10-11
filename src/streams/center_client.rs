@@ -13,12 +13,14 @@ use tokio_rustls::{client::TlsStream, TlsConnector};
 use webparse::{BinaryMut, Buf};
 
 use crate::{
-    Helper, MappingConfig, ProtClose, ProtCreate, ProtFrame, ProxyResult, TransStream, HealthCheck,
+    HealthCheck, Helper, MappingConfig, ProtClose, ProtCreate, ProtFrame, ProxyOption, ProxyResult,
+    TransStream,
 };
 
 /// 中心客户端
 /// 负责与服务端建立连接，断开后自动再重连
 pub struct CenterClient {
+    option: ProxyOption,
     /// tls的客户端连接信息
     tls_client: Option<Arc<rustls::ClientConfig>>,
     /// tls的客户端连接域名
@@ -48,6 +50,7 @@ pub struct CenterClient {
 
 impl CenterClient {
     pub fn new(
+        option: ProxyOption,
         server_addr: SocketAddr,
         tls_client: Option<Arc<rustls::ClientConfig>>,
         domain: Option<String>,
@@ -57,6 +60,7 @@ impl CenterClient {
         let (sender_work, receiver_work) = channel::<(ProtCreate, Sender<ProtFrame>)>(10);
 
         Self {
+            option,
             tls_client,
             domain,
             server_addr,
@@ -107,6 +111,7 @@ impl CenterClient {
     }
 
     async fn inner_serve<T>(
+        option: &ProxyOption,
         stream: T,
         sender: &mut Sender<ProtFrame>,
         receiver_work: &mut Receiver<(ProtCreate, Sender<ProtFrame>)>,
@@ -122,7 +127,13 @@ impl CenterClient {
         let (mut reader, mut writer) = split(stream);
         let mut vec = vec![0u8; 4096];
         let is_closed;
-        println!("mappings = {:?}", mappings);
+        if option.username.is_some() && option.password.is_some() {
+            ProtFrame::new_token(
+                option.username.clone().unwrap(),
+                option.password.clone().unwrap(),
+            )
+            .encode(&mut write_buf)?;
+        }
         if mappings.len() > 0 {
             println!("encode mapping = {:?}", mappings);
             ProtFrame::new_mapping(0, mappings.clone()).encode(&mut write_buf)?;
@@ -197,7 +208,7 @@ impl CenterClient {
                                 }
                                 let (virtual_sender, virtual_receiver) = channel::<ProtFrame>(10);
                                 map.insert(p.sock_map(), virtual_sender);
-                                
+
                                 let domain = local_addr.unwrap();
                                 let sock_map = p.sock_map();
                                 let sender = sender.clone();
@@ -220,12 +231,20 @@ impl CenterClient {
                                     }
                                 });
                             }
-                            ProtFrame::Close(_) | ProtFrame::Data(_) => {
+                            ProtFrame::Data(_) => {
                                 if let Some(sender) = map.get(&p.sock_map()) {
                                     let _ = sender.try_send(p);
                                 }
                             }
+                            ProtFrame::Close(p) => {
+                                if p.sock_map() == 0 {
+                                    println!("close client by server, reason:{}", p.reason())
+                                } else if let Some(sender) = map.get(&p.sock_map()) {
+                                    let _ = sender.try_send(ProtFrame::Close(p));
+                                }
+                            }
                             ProtFrame::Mapping(_) => {}
+                            ProtFrame::Token(_) => todo!(),
                         }
                     }
                     None => {
@@ -249,6 +268,7 @@ impl CenterClient {
         let tls_client = self.tls_client.clone();
         let server = self.server_addr.clone();
         let domain = self.domain.clone();
+        let option = self.option.clone();
 
         let stream = self.stream.take();
         let tls_stream = self.tls_stream.take();
@@ -262,6 +282,7 @@ impl CenterClient {
             loop {
                 if stream.is_some() {
                     let _ = Self::inner_serve(
+                        &option,
                         stream.take().unwrap(),
                         &mut client_sender,
                         &mut receiver_work,
@@ -269,8 +290,10 @@ impl CenterClient {
                         &mut mappings,
                     )
                     .await;
+                    tokio::time::sleep(Duration::from_millis(1000)).await;
                 } else if tls_stream.is_some() {
                     let _ = Self::inner_serve(
+                        &option,
                         tls_stream.take().unwrap(),
                         &mut client_sender,
                         &mut receiver_work,
@@ -278,6 +301,7 @@ impl CenterClient {
                         &mut mappings,
                     )
                     .await;
+                    tokio::time::sleep(Duration::from_millis(1000)).await;
                 };
                 match Self::inner_connect(tls_client.clone(), server.clone(), domain.clone()).await
                 {
