@@ -13,7 +13,7 @@ use tokio::{
 use webparse::{
     Request, Response,
 };
-use wenmeng::{Client, ProtResult, RecvStream, Server, HeaderHelper};
+use wenmeng::{Client, ProtResult, RecvStream, Server, HeaderHelper, ProtError};
 
 use crate::{MappingConfig, ProtCreate, ProtFrame, ProxyError, VirtualStream};
 
@@ -145,10 +145,9 @@ impl TransHttp {
 
     //, client: &mut Client<VirtualStream>
     async fn operate(
-        req: Request<RecvStream>,
-        data: Arc<Mutex<HttpOper>>,
+        req: Request<RecvStream>
     ) -> ProtResult<Option<Response<RecvStream>>> {
-        let mut value = Self::inner_operate(req, data).await?;
+        let mut value = Self::inner_operate(req).await?;
         if let Some(res) = &mut value {
             res.headers_mut().insert("server", "wmproxy");
         }
@@ -156,10 +155,14 @@ impl TransHttp {
     }
 
     async fn inner_operate(
-        mut req: Request<RecvStream>,
-        data: Arc<Mutex<HttpOper>>,
+        mut req: Request<RecvStream>
     ) -> ProtResult<Option<Response<RecvStream>>> {
         println!("receiver req = {:?}", req.url());
+        let data = req.extensions_mut().remove::<Arc<Mutex<HttpOper>>>();
+        if data.is_none() {
+            return Err(ProtError::Extension("unknow data"));
+        }
+        let data = data.unwrap();
         let mut value = data.lock().await;
         let sender = value.virtual_sender.take();
         // 传在该参数则为第一次, 第一次的时候发送Create创建绑定连接
