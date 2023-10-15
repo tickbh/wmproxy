@@ -1,4 +1,4 @@
-use webparse::{Binary, Buf, BufMut, Serialize};
+use webparse::{Buf, BufMut};
 
 use crate::{
     prot::{ProtFlag, ProtKind},

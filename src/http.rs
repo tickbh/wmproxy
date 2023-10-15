@@ -1,7 +1,6 @@
 use crate::{ProxyError, HealthCheck};
 use tokio::{
     io::{copy_bidirectional, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf},
-    net::TcpStream,
 };
 use webparse::{BinaryMut, Buf, BufMut, HttpError, Method, WebError};
 

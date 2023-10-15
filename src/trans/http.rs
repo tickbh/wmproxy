@@ -50,24 +50,6 @@ impl TransHttp {
         }
     }
 
-    async fn err_server_status<T>(mut inbound: T, status: u16) -> Result<(), ProxyError<T>>
-    where
-        T: AsyncRead + AsyncWrite + Unpin,
-    {
-        let mut res = webparse::Response::builder().status(status).body(())?;
-        inbound.write_all(&res.httpdata()?).await?;
-        Ok(())
-    }
-
-    async fn not_match_err_status<T>(mut inbound: T, body: String) -> Result<(), ProxyError<T>>
-    where
-        T: AsyncRead + AsyncWrite + Unpin,
-    {
-        let mut res = webparse::Response::builder().status(503).body(body)?;
-        inbound.write_all(&res.httpdata()?).await?;
-        Ok(())
-    }
-
     // pub async fn process<T>(self, mut inbound: T) -> Result<(), ProxyError<T>>
     // where
     //     T: AsyncRead + AsyncWrite + Unpin,
@@ -146,17 +128,15 @@ impl TransHttp {
     //, client: &mut Client<VirtualStream>
     async fn operate(
         req: Request<RecvStream>
-    ) -> ProtResult<Option<Response<RecvStream>>> {
+    ) -> ProtResult<Response<RecvStream>> {
         let mut value = Self::inner_operate(req).await?;
-        if let Some(res) = &mut value {
-            res.headers_mut().insert("server", "wmproxy");
-        }
+        value.headers_mut().insert("server", "wmproxy");
         Ok(value)
     }
 
     async fn inner_operate(
         mut req: Request<RecvStream>
-    ) -> ProtResult<Option<Response<RecvStream>>> {
+    ) -> ProtResult<Response<RecvStream>> {
         println!("receiver req = {:?}", req.url());
         let data = req.extensions_mut().remove::<Arc<Mutex<HttpOper>>>();
         if data.is_none() {
@@ -183,7 +163,7 @@ impl TransHttp {
                     }
                 }
                 if !is_find {
-                    return Ok(Some(Response::builder().status(404).body("not found").ok().unwrap().into_type()));
+                    return Ok(Response::builder().status(404).body("not found").ok().unwrap().into_type());
                 }
                 value.http_map = config;
             }
@@ -208,9 +188,9 @@ impl TransHttp {
                 // 复写Response的头文件信息
                 HeaderHelper::rewrite_response(res.as_mut().unwrap(), &config.headers);
             }
-            return Ok(res);
+            return Ok(res.unwrap());
         } else {
-            return Ok(Some(Response::builder().status(503).body("cant trans").ok().unwrap().into_type()));
+            return Ok(Response::builder().status(503).body("cant trans").ok().unwrap().into_type());
         }
     }
 

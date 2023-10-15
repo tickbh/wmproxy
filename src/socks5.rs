@@ -6,7 +6,7 @@ use std::{
 use crate::{error::ProxyTypeResult, ProxyError, ProxyResult, HealthCheck};
 use tokio::{
     io::{copy_bidirectional, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf},
-    net::{TcpStream, UdpSocket},
+    net::{UdpSocket},
     sync::broadcast::{channel, Receiver, Sender},
     try_join,
 };
