@@ -341,8 +341,11 @@ impl ProxyOption {
             let mut file = File::open(config)?;
             let mut contents = String::new();
             file.read_to_string(&mut contents)?;
-            let option = serde_yaml::from_str::<ProxyOption>(&contents).unwrap();
+            let mut option = serde_yaml::from_str::<ProxyOption>(&contents).unwrap();
             println!("options = {:?}", option);
+            if let Some(reverse) = &mut option.reverse {
+                reverse.fix_default();
+            }
             return Ok(option);
         }
 

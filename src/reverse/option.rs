@@ -4,5 +4,14 @@ use wenmeng::FileServer;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ReverseOption {
-    pub file_server: FileServer,
+    pub file_server: Option<FileServer>,
+}
+
+impl ReverseOption {
+    
+    pub fn fix_default(&mut self) {
+        if let Some(f) = &mut self.file_server {
+            f.fix_default();
+        }
+    }
 }

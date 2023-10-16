@@ -14,7 +14,7 @@ use webparse::BinaryMut;
 
 use crate::{
     error::ProxyTypeResult, CenterClient, CenterServer, Flag, HealthCheck, ProxyError, ProxyHttp,
-    ProxyOption, ProxyResult, ProxySocks5, reverse::Reverse,
+    ProxyOption, ProxyResult, ProxySocks5, reverse::ReverseServer,
 };
 
 pub struct Proxy {
@@ -74,7 +74,7 @@ impl Proxy {
     {
         // 本地反向处理
         if let Some(client) = &mut self.option.reverse {
-            return Reverse::process(inbound, addr, client).await
+            return ReverseServer::process(inbound, addr, client).await
         }
 
         // 转发到服务端
@@ -196,8 +196,8 @@ impl Proxy {
             None
         };
 
-        // let pending = std::future::pending();
-        // let fut: &mut dyn Future<Output = ()> = option_fut.as_mut().unwrap_or(&mut pending);
+        // // let pending = std::future::pending();
+        // // let fut: &mut dyn Future<Output = ()> = option_fut.as_mut().unwrap_or(&mut pending);
 
         loop {
             tokio::select! {
@@ -228,6 +228,8 @@ impl Proxy {
             }
             println!("aaaaaaaaaaaaaa");
         }
+
+        Ok(())
     }
 
     async fn transfer_server<T>(

@@ -9,11 +9,11 @@ use crate::ProxyResult;
 use super::ReverseOption;
 
 
-pub struct Reverse {
+pub struct ReverseServer {
     
 }
 
-impl Reverse {
+impl ReverseServer {
     
     async fn inner_operate(
         mut req: Request<RecvStream>
@@ -25,8 +25,11 @@ impl Reverse {
         }
         let data = data.unwrap();
         let mut value = data.lock().await;
-        // value.file_server.deal_request(req).await
-        Err(ProtError::Extension("unknow data"))
+        if let Some(f) = &mut value.file_server {
+            f.deal_request(req).await
+        } else {
+            return Err(ProtError::Extension("unknow data"));
+        }
     }
 
     async fn operate(
@@ -42,12 +45,17 @@ impl Reverse {
         addr: SocketAddr,
         option: &mut ReverseOption
     ) -> ProxyResult<()>     where
-    T: AsyncRead + AsyncWrite + Unpin {
-        let mut server = Server::new(inbound, Some(addr), option.clone());
-        let _ret = server.incoming(Self::operate).await;
-        if _ret.is_err() {
-            println!("ret = {:?}", _ret);
-        }
+    T: AsyncRead + AsyncWrite + Unpin + std::marker::Send + 'static {
+        println!("xxxxxxxxxxxxxxxxxxxx");
+        let option = option.clone();
+        tokio::spawn(async move {
+            let mut server = Server::new(inbound, Some(addr), option);
+            let _ret = server.incoming(Self::operate).await;
+            if _ret.is_err() {
+                println!("ret = {:?}", _ret);
+            };
+            
+        });
         Ok(())
     }
 }
