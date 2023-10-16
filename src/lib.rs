@@ -12,6 +12,7 @@ mod helper;
 mod trans;
 mod mapping;
 mod check;
+mod reverse;
 
 pub use error::{ProxyResult, ProxyError};
 pub use flag::Flag;

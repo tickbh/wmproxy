@@ -44,6 +44,24 @@
         {
             "type": "lldb",
             "request": "launch",
+            "name": "reverse",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=wmproxy",
+                    "--package=wmproxy"
+                ],
+                "filter": {
+                    "name": "wmproxy",
+                    "kind": "bin"
+                }
+            },
+            "args": ["-c", "config/reverse.yaml"],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
             "name": "server",
             "cargo": {
                 "args": [

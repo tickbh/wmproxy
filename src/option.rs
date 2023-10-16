@@ -7,11 +7,12 @@ use std::{
 
 use commander::Commander;
 use rustls::{Certificate, PrivateKey};
+use wenmeng::FileServer;
 
 use serde::{Deserialize, Serialize};
 use tokio_rustls::{rustls, TlsAcceptor};
 
-use crate::{Flag, MappingConfig, ProxyError, ProxyResult};
+use crate::{Flag, MappingConfig, ProxyError, ProxyResult, reverse::ReverseOption};
 
 use bitflags::bitflags;
 
@@ -214,12 +215,12 @@ fn default_bool_true() -> bool {
 /// 代理类, 一个代理类启动一种类型的代理
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ProxyOption {
+    #[serde(default = "default_bind_addr")]
+    pub(crate) bind_addr: SocketAddr,
     #[serde(default)]
     pub(crate) flag: Flag,
     #[serde(default)]
     pub(crate) mode: String,
-    #[serde(default = "default_bind_addr")]
-    pub(crate) bind_addr: SocketAddr,
     pub(crate) server: Option<SocketAddr>,
     /// 用于socks验证及中心服务器验证
     pub(crate) username: Option<String>,
@@ -253,6 +254,10 @@ pub struct ProxyOption {
     pub(crate) key: Option<String>,
     #[serde(default)]
     pub(crate) mappings: Vec<MappingConfig>,
+
+    /// 是否开启本地服务功能, 如文件服务器
+    #[serde(default)]
+    pub(crate) reverse: Option<ReverseOption>,
 }
 
 impl Default for ProxyOption {
@@ -280,6 +285,8 @@ impl Default for ProxyOption {
             key: None,
 
             mappings: vec![],
+
+            reverse: None,
         }
     }
 }
@@ -530,6 +537,7 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
 
         let config = rustls::ServerConfig::builder().with_safe_defaults();
 
+        // 开始双向认证，需要客户端提供证书信息
         let config = if self.two_way_tls {
             let mut client_auth_roots = rustls::RootCertStore::empty();
             for root in &certs {
@@ -559,6 +567,7 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
         }
         let certs = Self::load_certs(&self.cert)?;
         let mut root_cert_store = rustls::RootCertStore::empty();
+        // 信任通用的签名商
         root_cert_store.add_trust_anchors(
             webpki_roots::TLS_SERVER_ROOTS
                 .iter()

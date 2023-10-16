@@ -7,7 +7,7 @@ use crate::{
 
 use super::{read_short_string, write_short_string, ProtFrameHeader};
 
-/// Socket的数据消息包
+/// 进行身份的认证
 #[derive(Debug)]
 pub struct ProtToken {
     username: String,

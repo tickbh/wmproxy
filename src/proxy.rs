@@ -13,8 +13,8 @@ use tokio_rustls::{rustls, TlsAcceptor, TlsConnector};
 use webparse::BinaryMut;
 
 use crate::{
-    error::ProxyTypeResult, CenterClient, CenterServer, Flag, ProxyError,
-    ProxyHttp, ProxyOption, ProxyResult, ProxySocks5, HealthCheck,
+    error::ProxyTypeResult, CenterClient, CenterServer, Flag, HealthCheck, ProxyError, ProxyHttp,
+    ProxyOption, ProxyResult, ProxySocks5, reverse::Reverse,
 };
 
 pub struct Proxy {
@@ -62,14 +62,21 @@ impl Proxy {
         }
     }
 
+
     async fn deal_stream<T>(
         &mut self,
         inbound: T,
+        addr: SocketAddr,
         tls_client: Option<Arc<rustls::ClientConfig>>,
     ) -> ProxyResult<()>
     where
         T: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static,
     {
+        // 本地反向处理
+        if let Some(client) = &mut self.option.reverse {
+            return Reverse::process(inbound, addr, client).await
+        }
+
         // 转发到服务端
         if let Some(client) = &mut self.center_client {
             return client.deal_new_stream(inbound).await;
@@ -110,6 +117,7 @@ impl Proxy {
     }
 
     pub async fn start_serve(&mut self) -> ProxyResult<()> {
+        println!("start serve!!!!!!!!");
         let addr = self.option.bind_addr.clone();
         let accept = self.option.get_tls_accept().await.ok();
         let client = self.option.get_tls_request().await.ok();
@@ -194,17 +202,17 @@ impl Proxy {
         loop {
             tokio::select! {
                 v = center_listener.accept() => {
-                    let (inbound, _) = v?;
+                    let (inbound, addr) = v?;
                     if let Some(a) = accept.clone() {
                         let inbound = a.accept(inbound).await;
                         // 获取的流跟正常内容一样读写, 在内部实现了自动加解密
                         if let Ok(inbound) = inbound {
-                            let _ = self.deal_stream(inbound, client.clone()).await;
+                            let _ = self.deal_stream(inbound, addr, client.clone()).await;
                         } else {
                             println!("accept error = {:?}", inbound.err());
                         }
                     } else {
-                        let _ = self.deal_stream(inbound, client.clone()).await;
+                        let _ = self.deal_stream(inbound, addr, client.clone()).await;
                     };
                 }
                 Some((inbound, addr)) = tcp_listen_work(&http_listener) => {
@@ -289,7 +297,11 @@ impl Proxy {
         Ok(())
     }
 
-    pub async fn server_new_http(&mut self, stream: TcpStream, addr: SocketAddr) -> ProxyResult<()> {
+    pub async fn server_new_http(
+        &mut self,
+        stream: TcpStream,
+        addr: SocketAddr,
+    ) -> ProxyResult<()> {
         for server in &mut self.center_servers {
             if !server.is_close() {
                 return server.server_new_http(stream, addr).await;
@@ -301,7 +313,8 @@ impl Proxy {
 
     pub async fn server_new_https(
         &mut self,
-        stream: TcpStream, addr: SocketAddr,
+        stream: TcpStream,
+        addr: SocketAddr,
         accept: TlsAcceptor,
     ) -> ProxyResult<()> {
         for server in &mut self.center_servers {
@@ -313,7 +326,11 @@ impl Proxy {
         Ok(())
     }
 
-    pub async fn server_new_tcp(&mut self, stream: TcpStream, _addr: SocketAddr) -> ProxyResult<()> {
+    pub async fn server_new_tcp(
+        &mut self,
+        stream: TcpStream,
+        _addr: SocketAddr,
+    ) -> ProxyResult<()> {
         for server in &mut self.center_servers {
             if !server.is_close() {
                 return server.server_new_tcp(stream).await;

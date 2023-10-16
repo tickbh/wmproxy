@@ -1,0 +1,7 @@
+bind_addr: 0.0.0.0:8090
+
+reverse:
+  file_server:
+    root: ""
+    prefix: ""
+    
