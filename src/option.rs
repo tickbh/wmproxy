@@ -2,7 +2,7 @@ use std::{
     fs::File,
     io::{self, BufReader, Read},
     net::{IpAddr, SocketAddr},
-    sync::Arc,
+    sync::Arc, path::PathBuf,
 };
 
 use commander::Commander;
@@ -338,10 +338,25 @@ impl ProxyOption {
             .parse_env_or_exit();
 
         if let Some(config) = command.get_str("c") {
+            let path = PathBuf::from(&config);
             let mut file = File::open(config)?;
             let mut contents = String::new();
             file.read_to_string(&mut contents)?;
-            let mut option = serde_yaml::from_str::<ProxyOption>(&contents).unwrap();
+            let extension = path.extension().unwrap().to_string_lossy().to_string();
+            let mut option = match &*extension {
+                "yaml" => {
+                    serde_yaml::from_str::<ProxyOption>(&contents).map_err(|_| io::Error::new(io::ErrorKind::Other, "parse yaml error"))?
+                }
+                "toml" => {
+                    toml::from_str::<ProxyOption>(&contents).map_err(|_| io::Error::new(io::ErrorKind::Other, "parse yaml error"))?
+                }
+                _ => {
+                    let e = io::Error::new(io::ErrorKind::Other, "unknow format error");
+                    return Err(e.into());
+                }
+            };
+
+            // let mut option = serde_yaml::from_str::<ProxyOption>(&contents).unwrap();
             println!("options = {:?}", option);
             if let Some(reverse) = &mut option.reverse {
                 reverse.fix_default();

@@ -4,4 +4,5 @@ reverse:
   file_server:
     root: ""
     prefix: "/root"
-    
+    hide: [.git]
+    index: []
