@@ -5,6 +5,7 @@ use std::{
     sync::Arc,
 };
 
+use futures::{stream::SelectAll, future::select_all, FutureExt};
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::{TcpListener, TcpStream},
@@ -14,7 +15,7 @@ use webparse::BinaryMut;
 
 use crate::{
     error::ProxyTypeResult, CenterClient, CenterServer, Flag, HealthCheck, ProxyError, ProxyHttp,
-    ProxyOption, ProxyResult, ProxySocks5, reverse::ReverseServer,
+    ProxyOption, ProxyResult, ProxySocks5, reverse::{ReverseServer, HttpConfig},
 };
 
 pub struct Proxy {
@@ -166,8 +167,13 @@ impl Proxy {
                 let () = pend.await;
                 None
             }
-            // do work
         }
+
+        let (mut servers, mut listeners) = if let Some(http) = &mut self.option.http {
+            http.bind().await?
+        } else {
+            (vec![], vec![])
+        };
 
         let http_listener = if let Some(ls) = &self.option.map_http_bind {
             Some(TcpListener::bind(ls).await?)
@@ -198,7 +204,7 @@ impl Proxy {
 
         // // let pending = std::future::pending();
         // // let fut: &mut dyn Future<Output = ()> = option_fut.as_mut().unwrap_or(&mut pending);
-
+        // let receiver = SelectAll::new();
         loop {
             tokio::select! {
                 v = center_listener.accept() => {
@@ -224,6 +230,14 @@ impl Proxy {
                 }
                 Some((inbound, addr)) = tcp_listen_work(&tcp_listener) => {
                     self.server_new_tcp(inbound, addr).await?;
+                }
+                (result, index, _) = select_all(
+                    listeners.iter_mut()
+                        .map(|listener| listener.accept().boxed()),
+                ) => {
+                    let (conn, addr) = result.unwrap();
+                    println!("result = {:?} index = {:?}", conn, index);
+                    let _ = servers[index].process(conn, addr).await;
                 }
             }
             println!("aaaaaaaaaaaaaa");

@@ -5,3 +5,36 @@ root = ""
 prefix = "/root"
 hide = [".git"]
 index = []
+
+[http]
+aa = "b"
+[[http.server]]
+bind_addr = "127.0.0.1:81"
+server_name = "localhost"
+
+[[http.server.location]]
+rule = "/oauth"
+proxy_pass = ""
+set_header = { HOST= "$host", X-Real-IP= "$remote_addr" }
+set = [
+  { name= "Hammer", sku= 738594937 }
+]
+
+[http.server.location.file_server]
+root = "D:/"
+
+[[http.server.location]]
+rule = "/aaa"
+# file_server = { root = "" }
+proxy_pass = ""
+set_header = { HOST= "$host", X-Real-IP= "$remote_addr" }
+set = [
+  { name= "Hammer", sku= 738594937 }
+]
+
+[http.server.location.file_server]
+root = "D:/aaa"
+
+# [[server]]
+# listen = 81
+# server_name = "localhost"

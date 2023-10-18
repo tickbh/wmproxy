@@ -2,7 +2,8 @@ use std::{
     fs::File,
     io::{self, BufReader, Read},
     net::{IpAddr, SocketAddr},
-    sync::Arc, path::PathBuf,
+    path::PathBuf,
+    sync::Arc,
 };
 
 use commander::Commander;
@@ -12,7 +13,10 @@ use wenmeng::FileServer;
 use serde::{Deserialize, Serialize};
 use tokio_rustls::{rustls, TlsAcceptor};
 
-use crate::{Flag, MappingConfig, ProxyError, ProxyResult, reverse::ReverseOption};
+use crate::{
+    reverse::{HttpConfig, ReverseOption},
+    Flag, MappingConfig, ProxyError, ProxyResult,
+};
 
 use bitflags::bitflags;
 
@@ -258,6 +262,9 @@ pub struct ProxyOption {
     /// 是否开启本地服务功能, 如文件服务器
     #[serde(default)]
     pub(crate) reverse: Option<ReverseOption>,
+
+    #[serde(default)]
+    pub(crate) http: Option<HttpConfig>,
 }
 
 impl Default for ProxyOption {
@@ -287,6 +294,7 @@ impl Default for ProxyOption {
             mappings: vec![],
 
             reverse: None,
+            http: None,
         }
     }
 }
@@ -344,12 +352,16 @@ impl ProxyOption {
             file.read_to_string(&mut contents)?;
             let extension = path.extension().unwrap().to_string_lossy().to_string();
             let mut option = match &*extension {
-                "yaml" => {
-                    serde_yaml::from_str::<ProxyOption>(&contents).map_err(|_| io::Error::new(io::ErrorKind::Other, "parse yaml error"))?
-                }
-                "toml" => {
-                    toml::from_str::<ProxyOption>(&contents).map_err(|_| io::Error::new(io::ErrorKind::Other, "parse yaml error"))?
-                }
+                "yaml" => serde_yaml::from_str::<ProxyOption>(&contents)
+                    .map_err(|e| {
+                        println!("parse error msg = {:?}", e);
+                        io::Error::new(io::ErrorKind::Other, "parse yaml error")
+                    })?,
+                "toml" => toml::from_str::<ProxyOption>(&contents)
+                    .map_err(|e| {
+                        println!("parse error msg = {:?}", e);
+                        io::Error::new(io::ErrorKind::Other, "parse toml error")
+                    })?,
                 _ => {
                     let e = io::Error::new(io::ErrorKind::Other, "unknow format error");
                     return Err(e.into());
@@ -586,17 +598,13 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
         let certs = Self::load_certs(&self.cert)?;
         let mut root_cert_store = rustls::RootCertStore::empty();
         // 信任通用的签名商
-        root_cert_store.add_trust_anchors(
-            webpki_roots::TLS_SERVER_ROOTS
-                .iter()
-                .map(|ta| {
-                    rustls::OwnedTrustAnchor::from_subject_spki_name_constraints(
-                        ta.subject,
-                        ta.spki,
-                        ta.name_constraints,
-                    )
-                }),
-        );
+        root_cert_store.add_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.iter().map(|ta| {
+            rustls::OwnedTrustAnchor::from_subject_spki_name_constraints(
+                ta.subject,
+                ta.spki,
+                ta.name_constraints,
+            )
+        }));
         for cert in &certs {
             let _ = root_cert_store.add(cert);
         }
