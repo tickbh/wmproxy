@@ -217,7 +217,7 @@ fn default_bool_true() -> bool {
 }
 
 /// 代理类, 一个代理类启动一种类型的代理
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProxyOption {
     #[serde(default = "default_bind_addr")]
     pub(crate) bind_addr: SocketAddr,

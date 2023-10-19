@@ -12,7 +12,7 @@ fn default_servers() -> Vec<ServerConfig> {
     vec![]
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HttpConfig {
     #[serde(default = "default_servers")]
     pub server: Vec<ServerConfig>,

@@ -1,5 +1,5 @@
 # wmproxy
-一个同时支持http/https/socks5的代理，通过简单配置即可获取加密通道的内网穿透功能，支持http/https/tcp内网穿透
+`wmproxy`将用`Rust`实现`http/https`代理, `socks5`代理, 反向代理, 静态文件服务器,后续将实现`websocket`代理, 内外网穿透等, 会将实现过程分享出来, 感兴趣的可以一起造个轮子
 
 ## 📦 Installation & 🏃 Usage
 

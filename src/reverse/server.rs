@@ -13,9 +13,10 @@ fn default_location() -> Vec<LocationConfig> {
     vec![]
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServerConfig {
     pub bind_addr: SocketAddr,
+    pub root: Option<String>,
     #[serde(default = "default_location")]
     pub location: Vec<LocationConfig>,
 }
@@ -33,9 +34,9 @@ impl ServerConfig {
         let data = data.unwrap();
         let mut value = data.lock().await;
         let path = req.path().clone();
-        for l in &mut value.location {
+        for (index, l) in value.location.iter().enumerate() {
             if l.is_match_rule(&path) {
-                return l.deal_request(req).await;
+                return LocationConfig::deal_request(&mut value, index, req).await;
             }
         }
         return Ok(Response::builder().status(503).body("unknow location").unwrap().into_type());
