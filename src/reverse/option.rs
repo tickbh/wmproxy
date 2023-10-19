@@ -11,7 +11,7 @@ impl ReverseOption {
     
     pub fn fix_default(&mut self) {
         if let Some(f) = &mut self.file_server {
-            f.fix_default();
+            f.pre_deal_request();
         }
     }
 }

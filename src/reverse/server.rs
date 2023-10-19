@@ -2,7 +2,7 @@ use std::{net::SocketAddr, sync::Arc};
 
 use serde::{Deserialize, Serialize};
 use tokio::{sync::Mutex, io::{AsyncRead, AsyncWrite}};
-use webparse::{Request, Response};
+use webparse::{Request, Response, http::response};
 use wenmeng::{RecvStream, ProtResult, ProtError, Server};
 
 use crate::{reverse::ReverseOption, ProxyResult};
@@ -30,13 +30,15 @@ impl ServerConfig {
         if data.is_none() {
             return Err(ProtError::Extension("unknow data"));
         }
-        // let data = data.unwrap();
-        // let mut value = data.lock().await;
-        // if let Some(f) = &mut value.file_server {
-        //     f.deal_request(req).await
-        // } else {
-        return Err(ProtError::Extension("unknow data"));
-        // }
+        let data = data.unwrap();
+        let mut value = data.lock().await;
+        let path = req.path().clone();
+        for l in &mut value.location {
+            if l.is_match_rule(&path) {
+                return l.deal_request(req).await;
+            }
+        }
+        return Ok(Response::builder().status(503).body("unknow location").unwrap().into_type());
     }
 
     async fn operate(
