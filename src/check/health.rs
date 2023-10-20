@@ -82,7 +82,30 @@ impl HealthCheck {
             if Instant::now().duration_since(value.last_record) > value.fail_timeout {
                 return false;
             }
-            h.health_map[addr].failed
+            value.failed
+        } else {
+            false
+        }
+    }
+
+    /// 检测状态是否能连接
+    pub fn check_fall_down(addr: &SocketAddr, fail_timeout: &Duration, fall_times: &usize, rise_times: &usize) -> bool {
+        // 只读，获取读锁
+        if let Ok(h) = HEALTH_CHECK.read() {
+            if !h.health_map.contains_key(addr) {
+                return false;
+            }
+            let value = h.health_map.get(&addr).unwrap();
+            if Instant::now().duration_since(value.last_record) > *fail_timeout {
+                return false;
+            }
+            if &value.fall_times >= fall_times {
+                return true;
+            }
+            if &value.rise_times >= rise_times {
+                return false;
+            }
+            value.failed
         } else {
             false
         }

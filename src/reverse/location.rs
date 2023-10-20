@@ -5,7 +5,7 @@ use tokio::io::{AsyncRead, AsyncWrite};
 use webparse::{HeaderName, Request, Response, Scheme, Url};
 use wenmeng::{Client, FileServer, HeaderHelper, ProtError, ProtResult, RecvStream};
 
-use crate::{ProxyError, ProxyResult};
+use crate::{ProxyError, ProxyResult, HealthCheck};
 
 use super::ServerConfig;
 
@@ -84,12 +84,19 @@ impl LocationConfig {
         }
         req.headers_mut()
             .insert(HeaderName::HOST, url.domain.clone().unwrap());
-
+        let stream = match url.get_connect_url() {
+            Some(connect) => {
+                HealthCheck::connect(&connect).await?
+            },
+            None => {
+                return Err(ProtError::Extension("get url error"));
+            }
+        };
         let mut res = if url.scheme.is_http() {
-            let client = Client::builder().connect(url).await?;
+            let client = Client::builder().connect_by_stream(stream).await?;
             Self::deal_client(req, client).await?
         } else {
-            let client = Client::builder().connect_tls(url).await?;
+            let client = Client::builder().connect_tls_by_stream(stream, url).await?;
             Self::deal_client(req, client).await?
         };
         HeaderHelper::rewrite_response(&mut res, &self.headers);
