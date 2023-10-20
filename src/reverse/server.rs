@@ -16,7 +16,10 @@ fn default_location() -> Vec<LocationConfig> {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServerConfig {
     pub bind_addr: SocketAddr,
+    pub server_name: String,
     pub root: Option<String>,
+    pub cert: Option<String>,
+    pub key: Option<String>,
     #[serde(default = "default_location")]
     pub location: Vec<LocationConfig>,
     #[serde(default = "Vec::new")]

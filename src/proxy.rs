@@ -169,11 +169,13 @@ impl Proxy {
             }
         }
 
-        let (mut servers, mut listeners) = if let Some(http) = &mut self.option.http {
+        let (mut accept, mut tlss, mut listeners) = if let Some(http) = &mut self.option.http {
             http.bind().await?
         } else {
-            (vec![], vec![])
+            (None, vec![], vec![])
         };
+
+        let http = Arc::new(self.option.http.take().unwrap_or(HttpConfig::new()));
 
         let http_listener = if let Some(ls) = &self.option.map_http_bind {
             Some(TcpListener::bind(ls).await?)
@@ -237,7 +239,18 @@ impl Proxy {
                 ) => {
                     let (conn, addr) = result.unwrap();
                     println!("result = {:?} index = {:?}", conn, index);
-                    let _ = servers[index].process(conn, addr).await;
+                    if tlss[index] {
+                        let tls_accept = accept.clone().unwrap();
+                        let http = http.clone();
+                        tokio::spawn(async move {
+                            if let Ok(stream) = tls_accept.accept(conn).await {
+                                let _ = HttpConfig::process(http, stream, addr).await;
+                            }
+                        });
+                    } else {
+                        // let _ = self.option.http.as_mut().unwrap().process(conn, addr).await;
+                        let _ = HttpConfig::process(http.clone(), conn, addr).await;
+                    }
                 }
             }
             println!("aaaaaaaaaaaaaa");

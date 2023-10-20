@@ -8,10 +8,13 @@ index = []
 
 [http]
 aa = "b"
+
 [[http.server]]
 bind_addr = "127.0.0.1:81"
-server_name = "localhost"
+server_name = "soft.wm-proxy.com"
 root="E:/"
+cert="key/soft.wm-proxy.com.pem"
+key="key/soft.wm-proxy.com.key"
 
 [[http.server.upstream]]
 name = "server"
@@ -37,17 +40,45 @@ set_header = { HOST= "$host", X-Real-IP= "$remote_addr" }
 set = [
   { name= "Hammer", sku= 738594937 }
 ]
-# reverse_proxy = "https://www.baidu.com"
 reverse_proxy = "http://server"
 headers = [
   ["+", "aaa", "bbb"]
 ]
-# reverse_proxy = "http://192.168.17.22:8080"
 
 
-# [http.server.location.file_server]
-# root = "D:/"
+[[http.server]]
+bind_addr = "127.0.0.1:81"
+server_name = "local.tool.fit"
+root="E:/1"
+cert="key/local.tool.fit.pem"
+key="key/local.tool.fit.key"
 
-# [[server]]
-# listen = 81
-# server_name = "localhost"
+
+[[http.server.upstream]]
+name = "server"
+
+server = [
+  {addr="127.0.0.1:8080", fail_timeout=30},
+  {addr="127.0.0.1:8081"}
+] 
+
+[[http.server.location]]
+rule = "/root"
+file_server = { browse = true }
+proxy_pass = ""
+set_header = { HOST= "$host", X-Real-IP= "$remote_addr" }
+set = [
+  { name= "Hammer", sku= 738594937 }
+]
+
+[[http.server.location]]
+rule = "/"
+proxy_pass = ""
+set_header = { HOST= "$host", X-Real-IP= "$remote_addr" }
+set = [
+  { name= "Hammer", sku= 738594937 }
+]
+reverse_proxy = "https://www.baidu.com"
+headers = [
+  ["+", "aaa", "bbb"]
+]

@@ -7,7 +7,7 @@ use std::{
 };
 
 use commander::Commander;
-use rustls::{Certificate, PrivateKey};
+use rustls::{Certificate, PrivateKey, server::ResolvesServerCertUsingSni};
 use wenmeng::FileServer;
 
 use serde::{Deserialize, Serialize};
@@ -490,7 +490,7 @@ n2hcLrfZSbynEC/pSw/ET7H5nWwckjmAJ1l9fcnbqkU/pf6uMQmnfl0JQjJNSg==
         let mut keys = if let Some(path) = path {
             let file = File::open(&path)?;
             let mut reader = BufReader::new(file);
-            rustls_pemfile::pkcs8_private_keys(&mut reader)?
+            rustls_pemfile::rsa_private_keys(&mut reader)?
         } else {
             let key = br"-----BEGIN RSA PRIVATE KEY-----
 MIIEpQIBAAKCAQEAw7gdhMEwp5al49V4b3DkwPWUa/Aiaxo5dk8+JWETaIfU8L9w
@@ -566,13 +566,13 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
         let key = Self::load_keys(&self.key)?;
 
         let config = rustls::ServerConfig::builder().with_safe_defaults();
-
         // 开始双向认证，需要客户端提供证书信息
         let config = if self.two_way_tls {
             let mut client_auth_roots = rustls::RootCertStore::empty();
             for root in &certs {
                 client_auth_roots.add(&root).unwrap();
             }
+            
             let client_auth = rustls::server::AllowAnyAuthenticatedClient::new(client_auth_roots);
 
             config
