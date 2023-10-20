@@ -2,12 +2,14 @@ use std::{io, fmt::Debug};
 
 use tokio::{net::TcpStream, io::{AsyncRead, AsyncWrite}};
 use webparse::{WebError, BinaryMut};
+use wenmeng::ProtError;
 
 // #[derive(Debug)]
 pub enum ProxyError<T>
 where T : AsyncRead + AsyncWrite + Unpin {
     IoError(io::Error),
     WebError(WebError),
+    ProtError(ProtError),
     /// 该错误发生协议不可被解析, 则尝试下一个协议
     Continue((Option<BinaryMut>, T)),
     VerifyFail,
@@ -36,6 +38,7 @@ where T : AsyncRead + AsyncWrite + Unpin {
         match self {
             ProxyError::IoError(e) => ProxyError::IoError(e),
             ProxyError::WebError(e) => ProxyError::WebError(e),
+            ProxyError::ProtError(e) => ProxyError::ProtError(e),
             ProxyError::Continue(_) => unreachable!("continue can't convert"),
             ProxyError::VerifyFail => ProxyError::VerifyFail,
             ProxyError::UnknownHost => ProxyError::UnknownHost,
@@ -68,12 +71,20 @@ where T : AsyncRead + AsyncWrite + Unpin {
     }
 }
 
+impl<T> From<ProtError> for ProxyError<T>
+where T : AsyncRead + AsyncWrite + Unpin {
+    fn from(value: ProtError) -> Self {
+        ProxyError::ProtError(value)
+    }
+}
+
 impl<T> Debug for ProxyError<T>
 where T : AsyncRead + AsyncWrite + Unpin {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::IoError(arg0) => f.debug_tuple("IoError").field(arg0).finish(),
             Self::WebError(arg0) => f.debug_tuple("WebError").field(arg0).finish(),
+            Self::ProtError(arg0) => f.debug_tuple("ProtErr").field(arg0).finish(),
             Self::Continue(_arg0) => f.debug_tuple("Continue").finish(),
             Self::VerifyFail => write!(f, "VerifyFail"),
             Self::UnknownHost => write!(f, "UnknownHost"),

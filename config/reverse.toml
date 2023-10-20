@@ -13,6 +13,14 @@ bind_addr = "127.0.0.1:81"
 server_name = "localhost"
 root="E:/"
 
+[[http.server.upstream]]
+name = "server"
+
+server = [
+  {addr="127.0.0.1:8080"},
+  {addr="127.0.0.1:8081"}
+]
+
 [[http.server.location]]
 rule = "/root"
 file_server = { browse = true }
@@ -29,7 +37,8 @@ set_header = { HOST= "$host", X-Real-IP= "$remote_addr" }
 set = [
   { name= "Hammer", sku= 738594937 }
 ]
-reverse_proxy = "https://www.baidu.com"
+# reverse_proxy = "https://www.baidu.com"
+reverse_proxy = "http://server"
 headers = [
   ["+", "aaa", "bbb"]
 ]

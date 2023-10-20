@@ -5,9 +5,9 @@ use tokio::{sync::Mutex, io::{AsyncRead, AsyncWrite}};
 use webparse::{Request, Response, http::response};
 use wenmeng::{RecvStream, ProtResult, ProtError, Server};
 
-use crate::{reverse::ReverseOption, ProxyResult};
+use crate::{reverse::ReverseOption, ProxyResult, ProxyError};
 
-use super::LocationConfig;
+use super::{LocationConfig, UpstreamConfig};
 
 fn default_location() -> Vec<LocationConfig> {
     vec![]
@@ -19,6 +19,8 @@ pub struct ServerConfig {
     pub root: Option<String>,
     #[serde(default = "default_location")]
     pub location: Vec<LocationConfig>,
+    #[serde(default = "Vec::new")]
+    pub upstream: Vec<UpstreamConfig>,
 }
 
 impl ServerConfig {
@@ -67,5 +69,14 @@ impl ServerConfig {
             
         });
         Ok(())
+    }
+
+    pub fn get_upstream_addr(&self, name: &str) -> ProtResult<SocketAddr> {
+        for stream in &self.upstream {
+            if &stream.name == name {
+                return stream.get_server_addr()
+            }
+        }
+        return Err(ProtError::Extension(""));
     }
 }
