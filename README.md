@@ -1,5 +1,5 @@
 # wmproxy
-`wmproxy`将用`Rust`实现`http/https`代理, `socks5`代理, 反向代理, 静态文件服务器,后续将实现`websocket`代理, 内外网穿透等, 会将实现过程分享出来, 感兴趣的可以一起造个轮子
+`wmproxy`将用`Rust`实现`http/https`代理, `socks5`代理, 反向代理, 静态文件服务器, 后续将实现`websocket`代理, 内外网穿透等, 会将实现过程分享出来, 感兴趣的可以一起造个轮子
 
 ## 📦 Installation & 🏃 Usage
 
@@ -129,7 +129,6 @@ password: wmproxy
   - [x] `UDP ASSOCIATE`
 
 ### http/https
-
 - [x] IPV6 Support
 
 ### 内网穿透
@@ -137,6 +136,12 @@ password: wmproxy
 - [x] Http Support
 - [x] Https Support
 - [x] Tcp Support
+
+### 反向代理
+- [x] 静态文件服务器
+- [x] 被动健康检查
+- [ ] 主动健康检查
+- [ ] 负载均衡
 
 #### 支持功能
 - 修改 HTTP 请求 Header

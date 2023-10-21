@@ -9,6 +9,9 @@ pub struct ServerConfig {
     pub root: Option<String>,
     pub cert: Option<String>,
     pub key: Option<String>,
+    
+    #[serde(default = "Vec::new")]
+    pub headers: Vec<Vec<String>>,
     #[serde(default = "Vec::new")]
     pub location: Vec<LocationConfig>,
     #[serde(default = "Vec::new")]
@@ -20,6 +23,7 @@ impl ServerConfig {
     pub fn copy_to_child(&mut self) {
         for l in &mut self.location {
             l.upstream.append(&mut self.upstream.clone());
+            l.headers.append(&mut self.headers.clone());
             if l.root.is_none() && self.root.is_some() {
                 l.root = self.root.clone();
                 if let Some(file_server) = &mut l.file_server {
