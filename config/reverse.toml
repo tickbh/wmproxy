@@ -9,20 +9,19 @@ index = []
 [http]
 aa = "b"
 
+[[http.upstream]]
+name = "server"
+server = [
+  {addr="127.0.0.1:8080", fail_timeout=30},
+  {addr="127.0.0.1:8081"}
+]
+
 [[http.server]]
 bind_addr = "127.0.0.1:81"
 server_name = "soft.wm-proxy.com"
 root="E:/"
 cert="key/soft.wm-proxy.com.pem"
 key="key/soft.wm-proxy.com.key"
-
-[[http.server.upstream]]
-name = "server"
-
-server = [
-  {addr="127.0.0.1:8080", fail_timeout=30},
-  {addr="127.0.0.1:8081"}
-]
 
 [[http.server.location]]
 rule = "/root"
@@ -35,6 +34,7 @@ set = [
 
 [[http.server.location]]
 rule = "/"
+method = "post"
 proxy_pass = ""
 set_header = { HOST= "$host", X-Real-IP= "$remote_addr" }
 set = [
@@ -65,11 +65,6 @@ server = [
 [[http.server.location]]
 rule = "/root"
 file_server = { browse = true }
-proxy_pass = ""
-set_header = { HOST= "$host", X-Real-IP= "$remote_addr" }
-set = [
-  { name= "Hammer", sku= 738594937 }
-]
 
 [[http.server.location]]
 rule = "/"

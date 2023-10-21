@@ -1,22 +1,14 @@
 
 
-use std::{sync::Weak, net::SocketAddr, time::Duration};
+use std::{net::SocketAddr, time::Duration};
 
 use rand::Rng;
 use serde::{Serialize, Deserialize};
 use serde_with::serde_as;
 use serde_with::DurationSeconds;
-use tokio::io::{AsyncWrite, AsyncRead};
-use webparse::{Request, Response, Url, HeaderName};
-use wenmeng::{FileServer, RecvStream, ProtResult, ProtError, Client, HeaderHelper};
 
-use crate::{ProxyResult, HealthCheck};
-
-use super::ServerConfig;
-
-fn default_headers() -> Vec<Vec<String>> {
-    vec![]
-}
+use wenmeng::{ProtResult, ProtError};
+use crate::{HealthCheck};
 
 
 fn default_weight() -> u16 {
@@ -41,7 +33,6 @@ fn default_rise_times() -> usize {
 pub struct SingleStreamConfig {
     /// 访问地址
     pub addr: SocketAddr,
-    
     /// 权重
     #[serde(default = "default_weight")]
     pub weight: u16,

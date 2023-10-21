@@ -5,7 +5,7 @@ use std::{
     sync::Arc,
 };
 
-use futures::{stream::SelectAll, future::select_all, FutureExt};
+use futures::{future::select_all, FutureExt};
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::{TcpListener, TcpStream},
@@ -15,7 +15,7 @@ use webparse::BinaryMut;
 
 use crate::{
     error::ProxyTypeResult, CenterClient, CenterServer, Flag, HealthCheck, ProxyError, ProxyHttp,
-    ProxyOption, ProxyResult, ProxySocks5, reverse::{ReverseServer, HttpConfig},
+    ProxyOption, ProxyResult, ProxySocks5, reverse::{HttpConfig},
 };
 
 pub struct Proxy {
@@ -67,17 +67,12 @@ impl Proxy {
     async fn deal_stream<T>(
         &mut self,
         inbound: T,
-        addr: SocketAddr,
+        _addr: SocketAddr,
         tls_client: Option<Arc<rustls::ClientConfig>>,
     ) -> ProxyResult<()>
     where
         T: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static,
     {
-        // 本地反向处理
-        if let Some(client) = &mut self.option.reverse {
-            return ReverseServer::process(inbound, addr, client).await
-        }
-
         // 转发到服务端
         if let Some(client) = &mut self.center_client {
             return client.deal_new_stream(inbound).await;
@@ -169,7 +164,7 @@ impl Proxy {
             }
         }
 
-        let (mut accept, mut tlss, mut listeners) = if let Some(http) = &mut self.option.http {
+        let (accept, tlss, mut listeners) = if let Some(http) = &mut self.option.http {
             http.bind().await?
         } else {
             (None, vec![], vec![])

@@ -4,7 +4,7 @@ use std::{
 };
 
 use tokio::{
-    io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
+    io::{AsyncRead, AsyncReadExt, AsyncWrite},
     sync::{
         mpsc::{channel, Sender, Receiver},
         Mutex, RwLock,

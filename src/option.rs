@@ -7,14 +7,14 @@ use std::{
 };
 
 use commander::Commander;
-use rustls::{Certificate, PrivateKey, server::ResolvesServerCertUsingSni};
-use wenmeng::FileServer;
+use rustls::{Certificate, PrivateKey};
+
 
 use serde::{Deserialize, Serialize};
 use tokio_rustls::{rustls, TlsAcceptor};
 
 use crate::{
-    reverse::{HttpConfig, ReverseOption},
+    reverse::{HttpConfig},
     Flag, MappingConfig, ProxyError, ProxyResult,
 };
 
@@ -259,10 +259,7 @@ pub struct ProxyOption {
     #[serde(default)]
     pub(crate) mappings: Vec<MappingConfig>,
 
-    /// 是否开启本地服务功能, 如文件服务器
-    #[serde(default)]
-    pub(crate) reverse: Option<ReverseOption>,
-
+    /// HTTP反向代理,静态文件服相关
     #[serde(default)]
     pub(crate) http: Option<HttpConfig>,
 }
@@ -293,7 +290,6 @@ impl Default for ProxyOption {
 
             mappings: vec![],
 
-            reverse: None,
             http: None,
         }
     }
@@ -369,10 +365,10 @@ impl ProxyOption {
             };
 
             // let mut option = serde_yaml::from_str::<ProxyOption>(&contents).unwrap();
-            println!("options = {:?}", option);
-            if let Some(reverse) = &mut option.reverse {
-                reverse.fix_default();
+            if let Some(http) = &mut option.http {
+                http.copy_to_child();
             }
+            println!("options = {:?}", option);
             return Ok(option);
         }
 

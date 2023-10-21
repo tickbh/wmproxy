@@ -6,7 +6,7 @@ use std::{
     sync::Arc,
 };
 
-use crate::{reverse::LocationConfig, ProxyResult};
+use crate::{ProxyResult};
 use rustls::{
     server::ResolvesServerCertUsingSni,
     sign::{self, CertifiedKey},
@@ -20,23 +20,32 @@ use tokio::{
 };
 use tokio_rustls::TlsAcceptor;
 use webparse::{Request, Response};
-use wenmeng::{FileServer, ProtError, ProtResult, RecvStream, Server};
+use wenmeng::{ProtError, ProtResult, RecvStream, Server};
 
-use super::ServerConfig;
-
-fn default_servers() -> Vec<ServerConfig> {
-    vec![]
-}
+use super::{ServerConfig, UpstreamConfig};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HttpConfig {
-    #[serde(default = "default_servers")]
+    #[serde(default = "Vec::new")]
     pub server: Vec<ServerConfig>,
+    #[serde(default = "Vec::new")]
+    pub upstream: Vec<UpstreamConfig>,
 }
 
 impl HttpConfig {
     pub fn new() -> Self {
-        HttpConfig { server: vec![] }
+        HttpConfig {
+            server: vec![],
+            upstream: vec![],
+        }
+    }
+    
+    /// 将配置参数提前共享给子级
+    pub fn copy_to_child(&mut self) {
+        for server in &mut self.server {
+            server.upstream.append(&mut self.upstream.clone());
+            server.copy_to_child();
+        }
     }
 
     fn load_certs(path: &Option<String>) -> io::Result<Vec<Certificate>> {
@@ -87,7 +96,8 @@ impl HttpConfig {
                     .map_err(|_| ProtError::Extension("unvaild key"))?;
                 let ck = CertifiedKey::new(Self::load_certs(&value.cert)?, key);
                 resolve.add(&value.server_name, ck).map_err(|e| {
-                    println!("{:?}", e); ProtError::Extension("key error")
+                    println!("{:?}", e);
+                    ProtError::Extension("key error")
                 })?;
                 is_ssl = true;
             }
@@ -100,7 +110,7 @@ impl HttpConfig {
             listeners.push(listener);
             tlss.push(is_ssl);
         }
-        
+
         let config = config
             .with_no_client_auth()
             .with_cert_resolver(Arc::new(resolve));
@@ -114,18 +124,23 @@ impl HttpConfig {
             return Err(ProtError::Extension("unknow data"));
         }
         let data = data.unwrap();
-        let mut value = data.lock().await;
+        let value = data.lock().await;
         let server_len = value.server.len();
         let host = req.get_host().unwrap_or(String::new());
         // 不管有没有匹配, 都执行最后一个
         for (index, s) in value.server.iter().enumerate() {
             if s.server_name == host || host.is_empty() || index == server_len - 1 {
                 let path = req.path().clone();
-                for (index, l) in s.location.iter().enumerate() {
-                    if l.is_match_rule(&path) {
-                        return LocationConfig::deal_request(&mut s.clone(), index, req).await;
+                for l in s.location.iter() {
+                    if l.is_match_rule(&path, req.method()) {
+                        return l.deal_request(req).await;
                     }
                 }
+                return Ok(Response::builder()
+                    .status(503)
+                    .body("unknow location to deal")
+                    .unwrap()
+                    .into_type());
             }
         }
         return Ok(Response::builder()
