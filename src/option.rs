@@ -15,7 +15,7 @@ use tokio_rustls::{rustls, TlsAcceptor};
 
 use crate::{
     reverse::{HttpConfig},
-    Flag, MappingConfig, ProxyError, ProxyResult, Proxy,
+    Flag, MappingConfig, ProxyError, ProxyResult,
 };
 
 use bitflags::bitflags;

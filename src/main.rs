@@ -3,6 +3,7 @@
 use wmproxy::{ConfigOption, ProxyResult, Proxy};
 
 async fn run_main() -> ProxyResult<()> {
+    env_logger::init();
     let option = ConfigOption::parse_env()?;
     let mut proxy = Proxy::new(option);
     proxy.start_serve().await?;

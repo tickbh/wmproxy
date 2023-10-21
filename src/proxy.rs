@@ -2,10 +2,11 @@ use std::{
     io::{self},
     net::{IpAddr, SocketAddr},
     process,
-    sync::Arc,
+    sync::Arc, pin::Pin,
 };
 
 use futures::{future::select_all, FutureExt};
+use futures_core::Future;
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::{TcpListener, TcpStream},
@@ -14,8 +15,7 @@ use tokio_rustls::{rustls, TlsAcceptor, TlsConnector};
 use webparse::BinaryMut;
 
 use crate::{
-    error::ProxyTypeResult, CenterClient, CenterServer, Flag, HealthCheck, ProxyError, ProxyHttp,
-    ProxyConfig, ProxyResult, ProxySocks5, reverse::{HttpConfig}, option::ConfigOption,
+    error::ProxyTypeResult, CenterClient, CenterServer, Flag, HealthCheck, ProxyError, ProxyHttp, ProxyResult, ProxySocks5, reverse::{HttpConfig}, option::ConfigOption,
 };
 
 pub struct Proxy {
@@ -85,13 +85,6 @@ impl Proxy {
                 return self.center_servers.last_mut().unwrap().serve(inbound).await;
             }
 
-            println!(
-                "server = {:?} tc = {:?} ts = {:?} tls_client = {:?}",
-                option.server,
-                option.tc,
-                option.ts,
-                tls_client.is_some()
-            );
             let flag = option.flag;
             let domain = option.domain.clone();
             if let Some(server) = option.server.clone() {
@@ -170,6 +163,16 @@ impl Proxy {
                 None
             }
         }
+        async fn multi_tcp_listen_work<'a>(listens: &'a mut Vec<TcpListener>) -> (io::Result<(TcpStream, SocketAddr)>, usize, Vec<Pin<Box<dyn Future<Output = io::Result<(TcpStream, SocketAddr)>> + Send + 'a>>>) {
+            if !listens.is_empty() {
+                select_all(listens.iter_mut()
+                        .map(|listener| listener.accept().boxed())).await
+            } else {
+                let pend = std::future::pending();
+                let () = pend.await;
+                unreachable!()
+            }
+        }
 
         let (accept, tlss, mut listeners) = if let Some(http) = &mut self.option.http {
             http.bind().await?
@@ -205,26 +208,23 @@ impl Proxy {
             };
         }
 
-        // // let pending = std::future::pending();
-        // // let fut: &mut dyn Future<Output = ()> = option_fut.as_mut().unwrap_or(&mut pending);
-        // let receiver = SelectAll::new();
         loop {
             tokio::select! {
                 Some((inbound, addr)) = tcp_listen_work(&center_listener) => {
+                    log::info!("代理收到客户端连接: {}->{}", addr, center_listener.as_ref().unwrap().local_addr()?);
                     if let Some(a) = proxy_accept.clone() {
                         let inbound = a.accept(inbound).await;
                         // 获取的流跟正常内容一样读写, 在内部实现了自动加解密
                         if let Ok(inbound) = inbound {
                             let _ = self.deal_stream(inbound, addr, client.clone()).await;
                         } else {
-                            println!("accept error = {:?}", inbound.err());
+                            log::warn!("accept client tls error, reason: {:?}", inbound.err());
                         }
                     } else {
                         let _ = self.deal_stream(inbound, addr, client.clone()).await;
                     };
                 }
                 Some((inbound, addr)) = tcp_listen_work(&http_listener) => {
-                    println!("tcp_listen_work =====");
                     self.server_new_http(inbound, addr).await?;
                 }
                 Some((inbound, addr)) = tcp_listen_work(&https_listener) => {
@@ -233,12 +233,8 @@ impl Proxy {
                 Some((inbound, addr)) = tcp_listen_work(&tcp_listener) => {
                     self.server_new_tcp(inbound, addr).await?;
                 }
-                (result, index, _) = select_all(
-                    listeners.iter_mut()
-                        .map(|listener| listener.accept().boxed()),
-                ) => {
+                (result, index, _) = multi_tcp_listen_work(&mut listeners) => {
                     let (conn, addr) = result.unwrap();
-                    println!("result = {:?} index = {:?}", conn, index);
                     if tlss[index] {
                         let tls_accept = accept.clone().unwrap();
                         let http = http.clone();
@@ -248,15 +244,13 @@ impl Proxy {
                             }
                         });
                     } else {
-                        // let _ = self.option.http.as_mut().unwrap().process(conn, addr).await;
                         let _ = HttpConfig::process(http.clone(), conn, addr).await;
                     }
                 }
             }
-            println!("aaaaaaaaaaaaaa");
+            log::trace!("now already has one tcp accept, loop repeat");
         }
 
-        Ok(())
     }
 
     async fn transfer_server<T>(
@@ -269,7 +263,6 @@ impl Proxy {
         T: AsyncRead + AsyncWrite + Unpin,
     {
         if tls_client.is_some() {
-            println!("connect by tls");
             let connector = TlsConnector::from(tls_client.unwrap());
             let stream = HealthCheck::connect(&server).await?;
             // 这里的域名只为认证设置
@@ -284,7 +277,6 @@ impl Proxy {
                 // TODO 返回对应协议的错误
             }
         } else {
-            println!("connect by normal");
             if let Ok(mut outbound) = HealthCheck::connect(&server).await {
                 let _ = tokio::io::copy_bidirectional(&mut inbound, &mut outbound).await?;
             } else {
@@ -318,8 +310,7 @@ impl Proxy {
                 Ok(()) => return Ok(()),
                 Err(ProxyError::Continue(buf)) => buf,
                 Err(err) => {
-                    // log::trace!("socks5 error {:?}", err);
-                    // println!("socks5 error {:?}", err);
+                    log::info!("socks5代理发生错误：{:?}", err);
                     return Err(err);
                 }
             };
@@ -336,7 +327,7 @@ impl Proxy {
                 return server.server_new_http(stream, addr).await;
             }
         }
-        println!("no any clinet!!!!!!!!!!!!!!");
+        log::warn!("未发现任何http服务器，但收到http的内网穿透，请检查配置");
         Ok(())
     }
 
@@ -351,7 +342,7 @@ impl Proxy {
                 return server.server_new_https(stream, addr, accept).await;
             }
         }
-        println!("no any clinet!!!!!!!!!!!!!!");
+        log::warn!("未发现任何https服务器，但收到https的内网穿透，请检查配置");
         Ok(())
     }
 
@@ -365,7 +356,7 @@ impl Proxy {
                 return server.server_new_tcp(stream).await;
             }
         }
-        println!("no any clinet!!!!!!!!!!!!!!");
+        log::warn!("未发现任何tcp服务器，但收到tcp的内网穿透，请检查配置");
         Ok(())
     }
 }
