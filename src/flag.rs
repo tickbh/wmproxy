@@ -2,7 +2,7 @@ use bitflags::bitflags;
 use serde::{Serialize, Deserialize};
 
 bitflags! {
-    #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Default)]
+    #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
     pub struct Flag: u8 {
         /// 使用HTTP代理类型
         const HTTP = 0x1;
@@ -17,6 +17,11 @@ bitflags! {
     }
 }
 
+impl Default for Flag {
+    fn default() -> Self {
+        Flag::HTTP | Flag::HTTPS | Flag::SOCKS5
+    }
+}
 
 impl Serialize for Flag {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>

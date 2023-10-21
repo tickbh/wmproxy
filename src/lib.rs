@@ -16,7 +16,7 @@ mod reverse;
 
 pub use error::{ProxyResult, ProxyError};
 pub use flag::Flag;
-pub use option::{ProxyOption, Builder};
+pub use option::{ProxyConfig, Builder, ConfigOption};
 pub use proxy::Proxy;
 pub use http::ProxyHttp;
 pub use socks5::ProxySocks5;

@@ -19,14 +19,14 @@ use webparse::Buf;
 use crate::{
     prot::{ProtClose, ProtFrame},
     trans::{TransHttp, TransTcp},
-    Helper, MappingConfig, ProtCreate, Proxy, ProxyOption, ProxyResult, VirtualStream,
+    Helper, MappingConfig, ProtCreate, Proxy, ProxyConfig, ProxyResult, VirtualStream,
 };
 
 /// 中心服务端
 /// 接受中心客户端的连接，并且将信息处理或者转发
 pub struct CenterServer {
     /// 代理的详情信息，如用户密码这类
-    option: ProxyOption,
+    option: ProxyConfig,
 
     /// 发送协议数据，接收到服务端的流数据，转发给相应的Stream
     sender: Sender<ProtFrame>,
@@ -44,7 +44,7 @@ pub struct CenterServer {
 }
 
 impl CenterServer {
-    pub fn new(option: ProxyOption) -> Self {
+    pub fn new(option: ProxyConfig) -> Self {
         let (sender, receiver) = channel::<ProtFrame>(100);
         let (sender_work, receiver_work) = channel::<(ProtCreate, Sender<ProtFrame>)>(10);
         Self {
@@ -78,7 +78,7 @@ impl CenterServer {
 
     pub async fn inner_serve<T>(
         stream: T,
-        option: ProxyOption,
+        option: ProxyConfig,
         sender: Sender<ProtFrame>,
         mut receiver: Receiver<ProtFrame>,
         mut receiver_work: Receiver<(ProtCreate, Sender<ProtFrame>)>,

@@ -1,28 +1,29 @@
-# 连接服务端地址
-server: 127.0.0.1:8091
-bind_addr: 0.0.0.0:8090
-# 连接服务端是否加密
-ts: true
-two_way_tls: true
-username: wmproxy
-password: wmproxy
+proxy:
+  # 连接服务端地址
+  server: 127.0.0.1:8091
+  bind_addr: 0.0.0.0:8090
+  # 连接服务端是否加密
+  ts: true
+  two_way_tls: true
+  username: wmproxy
+  password: wmproxy
 
-# 内网映射配置的数组
-mappings:
-  #将localhost的域名转发到本地的127.0.0.1:8080
-  - name: web
-    mode: http
-    local_addr: 127.0.0.1:8080
-    domain: localhost
-    headers:
-      - [proxy, +, x-forward-for, $client_ip]
-      - [proxy, +, from, $url]
-      - [+, key, value]
-      - [-, etag]
-      - [+, last-modified, aaaa]
+  # 内网映射配置的数组
+  mappings:
+    #将localhost的域名转发到本地的127.0.0.1:8080
+    - name: web
+      mode: http
+      local_addr: 127.0.0.1:8080
+      domain: localhost
+      headers:
+        - [proxy, +, x-forward-for, $client_ip]
+        - [proxy, +, from, $url]
+        - [+, key, value]
+        - [-, etag]
+        - [+, last-modified, aaaa]
 
-  #将tcp的流量无条件转到127.0.0.1:8080
-  - name: tcp
-    mode: tcp
-    local_addr: 127.0.0.1:8080
-    domain: 
+    #将tcp的流量无条件转到127.0.0.1:8080
+    - name: tcp
+      mode: tcp
+      local_addr: 127.0.0.1:8080
+      domain: 

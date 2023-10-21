@@ -1,4 +1,6 @@
+[proxy]
 bind_addr = "0.0.0.0:8090"
+flag = 7
 
 [http]
 aa = "b"

@@ -15,17 +15,17 @@ use webparse::BinaryMut;
 
 use crate::{
     error::ProxyTypeResult, CenterClient, CenterServer, Flag, HealthCheck, ProxyError, ProxyHttp,
-    ProxyOption, ProxyResult, ProxySocks5, reverse::{HttpConfig},
+    ProxyConfig, ProxyResult, ProxySocks5, reverse::{HttpConfig}, option::ConfigOption,
 };
 
 pub struct Proxy {
-    option: ProxyOption,
+    option: ConfigOption,
     center_client: Option<CenterClient>,
     center_servers: Vec<CenterServer>,
 }
 
 impl Proxy {
-    pub fn new(option: ProxyOption) -> Proxy {
+    pub fn new(option: ConfigOption) -> Proxy {
         Self {
             option,
             center_client: None,
@@ -77,36 +77,37 @@ impl Proxy {
         if let Some(client) = &mut self.center_client {
             return client.deal_new_stream(inbound).await;
         }
+        if let Some(option) = &mut self.option.proxy {
+            // 服务端开代理, 接收到客户端一律用协议处理
+            if option.center && option.is_server() {
+                let server = CenterServer::new(option.clone());
+                self.center_servers.push(server);
+                return self.center_servers.last_mut().unwrap().serve(inbound).await;
+            }
 
-        // 服务端开代理, 接收到客户端一律用协议处理
-        if self.option.center && self.option.is_server() {
-            let server = CenterServer::new(self.option.clone());
-            self.center_servers.push(server);
-            return self.center_servers.last_mut().unwrap().serve(inbound).await;
-        }
-
-        println!(
-            "server = {:?} tc = {:?} ts = {:?} tls_client = {:?}",
-            self.option.server,
-            self.option.tc,
-            self.option.ts,
-            tls_client.is_some()
-        );
-        let flag = self.option.flag;
-        let domain = self.option.domain.clone();
-        if let Some(server) = self.option.server.clone() {
-            tokio::spawn(async move {
-                // 转到上层服务器进行处理
-                let _e = Self::transfer_server(domain, tls_client, inbound, server).await;
-            });
-        } else {
-            let username = self.option.username.clone();
-            let password = self.option.password.clone();
-            let udp_bind = self.option.udp_bind.clone();
-            tokio::spawn(async move {
-                // tcp的连接被移动到该协程中，我们只要专注的处理该stream即可
-                let _ = Self::deal_proxy(inbound, flag, username, password, udp_bind).await;
-            });
+            println!(
+                "server = {:?} tc = {:?} ts = {:?} tls_client = {:?}",
+                option.server,
+                option.tc,
+                option.ts,
+                tls_client.is_some()
+            );
+            let flag = option.flag;
+            let domain = option.domain.clone();
+            if let Some(server) = option.server.clone() {
+                tokio::spawn(async move {
+                    // 转到上层服务器进行处理
+                    let _e = Self::transfer_server(domain, tls_client, inbound, server).await;
+                });
+            } else {
+                let username = option.username.clone();
+                let password = option.password.clone();
+                let udp_bind = option.udp_bind.clone();
+                tokio::spawn(async move {
+                    // tcp的连接被移动到该协程中，我们只要专注的处理该stream即可
+                    let _ = Self::deal_proxy(inbound, flag, username, password, udp_bind).await;
+                });
+            }
         }
 
         Ok(())
@@ -114,43 +115,49 @@ impl Proxy {
 
     pub async fn start_serve(&mut self) -> ProxyResult<()> {
         println!("start serve!!!!!!!!");
-        let addr = self.option.bind_addr.clone();
-        let accept = self.option.get_tls_accept().await.ok();
-        let client = self.option.get_tls_request().await.ok();
-        if self.option.center {
-            if let Some(server) = self.option.server.clone() {
-                let mut center_client = CenterClient::new(
-                    self.option.clone(),
-                    server,
-                    client.clone(),
-                    self.option.domain.clone(),
-                    self.option.mappings.clone(),
-                );
-                match center_client.connect().await {
-                    Ok(true) => (),
-                    Ok(false) => {
-                        println!("未能正确连上服务端:{:?}", self.option.server.unwrap());
-                        process::exit(1);
+        
+        let mut proxy_accept = None;
+        let mut client = None;
+        let mut center_listener = None;
+        if let Some(option) = &mut self.option.proxy {
+            let addr = option.bind_addr.clone();
+            proxy_accept = option.get_tls_accept().await.ok();
+            client = option.get_tls_request().await.ok();
+            if option.center {
+                if let Some(server) = option.server.clone() {
+                    let mut center_client = CenterClient::new(
+                        option.clone(),
+                        server,
+                        client.clone(),
+                        option.domain.clone(),
+                        option.mappings.clone(),
+                    );
+                    match center_client.connect().await {
+                        Ok(true) => (),
+                        Ok(false) => {
+                            println!("未能正确连上服务端:{:?}", option.server.unwrap());
+                            process::exit(1);
+                        }
+                        Err(err) => {
+                            println!(
+                                "未能正确连上服务端:{:?}, 发生错误:{:?}",
+                                option.server.unwrap(),
+                                err
+                            );
+                            process::exit(1);
+                        }
                     }
-                    Err(err) => {
-                        println!(
-                            "未能正确连上服务端:{:?}, 发生错误:{:?}",
-                            self.option.server.unwrap(),
-                            err
-                        );
-                        process::exit(1);
-                    }
+                    let _ = center_client.serve().await;
+                    self.center_client = Some(center_client);
                 }
-                let _ = center_client.serve().await;
-                self.center_client = Some(center_client);
             }
+            center_listener = Some(TcpListener::bind(addr).await?);
+            println!(
+                "accept = {:?} client = {:?}",
+                proxy_accept.is_some(),
+                client.is_some()
+            );
         }
-        let center_listener = TcpListener::bind(addr).await?;
-        println!(
-            "accept = {:?} client = {:?}",
-            accept.is_some(),
-            client.is_some()
-        );
         async fn tcp_listen_work(listen: &Option<TcpListener>) -> Option<(TcpStream, SocketAddr)> {
             if listen.is_some() {
                 match listen.as_ref().unwrap().accept().await {
@@ -172,41 +179,39 @@ impl Proxy {
 
         let http = Arc::new(self.option.http.take().unwrap_or(HttpConfig::new()));
 
-        let http_listener = if let Some(ls) = &self.option.map_http_bind {
-            Some(TcpListener::bind(ls).await?)
-        } else {
-            None
-        };
-        let mut https_listener = if let Some(ls) = &self.option.map_https_bind {
-            Some(TcpListener::bind(ls).await?)
-        } else {
-            None
-        };
+        let mut http_listener = None;
+        let mut https_listener = None;
+        let mut tcp_listener = None;
+        let mut map_accept = None;
+        if let Some(option) = &mut self.option.proxy { 
+            
+            if let Some(ls) = &option.map_http_bind {
+                http_listener = Some(TcpListener::bind(ls).await?);
+            };
+            if let Some(ls) = &option.map_https_bind {
+                https_listener = Some(TcpListener::bind(ls).await?);
+            };
 
-        let map_accept = if https_listener.is_some() {
-            let map_accept = self.option.get_map_tls_accept().await.ok();
-            if map_accept.is_none() {
-                let _ = https_listener.take();
-            }
-            map_accept
-        } else {
-            None
-        };
+            if https_listener.is_some() {
+                let accept = option.get_map_tls_accept().await.ok();
+                if accept.is_none() {
+                    let _ = https_listener.take();
+                }
+                map_accept = accept;
+            };
 
-        let tcp_listener = if let Some(ls) = &self.option.map_tcp_bind {
-            Some(TcpListener::bind(ls).await?)
-        } else {
-            None
-        };
+            if let Some(ls) = &option.map_tcp_bind {
+                tcp_listener = Some(TcpListener::bind(ls).await?);
+            };
+        }
 
         // // let pending = std::future::pending();
         // // let fut: &mut dyn Future<Output = ()> = option_fut.as_mut().unwrap_or(&mut pending);
         // let receiver = SelectAll::new();
         loop {
             tokio::select! {
-                v = center_listener.accept() => {
-                    let (inbound, addr) = v?;
-                    if let Some(a) = accept.clone() {
+                Some((inbound, addr)) = tcp_listen_work(&center_listener) => {
+                    if let Some(a) = proxy_accept.clone() {
                         let inbound = a.accept(inbound).await;
                         // 获取的流跟正常内容一样读写, 在内部实现了自动加解密
                         if let Ok(inbound) = inbound {

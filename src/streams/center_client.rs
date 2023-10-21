@@ -13,14 +13,14 @@ use tokio_rustls::{client::TlsStream, TlsConnector};
 use webparse::{BinaryMut, Buf};
 
 use crate::{
-    HealthCheck, Helper, MappingConfig, ProtClose, ProtCreate, ProtFrame, ProxyOption, ProxyResult,
+    HealthCheck, Helper, MappingConfig, ProtClose, ProtCreate, ProtFrame, ProxyConfig, ProxyResult,
     TransStream,
 };
 
 /// 中心客户端
 /// 负责与服务端建立连接，断开后自动再重连
 pub struct CenterClient {
-    option: ProxyOption,
+    option: ProxyConfig,
     /// tls的客户端连接信息
     tls_client: Option<Arc<rustls::ClientConfig>>,
     /// tls的客户端连接域名
@@ -50,7 +50,7 @@ pub struct CenterClient {
 
 impl CenterClient {
     pub fn new(
-        option: ProxyOption,
+        option: ProxyConfig,
         server_addr: SocketAddr,
         tls_client: Option<Arc<rustls::ClientConfig>>,
         domain: Option<String>,
@@ -111,7 +111,7 @@ impl CenterClient {
     }
 
     async fn inner_serve<T>(
-        option: &ProxyOption,
+        option: &ProxyConfig,
         stream: T,
         sender: &mut Sender<ProtFrame>,
         receiver_work: &mut Receiver<(ProtCreate, Sender<ProtFrame>)>,

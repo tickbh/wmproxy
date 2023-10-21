@@ -15,7 +15,7 @@ use tokio_rustls::{rustls, TlsAcceptor};
 
 use crate::{
     reverse::{HttpConfig},
-    Flag, MappingConfig, ProxyError, ProxyResult,
+    Flag, MappingConfig, ProxyError, ProxyResult, Proxy,
 };
 
 use bitflags::bitflags;
@@ -68,14 +68,14 @@ impl<'a> Deserialize<'a> for Mode {
 }
 
 pub struct Builder {
-    inner: ProxyResult<ProxyOption>,
+    inner: ProxyResult<ProxyConfig>,
 }
 
 impl Builder {
     #[inline]
     pub fn new() -> Builder {
         Builder {
-            inner: Ok(ProxyOption::default()),
+            inner: Ok(ProxyConfig::default()),
         }
     }
 
@@ -200,7 +200,7 @@ impl Builder {
 
     fn and_then<F>(self, func: F) -> Self
     where
-        F: FnOnce(ProxyOption) -> ProxyResult<ProxyOption>,
+        F: FnOnce(ProxyConfig) -> ProxyResult<ProxyConfig>,
     {
         Builder {
             inner: self.inner.and_then(func),
@@ -218,7 +218,7 @@ fn default_bool_true() -> bool {
 
 /// 代理类, 一个代理类启动一种类型的代理
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ProxyOption {
+pub struct ProxyConfig {
     #[serde(default = "default_bind_addr")]
     pub(crate) bind_addr: SocketAddr,
     #[serde(default)]
@@ -258,16 +258,24 @@ pub struct ProxyOption {
     pub(crate) key: Option<String>,
     #[serde(default)]
     pub(crate) mappings: Vec<MappingConfig>,
+}
 
+
+/// 代理类, 一个代理类启动一种类型的代理
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConfigOption {
+    /// HTTP反向代理,静态文件服相关
+    #[serde(default)]
+    pub(crate) proxy: Option<ProxyConfig>,
     /// HTTP反向代理,静态文件服相关
     #[serde(default)]
     pub(crate) http: Option<HttpConfig>,
 }
 
-impl Default for ProxyOption {
+impl Default for ProxyConfig {
     fn default() -> Self {
         Self {
-            flag: Flag::HTTP | Flag::HTTPS,
+            flag: Flag::HTTP | Flag::HTTPS | Flag::SOCKS5,
             mode: "client".to_string(),
             bind_addr: default_bind_addr(),
             server: None,
@@ -289,121 +297,15 @@ impl Default for ProxyOption {
             key: None,
 
             mappings: vec![],
-
-            http: None,
         }
     }
 }
 
-impl ProxyOption {
+impl ProxyConfig {
     pub fn builder() -> Builder {
         Builder::new()
     }
 
-    pub fn parse_env() -> ProxyResult<ProxyOption> {
-        let command = Commander::new()
-            .version(&env!("CARGO_PKG_VERSION").to_string())
-            .usage("-b 127.0.0.1:8090")
-            .usage_desc("wmproxy -b 127.0.0.1:8090")
-            .option_list(
-                "-f, --flag [value]",
-                "可兼容的方法, 如http https socks5",
-                None,
-            )
-            .option_str(
-                "-m, --mode value",
-                "client.表示客户端,server 表示服务端,all表示服务端及客户端",
-                None,
-            )
-            .option_str("-c, --config", "配置文件", None)
-            .option_str("--http value", "内网穿透的http代理监听地址", None)
-            .option_str("--https value", "内网穿透的https代理监听地址", None)
-            .option_str("--tcp value", "内网穿透的tcp代理监听地址", None)
-            // .option("--proxy value", "是否只接收来自代理的连接", Some(false))
-            .option("--center value", "是否启用协议转发", Some(false))
-            .option("--tc value", "接收客户端是否加密", Some(false))
-            .option("--ts value", "连接服务端是否加密", Some(false))
-            .option_str("--cert value", "证书的公钥", None)
-            .option_str("--key value", "证书的私钥", None)
-            .option_str("--domain value", "证书的域名", None)
-            .option_str(
-                "-b, --bind value",
-                "监听地址及端口",
-                Some("127.0.0.1:8090".to_string()),
-            )
-            .option_str("--user value", "auth的用户名", None)
-            .option_str("-S value", "父级的监听端口地址,如127.0.0.1:8091", None)
-            .option_str("--pass value", "auth的密码", None)
-            .option_str(
-                "--udp value",
-                "udp的监听地址,如127.0.0.1,socks5的udp协议用",
-                None,
-            )
-            .parse_env_or_exit();
-
-        if let Some(config) = command.get_str("c") {
-            let path = PathBuf::from(&config);
-            let mut file = File::open(config)?;
-            let mut contents = String::new();
-            file.read_to_string(&mut contents)?;
-            let extension = path.extension().unwrap().to_string_lossy().to_string();
-            let mut option = match &*extension {
-                "yaml" => serde_yaml::from_str::<ProxyOption>(&contents)
-                    .map_err(|e| {
-                        println!("parse error msg = {:?}", e);
-                        io::Error::new(io::ErrorKind::Other, "parse yaml error")
-                    })?,
-                "toml" => toml::from_str::<ProxyOption>(&contents)
-                    .map_err(|e| {
-                        println!("parse error msg = {:?}", e);
-                        io::Error::new(io::ErrorKind::Other, "parse toml error")
-                    })?,
-                _ => {
-                    let e = io::Error::new(io::ErrorKind::Other, "unknow format error");
-                    return Err(e.into());
-                }
-            };
-
-            // let mut option = serde_yaml::from_str::<ProxyOption>(&contents).unwrap();
-            if let Some(http) = &mut option.http {
-                http.copy_to_child();
-            }
-            println!("options = {:?}", option);
-            return Ok(option);
-        }
-
-        let listen_host = command.get_str("b").unwrap();
-        let addr = listen_host.parse().unwrap();
-        let mut builder = Self::builder().bind_addr(addr);
-
-        builder = builder.flag(Flag::HTTP | Flag::HTTPS | Flag::SOCKS5);
-        builder = builder.mode(command.get_str("m").unwrap_or(String::new()));
-        builder = builder.username(command.get_str("user"));
-        builder = builder.password(command.get_str("pass"));
-        builder = builder.tc(command.get("tc").unwrap_or(false));
-        builder = builder.ts(command.get("ts").unwrap_or(false));
-        builder = builder.center(command.get("center").unwrap_or(false));
-        builder = builder.domain(command.get_str("domain"));
-        builder = builder.cert(command.get_str("cert"));
-        builder = builder.key(command.get_str("key"));
-        if let Some(udp) = command.get_str("udp") {
-            builder = builder.udp_bind(udp.parse::<IpAddr>().ok());
-        };
-        if let Some(http) = command.get_str("http") {
-            builder = builder.map_http_bind(http.parse::<SocketAddr>().ok());
-        };
-        if let Some(https) = command.get_str("https") {
-            builder = builder.map_https_bind(https.parse::<SocketAddr>().ok());
-        };
-        if let Some(tcp) = command.get_str("tcp") {
-            builder = builder.map_tcp_bind(tcp.parse::<SocketAddr>().ok());
-        };
-        if let Some(s) = command.get_str("S") {
-            builder = builder.server(s.parse::<SocketAddr>().ok());
-        };
-
-        builder.inner
-    }
 
     fn load_certs(path: &Option<String>) -> io::Result<Vec<Certificate>> {
         if let Some(path) = path {
@@ -624,5 +526,115 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
 
     pub fn is_server(&self) -> bool {
         self.mode.eq_ignore_ascii_case("server")
+    }
+}
+
+impl ConfigOption {
+    pub fn parse_env() -> ProxyResult<ConfigOption> {
+        let command = Commander::new()
+            .version(&env!("CARGO_PKG_VERSION").to_string())
+            .usage("-b 127.0.0.1:8090")
+            .usage_desc("wmproxy -b 127.0.0.1:8090")
+            .option_list(
+                "-f, --flag [value]",
+                "可兼容的方法, 如http https socks5",
+                None,
+            )
+            .option_str(
+                "-m, --mode value",
+                "client.表示客户端,server 表示服务端,all表示服务端及客户端",
+                None,
+            )
+            .option_str("-c, --config", "配置文件", None)
+            .option_str("--http value", "内网穿透的http代理监听地址", None)
+            .option_str("--https value", "内网穿透的https代理监听地址", None)
+            .option_str("--tcp value", "内网穿透的tcp代理监听地址", None)
+            // .option("--proxy value", "是否只接收来自代理的连接", Some(false))
+            .option("--center value", "是否启用协议转发", Some(false))
+            .option("--tc value", "接收客户端是否加密", Some(false))
+            .option("--ts value", "连接服务端是否加密", Some(false))
+            .option_str("--cert value", "证书的公钥", None)
+            .option_str("--key value", "证书的私钥", None)
+            .option_str("--domain value", "证书的域名", None)
+            .option_str(
+                "-b, --bind value",
+                "监听地址及端口",
+                Some("127.0.0.1:8090".to_string()),
+            )
+            .option_str("--user value", "auth的用户名", None)
+            .option_str("-S value", "父级的监听端口地址,如127.0.0.1:8091", None)
+            .option_str("--pass value", "auth的密码", None)
+            .option_str(
+                "--udp value",
+                "udp的监听地址,如127.0.0.1,socks5的udp协议用",
+                None,
+            )
+            .parse_env_or_exit();
+
+        if let Some(config) = command.get_str("c") {
+            let path = PathBuf::from(&config);
+            let mut file = File::open(config)?;
+            let mut contents = String::new();
+            file.read_to_string(&mut contents)?;
+            let extension = path.extension().unwrap().to_string_lossy().to_string();
+            let mut option = match &*extension {
+                "yaml" => serde_yaml::from_str::<ConfigOption>(&contents)
+                    .map_err(|e| {
+                        println!("parse error msg = {:?}", e);
+                        io::Error::new(io::ErrorKind::Other, "parse yaml error")
+                    })?,
+                "toml" => toml::from_str::<ConfigOption>(&contents)
+                    .map_err(|e| {
+                        println!("parse error msg = {:?}", e);
+                        io::Error::new(io::ErrorKind::Other, "parse toml error")
+                    })?,
+                _ => {
+                    let e = io::Error::new(io::ErrorKind::Other, "unknow format error");
+                    return Err(e.into());
+                }
+            };
+
+            // let mut option = serde_yaml::from_str::<ProxyOption>(&contents).unwrap();
+            if let Some(http) = &mut option.http {
+                http.copy_to_child();
+            }
+            println!("options = {:?}", option);
+            return Ok(option);
+        }
+
+        let listen_host = command.get_str("b").unwrap();
+        let addr = listen_host.parse().unwrap();
+        let mut builder = ProxyConfig::builder().bind_addr(addr);
+
+        builder = builder.flag(Flag::HTTP | Flag::HTTPS | Flag::SOCKS5);
+        builder = builder.mode(command.get_str("m").unwrap_or(String::new()));
+        builder = builder.username(command.get_str("user"));
+        builder = builder.password(command.get_str("pass"));
+        builder = builder.tc(command.get("tc").unwrap_or(false));
+        builder = builder.ts(command.get("ts").unwrap_or(false));
+        builder = builder.center(command.get("center").unwrap_or(false));
+        builder = builder.domain(command.get_str("domain"));
+        builder = builder.cert(command.get_str("cert"));
+        builder = builder.key(command.get_str("key"));
+        if let Some(udp) = command.get_str("udp") {
+            builder = builder.udp_bind(udp.parse::<IpAddr>().ok());
+        };
+        if let Some(http) = command.get_str("http") {
+            builder = builder.map_http_bind(http.parse::<SocketAddr>().ok());
+        };
+        if let Some(https) = command.get_str("https") {
+            builder = builder.map_https_bind(https.parse::<SocketAddr>().ok());
+        };
+        if let Some(tcp) = command.get_str("tcp") {
+            builder = builder.map_tcp_bind(tcp.parse::<SocketAddr>().ok());
+        };
+        if let Some(s) = command.get_str("S") {
+            builder = builder.server(s.parse::<SocketAddr>().ok());
+        };
+
+        Ok(ConfigOption {
+            proxy: Some(builder.inner?),
+            http: None,
+        })
     }
 }
