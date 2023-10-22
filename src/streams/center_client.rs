@@ -135,7 +135,6 @@ impl CenterClient {
             .encode(&mut write_buf)?;
         }
         if mappings.len() > 0 {
-            println!("encode mapping = {:?}", mappings);
             ProtFrame::new_mapping(0, mappings.clone()).encode(&mut write_buf)?;
         }
         loop {
@@ -181,7 +180,7 @@ impl CenterClient {
                             }
                         }
                         Err(e) => {
-                            println!("center_client errrrr = {:?}", e);
+                            log::info!("写入的时候发生错误，错误内容为:{:?}", e);
                         },
                     }
                 }
@@ -203,6 +202,7 @@ impl CenterClient {
                                     }
                                 }
                                 if local_addr.is_none() {
+                                    log::info!("本地地址为空，无法做内网映射");
                                     log::warn!("local addr is none, can't mapping");
                                     continue;
                                 }
@@ -212,22 +212,22 @@ impl CenterClient {
                                 let domain = local_addr.unwrap();
                                 let sock_map = p.sock_map();
                                 let sender = sender.clone();
-                                println!("receiver sock_map {}, domain = {}", sock_map, domain);
                                 // let (flag, username, password, udp_bind) = (option.flag, option.username.clone(), option.password.clone(), option.udp_bind.clone());
                                 tokio::spawn(async move {
-                                    let stream = HealthCheck::connect(&domain).await;
-                                    println!("connect server {:?}", stream);
-                                    if let Ok(tcp) = stream {
-                                        let trans = TransStream::new(
-                                            tcp,
-                                            sock_map,
-                                            sender,
-                                            virtual_receiver,
-                                        );
-                                        let _ = trans.copy_wait().await;
-                                        // let _ = copy_bidirectional(&mut tcp, &mut stream).await;
-                                    } else {
-                                        let _ = sender.send(ProtFrame::new_close(sock_map)).await;
+                                    match HealthCheck::connect(&domain).await {
+                                        Ok(tcp) => {
+                                            let trans = TransStream::new(
+                                                tcp,
+                                                sock_map,
+                                                sender,
+                                                virtual_receiver,
+                                            );
+                                            let _ = trans.copy_wait().await;
+                                        }
+                                        Err(e) => {
+                                            log::trace!("连接地址:{}，发生错误：{:?}", domain, e);
+                                            let _ = sender.send(ProtFrame::new_close(sock_map)).await;
+                                        }
                                     }
                                 });
                             }
@@ -238,7 +238,7 @@ impl CenterClient {
                             }
                             ProtFrame::Close(p) => {
                                 if p.sock_map() == 0 {
-                                    println!("close client by server, reason:{}", p.reason())
+                                    log::warn!("客户端被服务端关闭:{}", p.reason());
                                 } else if let Some(sender) = map.get(&p.sock_map()) {
                                     let _ = sender.try_send(ProtFrame::Close(p));
                                 }

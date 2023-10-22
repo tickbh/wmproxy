@@ -44,7 +44,7 @@ impl TransTcp {
                 }
             }
             if !is_find {
-                log::warn!("not found tcp client trans");
+                log::warn!("未找到正确的tcp商户端映射");
                 return Ok(());
             }
         }

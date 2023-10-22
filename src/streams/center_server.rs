@@ -87,7 +87,6 @@ impl CenterServer {
     where
         T: AsyncRead + AsyncWrite + Unpin,
     {
-        println!("center_server {:?}", "aaaa");
         let mut map = HashMap::<u32, Sender<ProtFrame>>::new();
         let mut read_buf = BinaryMut::new();
         let mut write_buf = BinaryMut::new();
@@ -132,7 +131,6 @@ impl CenterServer {
                 }
                 // 一旦有写数据，则尝试写入数据，写入成功后扣除相应的数据
                 r = writer.write(write_buf.chunk()), if write_buf.has_remaining() => {
-                    println!("write = {:?}", r);
                     match r {
                         Ok(n) => {
                             write_buf.advance(n);
@@ -232,7 +230,7 @@ impl CenterServer {
         T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     {
         if self.receiver.is_none() || self.receiver_work.is_none() {
-            println!("receiver is none");
+            log::warn!("接收器为空，请检查是否出错");
             return Ok(());
         }
         let option = self.option.clone();
@@ -252,7 +250,6 @@ impl CenterServer {
         stream: TcpStream,
         addr: SocketAddr,
     ) -> ProxyResult<()> {
-        println!("server_new_http!!!!!!!!!!!! =====");
         let trans = TransHttp::new(
             self.sender(),
             self.sender_work(),

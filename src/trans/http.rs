@@ -50,82 +50,6 @@ impl TransHttp {
         }
     }
 
-    // pub async fn process<T>(self, mut inbound: T) -> Result<(), ProxyError<T>>
-    // where
-    //     T: AsyncRead + AsyncWrite + Unpin,
-    // {
-    //     let mut request;
-    //     let host_name;
-    //     let mut buffer = BinaryMut::new();
-    //     loop {
-    //         let size = {
-    //             let mut buf = ReadBuf::uninit(buffer.chunk_mut());
-    //             inbound.read_buf(&mut buf).await?;
-    //             buf.filled().len()
-    //         };
-
-    //         if size == 0 {
-    //             return Err(ProxyError::Extension("empty"));
-    //         }
-    //         unsafe {
-    //             buffer.advance_mut(size);
-    //         }
-    //         request = webparse::Request::new();
-    //         // 通过该方法解析标头是否合法, 若是partial(部分)则继续读数据
-    //         // 若解析失败, 则表示非http协议能处理, 则抛出错误
-    //         // 此处clone为浅拷贝，不确定是否一定能解析成功，不能影响偏移
-    //         match request.parse_buffer(&mut buffer.clone()) {
-    //             Ok(_) => match request.get_host() {
-    //                 Some(host) => {
-    //                     host_name = host;
-    //                     break;
-    //                 }
-    //                 None => {
-    //                     if !request.is_partial() {
-    //                         Self::err_server_status(inbound, 503).await?;
-    //                         return Err(ProxyError::UnknownHost);
-    //                     }
-    //                 }
-    //             },
-    //             // 数据不完整，还未解析完，等待传输
-    //             Err(WebError::Http(HttpError::Partial)) => {
-    //                 continue;
-    //             }
-    //             Err(e) => {
-    //                 Self::not_match_err_status(inbound, "not found".to_string()).await?;
-    //                 return Err(ProxyError::from(e));
-    //             }
-    //         }
-    //     }
-
-    //     // 取得相关的host数据，对内网的映射端做匹配，如果未匹配到返回错误，表示不支持
-    //     {
-    //         let mut is_find = false;
-    //         let read = self.mappings.read().await;
-    //         for v in &*read {
-    //             if v.domain == host_name {
-    //                 is_find = true;
-    //             }
-    //         }
-    //         if !is_find {
-    //             Self::not_match_err_status(inbound, "no found".to_string()).await?;
-    //             return Ok(());
-    //         }
-    //     }
-
-    //     // 有新的内网映射消息到达，通知客户端建立对内网指向的连接进行双向绑定，后续做正规的http服务以支持拓展
-    //     let create = ProtCreate::new(self.sock_map, Some(host_name));
-    //     let (stream_sender, stream_receiver) = channel::<ProtFrame>(10);
-    //     let _ = self.sender_work.send((create, stream_sender)).await;
-
-    //     let mut trans = TransStream::new(inbound, self.sock_map, self.sender, stream_receiver);
-    //     trans.reader_mut().put_slice(buffer.chunk());
-    //     trans.copy_wait().await?;
-    //     // let _ = copy_bidirectional(&mut inbound, &mut outbound).await?;
-    //     Ok(())
-    // }
-
-    //, client: &mut Client<VirtualStream>
     async fn operate(
         req: Request<RecvStream>
     ) -> ProtResult<Response<RecvStream>> {
@@ -148,7 +72,6 @@ impl TransHttp {
         // 传在该参数则为第一次, 第一次的时候发送Create创建绑定连接
         if sender.is_some() {
             let host_name = req.get_host().unwrap_or(String::new());
-            println!("host_name = {:?}", host_name);
             // 取得相关的host数据，对内网的映射端做匹配，如果未匹配到返回错误，表示不支持
             {
                 let mut config = None;
@@ -167,8 +90,6 @@ impl TransHttp {
                 }
                 value.http_map = config;
             }
-
-            println!("do create prot {}, host = {:?}", value.sock_map, req.get_host());
 
             let create = ProtCreate::new(value.sock_map, Some(req.get_host().unwrap_or(String::new())));
             let _ = value.sender_work.send((create, sender.unwrap())).await;
@@ -198,7 +119,7 @@ impl TransHttp {
     where
         T: AsyncRead + AsyncWrite + Unpin + Debug,
     {
-        println!("new process {:?}", inbound);
+        log::trace!("内网穿透处理HTTP {:?}", addr);
         let build = Client::builder();
         let (virtual_sender, virtual_receiver) = channel::<ProtFrame>(10);
         let stream = VirtualStream::new(self.sock_map, self.sender.clone(), virtual_receiver);
@@ -217,10 +138,9 @@ impl TransHttp {
         tokio::spawn( async move {
             let _ = client.wait_operate().await;
         });
-        let _ret = server.incoming(Self::operate).await;
-        if _ret.is_err() {
-            println!("ret = {:?}", _ret);
-        }
+        if let Err(e) = server.incoming(Self::operate).await {
+            log::info!("处理内网穿透时发生错误：{:?}", e);
+        };
         Ok(())
     }
 }

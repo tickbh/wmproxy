@@ -2,8 +2,6 @@ use webparse::{BinaryMut, Buf, http2::frame::read_u24};
 
 use crate::{ProxyResult, prot::{ProtFrame, ProtFrameHeader}};
 
-
-
 pub struct Helper;
 
 impl Helper {
