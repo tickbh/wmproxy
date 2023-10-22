@@ -2,11 +2,11 @@ use std::{
     io::{self},
     net::{IpAddr, SocketAddr},
     process,
-    sync::Arc, pin::Pin,
+    sync::Arc,
 };
 
 use futures::{future::select_all, FutureExt};
-use futures_core::Future;
+
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::{TcpListener, TcpStream},
@@ -15,7 +15,8 @@ use tokio_rustls::{rustls, TlsAcceptor, TlsConnector};
 use webparse::BinaryMut;
 
 use crate::{
-    error::ProxyTypeResult, CenterClient, CenterServer, Flag, HealthCheck, ProxyError, ProxyHttp, ProxyResult, ProxySocks5, reverse::{HttpConfig}, option::ConfigOption,
+    error::ProxyTypeResult, option::ConfigOption, reverse::HttpConfig, CenterClient, CenterServer,
+    Flag, HealthCheck, ProxyError, ProxyHttp, ProxyResult, ProxySocks5,
 };
 
 pub struct Proxy {
@@ -63,7 +64,6 @@ impl Proxy {
         }
     }
 
-
     async fn deal_stream<T>(
         &mut self,
         inbound: T,
@@ -107,8 +107,7 @@ impl Proxy {
     }
 
     pub async fn start_serve(&mut self) -> ProxyResult<()> {
-        println!("start serve!!!!!!!!");
-        
+        log::trace!("开始启动服务器，正在加载配置中");
         let mut proxy_accept = None;
         let mut client = None;
         let mut center_listener = None;
@@ -128,11 +127,11 @@ impl Proxy {
                     match center_client.connect().await {
                         Ok(true) => (),
                         Ok(false) => {
-                            println!("未能正确连上服务端:{:?}", option.server.unwrap());
+                            log::error!("未能正确连上服务端:{:?}", option.server.unwrap());
                             process::exit(1);
                         }
                         Err(err) => {
-                            println!(
+                            log::error!(
                                 "未能正确连上服务端:{:?}, 发生错误:{:?}",
                                 option.server.unwrap(),
                                 err
@@ -145,11 +144,6 @@ impl Proxy {
                 }
             }
             center_listener = Some(TcpListener::bind(addr).await?);
-            println!(
-                "accept = {:?} client = {:?}",
-                proxy_accept.is_some(),
-                client.is_some()
-            );
         }
         async fn tcp_listen_work(listen: &Option<TcpListener>) -> Option<(TcpStream, SocketAddr)> {
             if listen.is_some() {
@@ -163,10 +157,14 @@ impl Proxy {
                 None
             }
         }
-        async fn multi_tcp_listen_work<'a>(listens: &'a mut Vec<TcpListener>) -> (io::Result<(TcpStream, SocketAddr)>, usize, Vec<Pin<Box<dyn Future<Output = io::Result<(TcpStream, SocketAddr)>> + Send + 'a>>>) {
+
+        async fn multi_tcp_listen_work(
+            listens: &mut Vec<TcpListener>,
+        ) -> (io::Result<(TcpStream, SocketAddr)>, usize) {
             if !listens.is_empty() {
-                select_all(listens.iter_mut()
-                        .map(|listener| listener.accept().boxed())).await
+                let (conn, index, _) =
+                    select_all(listens.iter_mut().map(|listener| listener.accept().boxed())).await;
+                (conn, index)
             } else {
                 let pend = std::future::pending();
                 let () = pend.await;
@@ -186,8 +184,7 @@ impl Proxy {
         let mut https_listener = None;
         let mut tcp_listener = None;
         let mut map_accept = None;
-        if let Some(option) = &mut self.option.proxy { 
-            
+        if let Some(option) = &mut self.option.proxy {
             if let Some(ls) = &option.map_http_bind {
                 http_listener = Some(TcpListener::bind(ls).await?);
             };
@@ -211,46 +208,53 @@ impl Proxy {
         loop {
             tokio::select! {
                 Some((inbound, addr)) = tcp_listen_work(&center_listener) => {
-                    log::info!("代理收到客户端连接: {}->{}", addr, center_listener.as_ref().unwrap().local_addr()?);
+                    log::trace!("代理收到客户端连接: {}->{}", addr, center_listener.as_ref().unwrap().local_addr()?);
                     if let Some(a) = proxy_accept.clone() {
                         let inbound = a.accept(inbound).await;
                         // 获取的流跟正常内容一样读写, 在内部实现了自动加解密
-                        if let Ok(inbound) = inbound {
-                            let _ = self.deal_stream(inbound, addr, client.clone()).await;
-                        } else {
-                            log::warn!("accept client tls error, reason: {:?}", inbound.err());
+                        match inbound {
+                            Ok(inbound) => {
+                                let _ = self.deal_stream(inbound, addr, client.clone()).await;
+                            }
+                            Err(e) => {
+                                log::warn!("接收来自下级代理的连接失败, 原因为: {:?}", e);
+                            }
                         }
                     } else {
                         let _ = self.deal_stream(inbound, addr, client.clone()).await;
                     };
                 }
                 Some((inbound, addr)) = tcp_listen_work(&http_listener) => {
+                    log::trace!("内网穿透:Http收到客户端连接: {}->{}", addr, http_listener.as_ref().unwrap().local_addr()?);
                     self.server_new_http(inbound, addr).await?;
                 }
                 Some((inbound, addr)) = tcp_listen_work(&https_listener) => {
+                    log::trace!("内网穿透:Https收到客户端连接: {}->{}", addr, https_listener.as_ref().unwrap().local_addr()?);
                     self.server_new_https(inbound, addr, map_accept.clone().unwrap()).await?;
                 }
                 Some((inbound, addr)) = tcp_listen_work(&tcp_listener) => {
+                    log::trace!("内网穿透:Tcp收到客户端连接: {}->{}", addr, tcp_listener.as_ref().unwrap().local_addr()?);
                     self.server_new_tcp(inbound, addr).await?;
                 }
-                (result, index, _) = multi_tcp_listen_work(&mut listeners) => {
-                    let (conn, addr) = result.unwrap();
-                    if tlss[index] {
-                        let tls_accept = accept.clone().unwrap();
-                        let http = http.clone();
-                        tokio::spawn(async move {
-                            if let Ok(stream) = tls_accept.accept(conn).await {
-                                let _ = HttpConfig::process(http, stream, addr).await;
-                            }
-                        });
-                    } else {
-                        let _ = HttpConfig::process(http.clone(), conn, addr).await;
+                (result, index) = multi_tcp_listen_work(&mut listeners) => {
+                    if let Ok((conn, addr)) = result {
+                        log::trace!("反向代理:{}收到客户端连接: {}->{}", if tlss[index] { "https" } else { "http" }, addr, listeners[index].local_addr()?);
+                        if tlss[index] {
+                            let tls_accept = accept.clone().unwrap();
+                            let http = http.clone();
+                            tokio::spawn(async move {
+                                if let Ok(stream) = tls_accept.accept(conn).await {
+                                    let _ = HttpConfig::process(http, stream, addr).await;
+                                }
+                            });
+                        } else {
+                            let _ = HttpConfig::process(http.clone(), conn, addr).await;
+                        }
                     }
                 }
             }
-            log::trace!("now already has one tcp accept, loop repeat");
+            log::trace!("处理一条连接完毕，循环继续处理下一条信息");
         }
-
     }
 
     async fn transfer_server<T>(

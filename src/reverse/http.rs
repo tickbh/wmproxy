@@ -160,13 +160,11 @@ impl HttpConfig {
     where
         T: AsyncRead + AsyncWrite + Unpin + std::marker::Send + 'static,
     {
-        println!("xxxxxxxxxxxxxxxxxxxx");
         tokio::spawn(async move {
             let mut server = Server::new(inbound, Some(addr), http);
-            let _ret = server.incoming(Self::operate).await;
-            if _ret.is_err() {
-                println!("ret = {:?}", _ret);
-            };
+            if let Err(e) = server.incoming(Self::operate).await {
+                log::info!("反向代理：处理信息时发生错误：{:?}", e);
+            }
         });
         Ok(())
     }

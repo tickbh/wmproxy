@@ -260,9 +260,9 @@ impl CenterServer {
             self.mappings.clone(),
         );
         tokio::spawn(async move {
-            println!("tokio::spawn start!");
-            let e = trans.process(stream, addr).await;
-            println!("tokio::spawn end! = {:?}", e);
+            if let Err(e) = trans.process(stream, addr).await {
+                log::warn!("内网穿透:Http转发时发生错误:{:?}", e);
+            }
         });
         return Ok(());
     }
@@ -280,10 +280,15 @@ impl CenterServer {
             self.mappings.clone(),
         );
         tokio::spawn(async move {
-            println!("tokio::spawn start!");
-            if let Ok(tls_stream) = accept.accept(stream).await {
-                let e = trans.process(tls_stream, addr).await;
-                println!("tokio::spawn end! = {:?}", e);
+            match accept.accept(stream).await {
+                Ok(tls_stream) => {
+                    if let Err(e) = trans.process(tls_stream, addr).await {
+                        log::warn!("内网穿透:修理Https转发时发生错误:{:?}", e);
+                    }
+                }
+                Err(e) => {
+                    log::warn!("内网穿透:Https握手时发生错误:{:?}", e);
+                }
             }
         });
         return Ok(());
@@ -297,9 +302,9 @@ impl CenterServer {
             self.mappings.clone(),
         );
         tokio::spawn(async move {
-            println!("tokio::spawn start!");
-            let e = trans.process(stream).await;
-            println!("tokio::spawn end! = {:?}", e);
+            if let Err(e) = trans.process(stream).await {
+                log::warn!("内网穿透:修理Tcp转发时发生错误:{:?}", e);
+            }
         });
         return Ok(());
     }
