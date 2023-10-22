@@ -4,19 +4,16 @@ use std::{
     net::{IpAddr, SocketAddr},
     path::PathBuf,
     sync::Arc,
+    time::Duration, collections::HashSet,
 };
 
 use commander::Commander;
 use rustls::{Certificate, PrivateKey};
 
-
 use serde::{Deserialize, Serialize};
 use tokio_rustls::{rustls, TlsAcceptor};
 
-use crate::{
-    reverse::{HttpConfig},
-    Flag, MappingConfig, ProxyError, ProxyResult,
-};
+use crate::{reverse::{HttpConfig, UpstreamConfig}, Flag, MappingConfig, OneHealth, ProxyError, ProxyResult};
 
 use bitflags::bitflags;
 
@@ -260,7 +257,6 @@ pub struct ProxyConfig {
     pub(crate) mappings: Vec<MappingConfig>,
 }
 
-
 /// 代理类, 一个代理类启动一种类型的代理
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConfigOption {
@@ -305,7 +301,6 @@ impl ProxyConfig {
     pub fn builder() -> Builder {
         Builder::new()
     }
-
 
     fn load_certs(path: &Option<String>) -> io::Result<Vec<Certificate>> {
         if let Some(path) = path {
@@ -470,7 +465,7 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
             for root in &certs {
                 client_auth_roots.add(&root).unwrap();
             }
-            
+
             let client_auth = rustls::server::AllowAnyAuthenticatedClient::new(client_auth_roots);
 
             config
@@ -578,16 +573,14 @@ impl ConfigOption {
             file.read_to_string(&mut contents)?;
             let extension = path.extension().unwrap().to_string_lossy().to_string();
             let mut option = match &*extension {
-                "yaml" => serde_yaml::from_str::<ConfigOption>(&contents)
-                    .map_err(|e| {
-                        println!("parse error msg = {:?}", e);
-                        io::Error::new(io::ErrorKind::Other, "parse yaml error")
-                    })?,
-                "toml" => toml::from_str::<ConfigOption>(&contents)
-                    .map_err(|e| {
-                        println!("parse error msg = {:?}", e);
-                        io::Error::new(io::ErrorKind::Other, "parse toml error")
-                    })?,
+                "yaml" => serde_yaml::from_str::<ConfigOption>(&contents).map_err(|e| {
+                    println!("parse error msg = {:?}", e);
+                    io::Error::new(io::ErrorKind::Other, "parse yaml error")
+                })?,
+                "toml" => toml::from_str::<ConfigOption>(&contents).map_err(|e| {
+                    println!("parse error msg = {:?}", e);
+                    io::Error::new(io::ErrorKind::Other, "parse toml error")
+                })?,
                 _ => {
                     let e = io::Error::new(io::ErrorKind::Other, "unknow format error");
                     return Err(e.into());
@@ -636,5 +629,40 @@ impl ConfigOption {
             proxy: Some(builder.inner?),
             http: None,
         })
+    }
+
+    fn try_add_upstream(result: &mut Vec<OneHealth>, already: &mut HashSet<SocketAddr>, configs: &Vec<UpstreamConfig>) {
+        for up in configs {
+            for s in &up.server {
+                if already.contains(&s.addr) {
+                    continue;
+                }
+                already.insert(s.addr);
+                result.push(OneHealth::new(s.addr, "".to_string(), Duration::from_secs(1)));
+            }
+        }
+    }
+
+    pub fn get_health_check(&self) -> Vec<OneHealth> {
+        let mut result = vec![];
+        let mut already: HashSet<SocketAddr> = HashSet::new();
+        if let Some(proxy) = &self.proxy {
+            if let Some(server) = proxy.server {
+                result.push(OneHealth::new(
+                    server,
+                    String::new(),
+                    Duration::from_secs(5),
+                ));
+            }
+        }
+
+        if let Some(http) = &self.http {
+            Self::try_add_upstream(&mut result, &mut already, &http.upstream);
+            for s in &http.server {
+                Self::try_add_upstream(&mut result, &mut already, &s.upstream);
+            }
+        }
+
+        result
     }
 }

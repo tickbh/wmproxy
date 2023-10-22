@@ -50,10 +50,17 @@ impl HttpConfig {
 
     fn load_certs(path: &Option<String>) -> io::Result<Vec<Certificate>> {
         if let Some(path) = path {
-            let file = File::open(path)?;
-            let mut reader = BufReader::new(file);
-            let certs = rustls_pemfile::certs(&mut reader)?;
-            Ok(certs.into_iter().map(Certificate).collect())
+            match File::open(&path) {
+                Ok(file) => {
+                    let mut reader = BufReader::new(file);
+                    let certs = rustls_pemfile::certs(&mut reader)?;
+                    Ok(certs.into_iter().map(Certificate).collect())
+                }
+                Err(e) => {
+                    log::warn!("加载公钥{}出错，错误内容:{:?}", path, e);
+                    return Err(e);
+                }
+            }
         } else {
             Err(io::Error::new(io::ErrorKind::Other, "unknow certs"))
         }
@@ -61,9 +68,16 @@ impl HttpConfig {
 
     fn load_keys(path: &Option<String>) -> io::Result<PrivateKey> {
         let mut keys = if let Some(path) = path {
-            let file = File::open(&path)?;
-            let mut reader = BufReader::new(file);
-            rustls_pemfile::rsa_private_keys(&mut reader)?
+            match File::open(&path) {
+                Ok(file) => {
+                    let mut reader = BufReader::new(file);
+                    rustls_pemfile::rsa_private_keys(&mut reader)?
+                }
+                Err(e) => {
+                    log::warn!("加载私钥{}出错，错误内容:{:?}", path, e);
+                    return Err(e);
+                }
+            }
         } else {
             return Err(io::Error::new(io::ErrorKind::Other, "unknow keys"));
         };

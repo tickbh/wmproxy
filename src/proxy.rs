@@ -9,20 +9,22 @@ use futures::{future::select_all, FutureExt};
 
 use tokio::{
     io::{AsyncRead, AsyncWrite},
-    net::{TcpListener, TcpStream},
+    net::{TcpListener, TcpStream}, sync::mpsc::{channel, Sender},
 };
 use tokio_rustls::{rustls, TlsAcceptor, TlsConnector};
 use webparse::BinaryMut;
 
 use crate::{
     error::ProxyTypeResult, option::ConfigOption, reverse::HttpConfig, CenterClient, CenterServer,
-    Flag, HealthCheck, ProxyError, ProxyHttp, ProxyResult, ProxySocks5,
+    Flag, HealthCheck, ProxyError, ProxyHttp, ProxyResult, ProxySocks5, OneHealth, ActiveHealth,
 };
 
 pub struct Proxy {
     option: ConfigOption,
     center_client: Option<CenterClient>,
     center_servers: Vec<CenterServer>,
+
+    health_sender: Option<Sender<Vec<OneHealth>>>,
 }
 
 impl Proxy {
@@ -31,6 +33,7 @@ impl Proxy {
             option,
             center_client: None,
             center_servers: vec![],
+            health_sender: None,
         }
     }
 
@@ -103,6 +106,15 @@ impl Proxy {
             }
         }
 
+        Ok(())
+    }
+
+    pub async fn do_start_health_check(&mut self) -> ProxyResult<()> {
+        let healths = self.option.get_health_check();
+        let (sender, receiver) = channel::<Vec<OneHealth>>(1);
+        let active = ActiveHealth::new(healths, receiver);
+        active.do_start()?;
+        self.health_sender = Some(sender);
         Ok(())
     }
 
@@ -204,6 +216,8 @@ impl Proxy {
                 tcp_listener = Some(TcpListener::bind(ls).await?);
             };
         }
+
+        self.do_start_health_check().await?;
 
         loop {
             tokio::select! {
