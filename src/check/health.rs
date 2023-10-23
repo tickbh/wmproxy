@@ -15,6 +15,8 @@ lazy_static! {
 
 /// 每个SocketAddr的记录值
 struct HealthRecord {
+    /// 最后的发起时间
+    last_request: Option<Instant>,
     /// 最后的记录时间
     last_record: Instant,
     /// 失败的恢复时间
@@ -30,6 +32,7 @@ struct HealthRecord {
 impl HealthRecord {
     pub fn new(fail_timeout: usize) -> Self {
         Self {
+            last_request: None,
             last_record: Instant::now(),
             fail_timeout: Duration::new(fail_timeout as u64, 0),
             fall_times: 0,
@@ -69,6 +72,30 @@ impl HealthCheck {
 
     pub fn instance() -> &'static RwLock<HealthCheck> {
         &HEALTH_CHECK
+    }
+
+    pub fn check_can_request(addr: &SocketAddr, duration: Duration) -> bool {
+        if let Ok(mut h) = HEALTH_CHECK.write() {
+            if !h.health_map.contains_key(addr) {
+                let mut health = HealthRecord::new(0);
+                health.fall_times = 0;
+                health.last_request = Some(Instant::now());
+                h.health_map.insert(addr.clone(), health);
+                return true;
+            }
+            let value = h.health_map.get(&addr).unwrap();
+            let can = if let Some(ins) = value.last_request {
+                Instant::now().duration_since(ins) > duration
+            } else {
+                false
+            };
+            if can {
+                h.health_map.get_mut(&addr).unwrap().last_request = Some(Instant::now());
+            }
+            can
+        } else {
+            true
+        }
     }
 
     /// 检测状态是否能连接
@@ -118,6 +145,7 @@ impl HealthCheck {
             if !h.health_map.contains_key(&addr) {
                 let mut health = HealthRecord::new(h.fail_timeout);
                 health.fall_times = 1;
+                health.last_request = None;
                 h.health_map.insert(addr, health);
             } else {
                 let max_fails = h.max_fails;
@@ -126,6 +154,7 @@ impl HealthCheck {
                 if Instant::now().duration_since(value.last_record) > value.fail_timeout {
                     value.clear_status();
                 }
+                value.last_request = None;
                 value.last_record = Instant::now();
                 value.fall_times += 1;
                 value.rise_times = 0;

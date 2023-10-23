@@ -111,6 +111,7 @@ impl Proxy {
 
     pub async fn do_start_health_check(&mut self) -> ProxyResult<()> {
         let healths = self.option.get_health_check();
+        println!("healths = {:?}", healths);
         let (sender, receiver) = channel::<Vec<OneHealth>>(1);
         let active = ActiveHealth::new(healths, receiver);
         active.do_start()?;
@@ -190,7 +191,7 @@ impl Proxy {
             (None, vec![], vec![])
         };
 
-        let http = Arc::new(self.option.http.take().unwrap_or(HttpConfig::new()));
+        let http = Arc::new(self.option.http.clone().unwrap_or(HttpConfig::new()));
 
         let mut http_listener = None;
         let mut https_listener = None;

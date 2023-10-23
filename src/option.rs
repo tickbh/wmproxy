@@ -638,7 +638,7 @@ impl ConfigOption {
                     continue;
                 }
                 already.insert(s.addr);
-                result.push(OneHealth::new(s.addr, "".to_string(), Duration::from_secs(1)));
+                result.push(OneHealth::new(s.addr, "http".to_string(), Duration::from_secs(1)));
             }
         }
     }

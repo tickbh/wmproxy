@@ -43,31 +43,32 @@ wmproxy -b 127.0.0.1 -p 8090 -S 127.0.0.1:8091 --ts
 wmproxy -c config/client.yaml
 ```
 配置文件如下:
-```
-# 连接服务端地址
-server: 127.0.0.1:8091
-# 连接服务端是否加密
-ts: true
+```yaml
+proxy:
+  # 连接服务端地址
+  server: 127.0.0.1:8091
+  # 连接服务端是否加密
+  ts: true
 
-# 内网映射配置的数组
-mappings:
-  #将localhost的域名转发到本地的127.0.0.1:8080
-  - name: web
-    mode: http
-    local_addr: 127.0.0.1:8080
-    domain: localhost
-    headers:
-      - [proxy, +, x-forward-for, $client_ip]
-      - [proxy, +, from, $url]
-      - [+, key, value]
-      - [-, etag]
-      - [+, last-modified, aaaa]
+  # 内网映射配置的数组
+  mappings:
+    #将localhost的域名转发到本地的127.0.0.1:8080
+    - name: web
+      mode: http
+      local_addr: 127.0.0.1:8080
+      domain: localhost
+      headers:
+        - [proxy, +, x-forward-for, $client_ip]
+        - [proxy, +, from, $url]
+        - [+, key, value]
+        - [-, etag]
+        - [+, last-modified, aaaa]
 
-  #将tcp的流量无条件转到127.0.0.1:8080
-  - name: tcp
-    mode: tcp
-    local_addr: 127.0.0.1:8080
-    domain: 
+    #将tcp的流量无条件转到127.0.0.1:8080
+    - name: tcp
+      mode: tcp
+      local_addr: 127.0.0.1:8080
+      domain: 
 ```
 
 因为纯转发，所以在当前节点设置账号密码没有意义`-S`表示连接到的二级代理地址，**有该参数则表示是中转代理，否则是末端代理。**```--ts```表示连接父级代理的时候需要用加密的方式链接
@@ -81,28 +82,29 @@ wmproxy --user proxy --pass proxy -b 0.0.0.0 -p 8091 --tc
 wmproxy -c config/server.yaml
 ```
 配置文件如下:
-```
-#绑定的ip地址
-bind_addr: 127.0.0.1:8091
+```yaml
+proxy:
+  #绑定的ip地址
+  bind_addr: 127.0.0.1:8091
 
-#代理支持的功能，1为http，2为https，4为socks5
-flag: 7
+  #代理支持的功能，1为http，2为https，4为socks5
+  flag: 7
 
-#内网映射http绑定地址
-map_http_bind: 127.0.0.1:8001
-#内网映射tcp绑定地址
-map_tcp_bind: 127.0.0.1:8002
-#内网映射https绑定地址
-map_https_bind: 127.0.0.1:8003
-#内网映射的公钥证书，为空则是默认证书
-map_cert: 
-#内网映射的私钥证书，为空则是默认证书
-map_key:
+  #内网映射http绑定地址
+  map_http_bind: 127.0.0.1:8001
+  #内网映射tcp绑定地址
+  map_tcp_bind: 127.0.0.1:8002
+  #内网映射https绑定地址
+  map_https_bind: 127.0.0.1:8003
+  #内网映射的公钥证书，为空则是默认证书
+  map_cert: 
+  #内网映射的私钥证书，为空则是默认证书
+  map_key:
 
-#接收客户端是为是加密客户端
-tc: true
-#当前服务模式，server为服务端，client为客户端
-mode: server
+  #接收客户端是为是加密客户端
+  tc: true
+  #当前服务模式，server为服务端，client为客户端
+  mode: server
 ```
 
 ```--tc```表示接收子级代理的时候需要用加密的方式链接，可以```--cert```指定证书的公钥，```--key```指定证书的私钥，```--domain```指定证书的域名，如果不指定，则默认用自带的证书参数

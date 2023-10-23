@@ -125,9 +125,11 @@ impl HttpConfig {
             tlss.push(is_ssl);
         }
 
-        let config = config
+        let mut config = config
             .with_no_client_auth()
             .with_cert_resolver(Arc::new(resolve));
+        config.alpn_protocols.push("h2".as_bytes().to_vec());
+        config.alpn_protocols.push("http/1.1".as_bytes().to_vec());
         Ok((Some(TlsAcceptor::from(Arc::new(config))), tlss, listeners))
     }
 

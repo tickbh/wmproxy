@@ -23,6 +23,7 @@ fn main() {
     let runtime = Builder::new_multi_thread()
         .enable_io()
         .worker_threads(4)
+        .enable_time()
         .thread_name("my-custom-name")
         .thread_stack_size(3 * 1024 * 1024 * 1024)
         .build()
