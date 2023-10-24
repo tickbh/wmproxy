@@ -82,7 +82,6 @@ impl CenterClient {
         domain: Option<String>,
     ) -> ProxyResult<(Option<TcpStream>, Option<TlsStream<TcpStream>>)> {
         if tls_client.is_some() {
-            println!("connect by tls");
             let connector = TlsConnector::from(tls_client.unwrap());
             let stream = HealthCheck::connect(&server_addr).await?;
             // 这里的域名只为认证设置

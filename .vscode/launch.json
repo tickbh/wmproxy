@@ -74,7 +74,9 @@
                     "kind": "bin"
                 }
             },
-            "args": ["-c", "config/reverse.toml"],
+            // "console": "externalTerminal",
+            "env": {"RUST_LOG": "trace"},
+            "args": ["-c", "config/reverse.toml", "-fexec-charset=GBK"],
             "cwd": "${workspaceFolder}"
         },
         {

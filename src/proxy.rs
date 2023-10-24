@@ -111,7 +111,6 @@ impl Proxy {
 
     pub async fn do_start_health_check(&mut self) -> ProxyResult<()> {
         let healths = self.option.get_health_check();
-        println!("healths = {:?}", healths);
         let (sender, receiver) = channel::<Vec<OneHealth>>(1);
         let active = ActiveHealth::new(healths, receiver);
         active.do_start()?;
@@ -218,7 +217,7 @@ impl Proxy {
             };
         }
 
-        self.do_start_health_check().await?;
+        // self.do_start_health_check().await?;
 
         loop {
             tokio::select! {

@@ -77,7 +77,7 @@ impl HealthCheck {
     pub fn check_can_request(addr: &SocketAddr, duration: Duration) -> bool {
         if let Ok(mut h) = HEALTH_CHECK.write() {
             if !h.health_map.contains_key(addr) {
-                let mut health = HealthRecord::new(0);
+                let mut health = HealthRecord::new(30);
                 health.fall_times = 0;
                 health.last_request = Some(Instant::now());
                 h.health_map.insert(addr.clone(), health);

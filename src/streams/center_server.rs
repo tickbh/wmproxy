@@ -153,7 +153,6 @@ impl CenterServer {
                 // 将读出来的数据全部解析成ProtFrame并进行相应的处理，如果是0则是自身消息，其它进行转发
                 match Helper::decode_frame(&mut read_buf)? {
                     Some(p) => {
-                        println!("server decode receiver = {:?}", p);
                         match &p {
                             ProtFrame::Token(p) => {
                                 if !verify_succ
@@ -203,7 +202,6 @@ impl CenterServer {
                             ProtFrame::Mapping(p) => {
                                 let mut guard = mappings.write().await;
                                 *guard = p.into_mappings();
-                                println!("new mapping is =  {:?}", *guard);
                             }
                             ProtFrame::Token(_) => unreachable!(),
                         }

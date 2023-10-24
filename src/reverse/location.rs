@@ -94,7 +94,6 @@ impl LocationConfig {
         &self,
         req: Request<RecvStream>,
     ) -> ProtResult<Response<RecvStream>> {
-        println!("receiver req = {:?}", req.url());
         if let Some(file_server) = &self.file_server {
             return file_server.deal_request(req).await;
         }

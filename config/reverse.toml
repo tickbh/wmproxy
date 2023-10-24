@@ -9,11 +9,11 @@ aa = "b"
 name = "server"
 server = [
   {addr="127.0.0.1:8080", fail_timeout=30},
-  {addr="127.0.0.1:8081"}
+  # {addr="127.0.0.1:8081"}
 ]
 
 [[http.server]]
-bind_addr = "127.0.0.1:81"
+bind_addr = "0.0.0.0:81"
 server_name = "soft.wm-proxy.com"
 root="E:/"
 cert="key/soft.wm-proxy.com.pem"
@@ -37,21 +37,21 @@ headers = [
 ]
 
 
-[[http.server]]
-bind_addr = "127.0.0.1:81"
-server_name = "local.tool.fit"
-root="E:/1"
-cert="key/local.tool.fit.pem"
-key="key/local.tool.fit.key"
+# [[http.server]]
+# bind_addr = "0.0.0.0:81"
+# server_name = "local.tool.fit"
+# root="E:/1"
+# cert="key/local.tool.fit.pem"
+# key="key/local.tool.fit.key"
 
 
-[[http.server.location]]
-rule = "/root"
-file_server = { browse = true }
+# [[http.server.location]]
+# rule = "/root"
+# file_server = { browse = true }
 
-[[http.server.location]]
-rule = "/"
-reverse_proxy = "https://www.baidu.com"
-headers = [
-  ["+", "aaa", "bbb"]
-]
+# [[http.server.location]]
+# rule = "/"
+# reverse_proxy = "https://www.baidu.com"
+# headers = [
+#   ["+", "aaa", "bbb"]
+# ]

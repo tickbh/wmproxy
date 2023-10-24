@@ -110,7 +110,7 @@ impl HttpConfig {
                     .map_err(|_| ProtError::Extension("unvaild key"))?;
                 let ck = CertifiedKey::new(Self::load_certs(&value.cert)?, key);
                 resolve.add(&value.server_name, ck).map_err(|e| {
-                    println!("{:?}", e);
+                    log::warn!("添加证书时失败:{:?}", e);
                     ProtError::Extension("key error")
                 })?;
                 is_ssl = true;
@@ -134,7 +134,6 @@ impl HttpConfig {
     }
 
     async fn inner_operate(mut req: Request<RecvStream>) -> ProtResult<Response<RecvStream>> {
-        println!("receiver req = {:?}", req.url());
         let data = req.extensions_mut().remove::<Arc<Mutex<Arc<HttpConfig>>>>();
         if data.is_none() {
             return Err(ProtError::Extension("unknow data"));

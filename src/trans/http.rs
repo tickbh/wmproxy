@@ -61,7 +61,6 @@ impl TransHttp {
     async fn inner_operate(
         mut req: Request<RecvStream>
     ) -> ProtResult<Response<RecvStream>> {
-        println!("receiver req = {:?}", req.url());
         let data = req.extensions_mut().remove::<Arc<Mutex<HttpOper>>>();
         if data.is_none() {
             return Err(ProtError::Extension("unknow data"));
