@@ -21,7 +21,7 @@ fn fail_timeout() -> Duration {
 }
 
 fn default_fall_times() -> usize {
-    3
+    2
 }
 
 fn default_rise_times() -> usize {

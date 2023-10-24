@@ -217,7 +217,7 @@ impl Proxy {
             };
         }
 
-        // self.do_start_health_check().await?;
+        self.do_start_health_check().await?;
 
         loop {
             tokio::select! {

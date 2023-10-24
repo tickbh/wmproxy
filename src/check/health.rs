@@ -87,7 +87,7 @@ impl HealthCheck {
             let can = if let Some(ins) = value.last_request {
                 Instant::now().duration_since(ins) > duration
             } else {
-                false
+                true
             };
             if can {
                 h.health_map.get_mut(&addr).unwrap().last_request = Some(Instant::now());
@@ -145,7 +145,6 @@ impl HealthCheck {
             if !h.health_map.contains_key(&addr) {
                 let mut health = HealthRecord::new(h.fail_timeout);
                 health.fall_times = 1;
-                health.last_request = None;
                 h.health_map.insert(addr, health);
             } else {
                 let max_fails = h.max_fails;
@@ -154,7 +153,6 @@ impl HealthCheck {
                 if Instant::now().duration_since(value.last_record) > value.fail_timeout {
                     value.clear_status();
                 }
-                value.last_request = None;
                 value.last_record = Instant::now();
                 value.fall_times += 1;
                 value.rise_times = 0;

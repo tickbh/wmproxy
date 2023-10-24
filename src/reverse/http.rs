@@ -166,6 +166,7 @@ impl HttpConfig {
     }
 
     async fn operate(req: Request<RecvStream>) -> ProtResult<Response<RecvStream>> {
+        // body的内容可能重新解密又再重新再加过密, 后续可考虑直接做数据
         let mut value = Self::inner_operate(req).await?;
         value.headers_mut().insert("server", "wmproxy");
         Ok(value)
