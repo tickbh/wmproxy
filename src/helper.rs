@@ -1,3 +1,7 @@
+use std::{io, net::ToSocketAddrs};
+
+use socket2::{Socket, Domain, Type};
+use tokio::net::{TcpListener};
 use webparse::{BinaryMut, Buf, http2::frame::read_u24};
 
 use crate::{ProxyResult, prot::{ProtFrame, ProtFrameHeader}};
@@ -27,5 +31,65 @@ impl Helper {
             Ok(v) => return Ok(Some(v)),
             Err(err) => return Err(err),
         };
+    }
+
+    // pub async fn bind<A: ToSocketAddrs>(addr: A) -> io::Result<TcpListener> {
+    //     let addrs = addr.to_socket_addrs()?;
+    //     for addr in addrs {
+    //         return TcpListener::bind(addr).await;
+    //     }
+    //     // let addrs = addr.to_socket_addrs()?;
+    //     let mut last_err = None;
+    //     // for addr in addrs {
+    //     //     println!("addr = {:?}", addr);
+    //     //     let socket = Socket::new(Domain::IPV4, Type::STREAM, None)?;
+    //     //     socket.set_only_v6(false)?;
+    //     //     socket.bind(&addr.into())?;
+    //     //     socket.set_reuse_address(true)?;
+    //     //     match socket.listen(128) {
+    //     //         Ok(_) => {
+    //     //             let listener: std::net::TcpListener = socket.into();
+    //     //             return TcpListener::from_std(listener);
+    //     //         }
+    //     //         Err(e) => {
+    //     //             last_err = Some(e);
+    //     //         }
+    //     //     }
+    //     // }
+    //     Err(last_err.unwrap_or_else(|| {
+    //         io::Error::new(
+    //             io::ErrorKind::InvalidInput,
+    //             "could not resolve to any address",
+    //         )
+    //     }))
+    // }
+    
+    pub async fn bind<A: ToSocketAddrs>(addr: A) -> io::Result<TcpListener> {
+        let addrs = addr.to_socket_addrs()?;
+        let mut last_err = None;
+        for addr in addrs {
+            println!("addr = {:?}", addr);
+            let socket = Socket::new(Domain::IPV4, Type::STREAM, None)?;
+            socket.set_nonblocking(true)?;
+            socket.set_only_v6(false)?;
+            socket.bind(&addr.into())?;
+            socket.set_reuse_address(true)?;
+            match socket.listen(128) {
+                Ok(_) => {
+                    let listener: std::net::TcpListener = socket.into();
+                    return TcpListener::from_std(listener);
+                }
+                Err(e) => {
+                    last_err = Some(e);
+                }
+            }
+        }
+
+        Err(last_err.unwrap_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "could not resolve to any address",
+            )
+        }))
     }
 }

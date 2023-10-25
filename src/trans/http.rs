@@ -133,7 +133,7 @@ impl TransHttp {
             mappings: self.mappings.clone(),
             http_map: None,
         };
-        let mut server = Server::new(inbound, Some(addr), oper);
+        let mut server = Server::new_data(inbound, Some(addr), Arc::new(Mutex::new(oper)) );
         tokio::spawn( async move {
             let _ = client.wait_operate().await;
         });

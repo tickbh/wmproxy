@@ -51,7 +51,7 @@ impl OneHealth {
             return Ok(())
         }
         if self.method.eq_ignore_ascii_case("http") {
-            match tokio::time::timeout(self.interval + Duration::from_secs(1), self.connect_http()).await {
+            match tokio::time::timeout(self.interval + Duration::from_secs(3), self.connect_http()).await {
                 Ok(r) => match r {
                     Ok(r) => {
                         if r.status().is_server_error() {

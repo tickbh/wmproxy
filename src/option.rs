@@ -257,6 +257,10 @@ pub struct ProxyConfig {
     pub(crate) mappings: Vec<MappingConfig>,
 }
 
+pub fn default_control_port() -> u16 {
+    8837
+}
+
 /// 代理类, 一个代理类启动一种类型的代理
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConfigOption {
@@ -266,6 +270,8 @@ pub struct ConfigOption {
     /// HTTP反向代理,静态文件服相关
     #[serde(default)]
     pub(crate) http: Option<HttpConfig>,
+    #[serde(default="default_control_port")]
+    pub(crate) control: u16,
 }
 
 impl Default for ProxyConfig {
@@ -628,6 +634,7 @@ impl ConfigOption {
         Ok(ConfigOption {
             proxy: Some(builder.inner?),
             http: None,
+            control: default_control_port(),
         })
     }
 

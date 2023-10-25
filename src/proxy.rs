@@ -9,14 +9,14 @@ use futures::{future::select_all, FutureExt};
 
 use tokio::{
     io::{AsyncRead, AsyncWrite},
-    net::{TcpListener, TcpStream}, sync::mpsc::{channel, Sender},
+    net::{TcpListener, TcpStream}, sync::{mpsc::{channel, Sender}, Mutex},
 };
 use tokio_rustls::{rustls, TlsAcceptor, TlsConnector};
 use webparse::BinaryMut;
 
 use crate::{
     error::ProxyTypeResult, option::ConfigOption, reverse::HttpConfig, CenterClient, CenterServer,
-    Flag, HealthCheck, ProxyError, ProxyHttp, ProxyResult, ProxySocks5, OneHealth, ActiveHealth,
+    Flag, HealthCheck, ProxyError, ProxyHttp, ProxyResult, ProxySocks5, OneHealth, ActiveHealth, Helper,
 };
 
 pub struct Proxy {
@@ -155,7 +155,7 @@ impl Proxy {
                     self.center_client = Some(center_client);
                 }
             }
-            center_listener = Some(TcpListener::bind(addr).await?);
+            center_listener = Some(Helper::bind(addr).await?);
         }
         async fn tcp_listen_work(listen: &Option<TcpListener>) -> Option<(TcpStream, SocketAddr)> {
             if listen.is_some() {
@@ -190,18 +190,17 @@ impl Proxy {
             (None, vec![], vec![])
         };
 
-        let http = Arc::new(self.option.http.clone().unwrap_or(HttpConfig::new()));
-
+        let http = Arc::new(Mutex::new(self.option.http.clone().unwrap_or(HttpConfig::new())));
         let mut http_listener = None;
         let mut https_listener = None;
         let mut tcp_listener = None;
         let mut map_accept = None;
         if let Some(option) = &mut self.option.proxy {
             if let Some(ls) = &option.map_http_bind {
-                http_listener = Some(TcpListener::bind(ls).await?);
+                http_listener = Some(Helper::bind(ls).await?);
             };
             if let Some(ls) = &option.map_https_bind {
-                https_listener = Some(TcpListener::bind(ls).await?);
+                https_listener = Some(Helper::bind(ls).await?);
             };
 
             if https_listener.is_some() {
@@ -213,7 +212,7 @@ impl Proxy {
             };
 
             if let Some(ls) = &option.map_tcp_bind {
-                tcp_listener = Some(TcpListener::bind(ls).await?);
+                tcp_listener = Some(Helper::bind(ls).await?);
             };
         }
 

@@ -6,7 +6,7 @@ use std::{
     sync::Arc,
 };
 
-use crate::{ProxyResult};
+use crate::{ProxyResult, Helper};
 use rustls::{
     server::ResolvesServerCertUsingSni,
     sign::{self, CertifiedKey},
@@ -120,7 +120,7 @@ impl HttpConfig {
                 continue;
             }
             bind_port.insert(value.bind_addr.port());
-            let listener = TcpListener::bind(value.bind_addr).await?;
+            let listener = Helper::bind(value.bind_addr).await?;
             listeners.push(listener);
             tlss.push(is_ssl);
         }
@@ -134,7 +134,7 @@ impl HttpConfig {
     }
 
     async fn inner_operate(mut req: Request<RecvStream>) -> ProtResult<Response<RecvStream>> {
-        let data = req.extensions_mut().remove::<Arc<Mutex<Arc<HttpConfig>>>>();
+        let data = req.extensions_mut().remove::<Arc<Mutex<HttpConfig>>>();
         if data.is_none() {
             return Err(ProtError::Extension("unknow data"));
         }
@@ -172,12 +172,12 @@ impl HttpConfig {
         Ok(value)
     }
 
-    pub async fn process<T>(http: Arc<HttpConfig>, inbound: T, addr: SocketAddr) -> ProxyResult<()>
+    pub async fn process<T>(http: Arc<Mutex<HttpConfig>>, inbound: T, addr: SocketAddr) -> ProxyResult<()>
     where
         T: AsyncRead + AsyncWrite + Unpin + std::marker::Send + 'static,
     {
         tokio::spawn(async move {
-            let mut server = Server::new(inbound, Some(addr), http);
+            let mut server = Server::new_data(inbound, Some(addr), http);
             if let Err(e) = server.incoming(Self::operate).await {
                 log::info!("反向代理：处理信息时发生错误：{:?}", e);
             }

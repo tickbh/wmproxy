@@ -93,7 +93,8 @@ impl CenterServer {
         let mut verify_succ = option.username.is_none() && option.password.is_none();
 
         let (mut reader, mut writer) = split(stream);
-        let mut vec = vec![0u8; 4096];
+        let mut vec = Vec::with_capacity(4096);
+        vec.resize(4096, 0);
         let is_closed;
         let mut is_ready_shutdown = false;
         loop {

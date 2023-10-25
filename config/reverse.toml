@@ -9,7 +9,7 @@ aa = "b"
 name = "server"
 server = [
   {addr="127.0.0.1:8080", fail_timeout=30},
-  {addr="127.0.0.1:8081"}
+  # {addr="127.0.0.1:8081"}
 ]
 
 [[http.server]]

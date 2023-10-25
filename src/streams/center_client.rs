@@ -124,7 +124,8 @@ impl CenterClient {
         let mut read_buf = BinaryMut::new();
         let mut write_buf = BinaryMut::new();
         let (mut reader, mut writer) = split(stream);
-        let mut vec = vec![0u8; 4096];
+        let mut vec = Vec::with_capacity(4096);
+        vec.resize(4096, 0);
         let is_closed;
         if option.username.is_some() && option.password.is_some() {
             ProtFrame::new_token(

@@ -1,12 +1,12 @@
 // #![deny(warnings)]
 
-use wmproxy::{ConfigOption, ProxyResult, Proxy};
+use wmproxy::{ConfigOption, ProxyResult, Proxy, ControlServer};
 
 async fn run_main() -> ProxyResult<()> {
     env_logger::init();
     let option = ConfigOption::parse_env()?;
-    let mut proxy = Proxy::new(option);
-    proxy.start_serve().await?;
+    let control = ControlServer::new(option);
+    control.start_server().await?;
     Ok(())
 }
 
@@ -25,7 +25,7 @@ fn main() {
         .worker_threads(4)
         .enable_time()
         .thread_name("my-custom-name")
-        .thread_stack_size(3 * 1024 * 1024 * 1024)
+        .thread_stack_size(10 * 1024 * 1024 * 1024)
         .build()
         .unwrap();
     runtime.block_on(async {
