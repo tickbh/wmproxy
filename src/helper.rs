@@ -68,18 +68,19 @@ impl Helper {
         let addrs = addr.to_socket_addrs()?;
         let mut last_err = None;
         for addr in addrs {
-            println!("addr = {:?}", addr);
             let socket = Socket::new(Domain::IPV4, Type::STREAM, None)?;
             socket.set_nonblocking(true)?;
-            socket.set_only_v6(false)?;
-            socket.bind(&addr.into())?;
+            let _ = socket.set_only_v6(false);
             socket.set_reuse_address(true)?;
+            socket.set_reuse_port(true)?;
+            socket.bind(&addr.into())?;
             match socket.listen(128) {
                 Ok(_) => {
                     let listener: std::net::TcpListener = socket.into();
                     return TcpListener::from_std(listener);
                 }
                 Err(e) => {
+                    log::info!("绑定端口地址失败，原因： {:?}", addr);
                     last_err = Some(e);
                 }
             }

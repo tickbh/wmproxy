@@ -270,7 +270,7 @@ impl Proxy {
                     }
                 }
                 _ = receiver_close.recv() => {
-                    log::info!("反向代理：接收到错误信号,来自配置的变更,退出当前线程");
+                    log::info!("反向代理：接收到退出信号,来自配置的变更,退出当前线程");
                     return Ok(());
                 }
             }

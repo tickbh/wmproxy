@@ -42,7 +42,9 @@ impl ControlServer {
         let sender_close = self.sender_close.take();
         tokio::spawn(async move {
             let mut proxy = Proxy::new(option);
-            let _ = proxy.start_serve(receiver_no_listen, sender_close).await;
+            if let Err(e) = proxy.start_serve(receiver_no_listen, sender_close).await {
+                log::info!("处理失败服务进程失败: {:?}", e);
+            }
             let _ = sender.send(()).await;
         });
         self.sender_close = Some(sender_no_listen);

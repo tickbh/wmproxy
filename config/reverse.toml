@@ -15,9 +15,9 @@ server = [
 [[http.server]]
 bind_addr = "0.0.0.0:81"
 server_name = "soft.wm-proxy.com"
-root="E:/"
-cert="key/soft.wm-proxy.com.pem"
-key="key/soft.wm-proxy.com.key"
+root=""
+#cert="key/soft.wm-proxy.com.pem"
+#key="key/soft.wm-proxy.com.key"
 headers = [
   ["proxy", "x-forward-for", "$client_ip"],
   ["+", "last-modified", "from proxy"]
