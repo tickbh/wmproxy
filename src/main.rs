@@ -6,7 +6,7 @@ async fn run_main() -> ProxyResult<()> {
     env_logger::init();
     let option = ConfigOption::parse_env()?;
     let control = ControlServer::new(option);
-    control.start_server().await?;
+    control.start_serve().await?;
     Ok(())
 }
 

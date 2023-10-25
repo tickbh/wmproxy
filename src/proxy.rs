@@ -9,7 +9,7 @@ use futures::{future::select_all, FutureExt};
 
 use tokio::{
     io::{AsyncRead, AsyncWrite},
-    net::{TcpListener, TcpStream}, sync::{mpsc::{channel, Sender}, Mutex},
+    net::{TcpListener, TcpStream}, sync::{mpsc::{channel, Sender, Receiver}, Mutex},
 };
 use tokio_rustls::{rustls, TlsAcceptor, TlsConnector};
 use webparse::BinaryMut;
@@ -118,7 +118,7 @@ impl Proxy {
         Ok(())
     }
 
-    pub async fn start_serve(&mut self) -> ProxyResult<()> {
+    pub async fn start_serve(&mut self, mut receiver_close: Receiver<()>, mut sender_close: Option<Sender<()>>) -> ProxyResult<()> {
         log::trace!("开始启动服务器，正在加载配置中");
         let mut proxy_accept = None;
         let mut client = None;
@@ -216,7 +216,11 @@ impl Proxy {
             };
         }
 
-        self.do_start_health_check().await?;
+        if let Some(sender) = sender_close.take() {
+            let _ = sender.send(()).await;
+        } else {
+            self.do_start_health_check().await?;
+        }
 
         loop {
             tokio::select! {
@@ -264,6 +268,10 @@ impl Proxy {
                             let _ = HttpConfig::process(http.clone(), conn, addr).await;
                         }
                     }
+                }
+                _ = receiver_close.recv() => {
+                    log::info!("反向代理：接收到错误信号,来自配置的变更,退出当前线程");
+                    return Ok(());
                 }
             }
             log::trace!("处理一条连接完毕，循环继续处理下一条信息");
