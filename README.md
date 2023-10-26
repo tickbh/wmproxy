@@ -1,9 +1,9 @@
 # wmproxy
 `wmproxy`将用`Rust`实现`http/https`代理, `socks5`代理, 反向代理, 静态文件服务器, 后续将实现`websocket`代理, 内外网穿透等, 会将实现过程分享出来, 感兴趣的可以一起造个轮子
 
-## 📦 Installation & 🏃 Usage
+## 📦 安装 & 🏃 使用
 
-### Installation
+### 安装
 
 ```bash
 cargo install wmproxy
@@ -17,7 +17,7 @@ cd wmproxy
 cargo install --path .
 ```
 
-### Usage
+### 使用
 默认端口为8090端口，默认监听地址为127.0.0.1
 ```bash
 # 直接通用默认参数
@@ -114,16 +114,17 @@ proxy:
 > 目前提供了两种认证双式, ```two_way_tls```开启客户端的证书认证信息, 另一种服务端配置了```username```和```password```即需要客户端配置相同的用户密码才能启用认证信息, 两种方式可叠加使用或者单独使用。
 > 配置添加如下:
 ```yaml
-two_way_tls: true
-username: wmproxy
-password: wmproxy
+proxy:
+  two_way_tls: true
+  username: wmproxy
+  password: wmproxy
 ```
 
-# 🚥 Roadmap
+# 🚥 路线图
 ### socks5
 
-- [x] IPV6 Support
-- [x] `SOCKS5` Authentication Methods
+- [x] IPV6 支持
+- [x] `SOCKS5` 验证方式
   - [x] `NOAUTH`
   - [x] `USERPASS`
 - [x] `SOCKS5` Commands
@@ -131,18 +132,19 @@ password: wmproxy
   - [x] `UDP ASSOCIATE`
 
 ### http/https
-- [x] IPV6 Support
+- [x] IPV6 支持
 
 ### 内网穿透
 
-- [x] Http Support
-- [x] Https Support
-- [x] Tcp Support
+- [x] Http 支持
+- [x] Https 支持
+- [x] Tcp 支持
 
 ### 反向代理
 - [x] 静态文件服务器
 - [x] 被动健康检查
-- [ ] 主动健康检查
+- [x] 主动健康检查
+- [x] 配置热加载
 - [ ] 负载均衡
 
 #### 支持功能

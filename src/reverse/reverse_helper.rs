@@ -13,6 +13,8 @@ impl ReverseHelper {
         for stream in upstream {
             if &stream.name == name {
                 return stream.get_server_addr()
+            } else if name == "" {
+                return stream.get_server_addr()
             }
         }
         return Err(ProtError::Extension(""));

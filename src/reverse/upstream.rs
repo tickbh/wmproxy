@@ -15,7 +15,6 @@ fn default_weight() -> u16 {
     100
 }
 
-
 fn fail_timeout() -> Duration {
     Duration::from_secs(30)
 }
@@ -47,6 +46,7 @@ pub struct SingleStreamConfig {
     #[serde(default = "default_rise_times")]
     rise_times: usize,
 
+    #[serde(skip)]
     pub status: Option<String>,
 }
 

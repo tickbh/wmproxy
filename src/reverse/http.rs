@@ -85,12 +85,12 @@ impl HttpConfig {
         match keys.len() {
             0 => Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
-                format!("No PKCS8-encoded private key found"),
+                format!("No RSA private key found"),
             )),
             1 => Ok(PrivateKey(keys.remove(0))),
             _ => Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
-                format!("More than one PKCS8-encoded private key found"),
+                format!("More than one RSA private key found"),
             )),
         }
     }

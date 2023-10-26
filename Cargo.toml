@@ -40,6 +40,7 @@ env_logger = "0.10.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_with="3.4.0"
 serde_yaml = "0.9"
+serde_json = "1.0.107"
 toml = "0.8.2"
 # webparse = { version = "0.1.6"}
 # wenmeng={version="0.1.2"}

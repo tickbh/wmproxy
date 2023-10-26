@@ -3,10 +3,10 @@
 use std::sync::Arc;
 
 use tokio::{sync::{mpsc::{Sender, channel, Receiver}, Mutex}, net::TcpListener};
-use webparse::{Request, Response, HeaderName};
+use webparse::{Request, Response};
 use wenmeng::{Server, RecvStream, ProtResult, ProtError};
 
-use crate::{ConfigOption, Proxy, ProxyResult, control::server, reverse::HttpConfig};
+use crate::{ConfigOption, Proxy, ProxyResult};
 
 /// 控制端，可以对配置进行热更新
 pub struct ControlServer {
@@ -73,13 +73,38 @@ impl ControlServer {
         }
         let data = data.unwrap();
         let mut value = data.lock().await;
+        match &**req.path() {
+            "/reload" => {
+                // 将重新启动服务器
+                let _ = value.do_restart_serve().await;
+                return Ok(Response::text()
+                .body("重新加载配置成功")
+                .unwrap()
+                .into_type());
+            }
+            "/stop" => {
+                // 通知控制端关闭，控制端阻塞主线程，如果控制端退出后进程退出
+                if let Some(sender) = &value.server_sender_close {
+                    let _ = sender.send(()).await;
+                }
+                return Ok(Response::text()
+                .body("关闭进程成功")
+                .unwrap()
+                .into_type());
+            }
+            "/now" => {
+                if let Ok(data) = serde_json::to_string_pretty(&value.option) {
+                    return Ok(Response::text()
+                    .body(data)
+                    .unwrap()
+                    .into_type());
+                }
+            }
+            _ => {
+
+            }
+        };
         if req.path() == "/reload" {
-            // 将重新启动服务器
-            let _ = value.do_restart_serve().await;
-            return Ok(Response::text()
-            .body("重新加载配置成功")
-            .unwrap()
-            .into_type());
         }
 
         if req.path() == "/stop" {
@@ -92,6 +117,7 @@ impl ControlServer {
             .unwrap()
             .into_type());
         }
+
 
         return Ok(Response::status503()
             .body("服务器内部无服务")

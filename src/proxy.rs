@@ -15,7 +15,7 @@ use tokio_rustls::{rustls, TlsAcceptor, TlsConnector};
 use webparse::BinaryMut;
 
 use crate::{
-    error::ProxyTypeResult, option::ConfigOption, reverse::HttpConfig, CenterClient, CenterServer,
+    error::ProxyTypeResult, option::ConfigOption, reverse::{HttpConfig, StreamConfig}, CenterClient, CenterServer,
     Flag, HealthCheck, ProxyError, ProxyHttp, ProxyResult, ProxySocks5, OneHealth, ActiveHealth, Helper,
 };
 
@@ -190,7 +190,15 @@ impl Proxy {
             (None, vec![], vec![])
         };
 
+        
+        let mut stream_listeners = if let Some(stream) = &mut self.option.stream {
+            stream.bind().await?
+        } else {
+            vec![]
+        };
+
         let http = Arc::new(Mutex::new(self.option.http.clone().unwrap_or(HttpConfig::new())));
+        let stream = Arc::new(Mutex::new(self.option.stream.clone().unwrap_or(StreamConfig::new())));
         let mut http_listener = None;
         let mut https_listener = None;
         let mut tcp_listener = None;
@@ -267,6 +275,16 @@ impl Proxy {
                         } else {
                             let _ = HttpConfig::process(http.clone(), conn, addr).await;
                         }
+                    }
+                }
+                (result, index) = multi_tcp_listen_work(&mut stream_listeners) => {
+                    if let Ok((conn, addr)) = result {
+                        log::trace!("反向代理:{}收到客户端连接: {}->{}", "stream", addr, stream_listeners[index].local_addr()?);
+                        let data = stream.clone();
+                        let local_addr = stream_listeners[index].local_addr()?;
+                        tokio::spawn(async move {
+                            let _ = StreamConfig::process(data, local_addr, conn, addr).await;
+                        });
                     }
                 }
                 _ = receiver_close.recv() => {

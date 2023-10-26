@@ -37,6 +37,19 @@ headers = [
 ]
 
 
+[stream]
+
+[[stream.upstream]]
+name = "server"
+server = [
+  {addr="127.0.0.1:8080", fail_timeout=30},
+  {addr="127.0.0.1:8081"}
+]
+
+[[stream.server]]
+bind_addr = "0.0.0.0:83"
+server_name = "stream"
+
 # [[http.server]]
 # bind_addr = "0.0.0.0:81"
 # server_name = "local.tool.fit"

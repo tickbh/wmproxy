@@ -1,6 +1,6 @@
 // #![deny(warnings)]
 
-use wmproxy::{ConfigOption, ProxyResult, Proxy, ControlServer};
+use wmproxy::{ConfigOption, ProxyResult, ControlServer};
 
 async fn run_main() -> ProxyResult<()> {
     env_logger::init();
@@ -24,7 +24,7 @@ fn main() {
         .enable_io()
         .worker_threads(4)
         .enable_time()
-        .thread_name("my-custom-name")
+        .thread_name("wmproxy")
         .thread_stack_size(10 * 1024 * 1024 * 1024)
         .build()
         .unwrap();

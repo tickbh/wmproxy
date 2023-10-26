@@ -13,7 +13,7 @@ use rustls::{Certificate, PrivateKey};
 use serde::{Deserialize, Serialize};
 use tokio_rustls::{rustls, TlsAcceptor};
 
-use crate::{reverse::{HttpConfig, UpstreamConfig}, Flag, MappingConfig, OneHealth, ProxyError, ProxyResult};
+use crate::{reverse::{HttpConfig, UpstreamConfig, StreamConfig}, Flag, MappingConfig, OneHealth, ProxyError, ProxyResult};
 
 use bitflags::bitflags;
 
@@ -270,6 +270,8 @@ pub struct ConfigOption {
     /// HTTP反向代理,静态文件服相关
     #[serde(default)]
     pub(crate) http: Option<HttpConfig>,
+    #[serde(default)]
+    pub(crate) stream: Option<StreamConfig>,
     #[serde(default="default_control_port")]
     pub(crate) control: u16,
 }
@@ -421,19 +423,18 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
             ";
             let cursor = io::Cursor::new(key);
             let mut buf = BufReader::new(cursor);
-            // rustls_pemfile::pkcs8_private_keys(&mut buf)?
             rustls_pemfile::rsa_private_keys(&mut buf)?
         };
 
         match keys.len() {
             0 => Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
-                format!("No PKCS8-encoded private key found"),
+                format!("No RSA private key found"),
             )),
             1 => Ok(PrivateKey(keys.remove(0))),
             _ => Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
-                format!("More than one PKCS8-encoded private key found"),
+                format!("More than one RSA private key found"),
             )),
         }
     }
@@ -597,6 +598,9 @@ impl ConfigOption {
             if let Some(http) = &mut option.http {
                 http.copy_to_child();
             }
+            if let Some(stream) = &mut option.stream {
+                stream.copy_to_child();
+            }
             println!("options = {:?}", option);
             return Ok(option);
         }
@@ -634,6 +638,7 @@ impl ConfigOption {
         Ok(ConfigOption {
             proxy: Some(builder.inner?),
             http: None,
+            stream: None,
             control: default_control_port(),
         })
     }
@@ -666,6 +671,13 @@ impl ConfigOption {
         if let Some(http) = &self.http {
             Self::try_add_upstream(&mut result, &mut already, &http.upstream);
             for s in &http.server {
+                Self::try_add_upstream(&mut result, &mut already, &s.upstream);
+            }
+        }
+        
+        if let Some(stream) = &self.stream {
+            Self::try_add_upstream(&mut result, &mut already, &stream.upstream);
+            for s in &stream.server {
                 Self::try_add_upstream(&mut result, &mut already, &s.upstream);
             }
         }
