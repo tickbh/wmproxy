@@ -3,23 +3,28 @@
 use std::sync::Arc;
 
 use tokio::{sync::{mpsc::{Sender, channel, Receiver}, Mutex}, net::TcpListener};
-use webparse::{Request, Response};
+use webparse::{Request, Response, HeaderName};
 use wenmeng::{Server, RecvStream, ProtResult, ProtError};
 
 use crate::{ConfigOption, Proxy, ProxyResult, control::server, reverse::HttpConfig};
 
 pub struct ControlServer {
     option: ConfigOption,
-    sender_close: Option<Sender<()>>,
-    receiver_close: Option<Receiver<()>>,
+    server_sender_close: Option<Sender<()>>,
+    control_sender_close: Sender<()>,
+    control_receiver_close: Option<Receiver<()>>,
+    count: i32,
 }
 
 impl ControlServer {
     pub fn new(option: ConfigOption) -> Self {
+        let (sender, receiver) = channel::<()>(1);
         Self {
             option,
-            sender_close: None,
-            receiver_close: None,
+            server_sender_close: None,
+            control_sender_close: sender,
+            control_receiver_close: Some(receiver),
+            count: 0,
         }
     }
 
@@ -37,9 +42,10 @@ impl ControlServer {
     }
 
     async fn inner_start_server(&mut self, option: ConfigOption) -> ProxyResult<()>  {
-        let (sender, receiver) = channel::<()>(1);
+        let sender = self.control_sender_close.clone();
         let (sender_no_listen, receiver_no_listen) = channel::<()>(1);
-        let sender_close = self.sender_close.take();
+        let sender_close = self.server_sender_close.take();
+        self.count += 1;
         tokio::spawn(async move {
             let mut proxy = Proxy::new(option);
             if let Err(e) = proxy.start_serve(receiver_no_listen, sender_close).await {
@@ -47,8 +53,7 @@ impl ControlServer {
             }
             let _ = sender.send(()).await;
         });
-        self.sender_close = Some(sender_no_listen);
-        self.receiver_close = Some(receiver);
+        self.server_sender_close = Some(sender_no_listen);
         Ok(())
     }
 
@@ -59,13 +64,26 @@ impl ControlServer {
         }
         let data = data.unwrap();
         let mut value = data.lock().await;
-        if req.path() == "/restart" {
+        if req.path() == "/reload" {
             let _ = value.do_restart_serve().await;
+            return Ok(Response::text()
+            .body("重新加载配置成功")
+            .unwrap()
+            .into_type());
         }
 
-        return Ok(Response::builder()
-            .status(503)
-            .body("unknow location")
+        if req.path() == "/stop" {
+            if let Some(sender) = &value.server_sender_close {
+                let _ = sender.send(()).await;
+            }
+            return Ok(Response::text()
+            .body("关闭进程成功")
+            .unwrap()
+            .into_type());
+        }
+
+        return Ok(Response::status503()
+            .body("服务器内部无服务")
             .unwrap()
             .into_type());
     }
@@ -96,7 +114,7 @@ impl ControlServer {
         loop {
             let mut receiver = {
                 let value = &mut control.lock().await;
-                value.receiver_close.take()
+                value.control_receiver_close.take()
             };
             
             tokio::select! {
@@ -108,11 +126,19 @@ impl ControlServer {
                             log::info!("反向代理：处理信息时发生错误：{:?}", e);
                         }
                     });
+                    let value = &mut control.lock().await;
+                    value.control_receiver_close = receiver;
                 }
-                // _ = Self::receiver_await(&mut receiver) => {
-                //     // log::info!("反向代理：接收到错误信号,来自配置的变更,退出当前线程");
-                //     break;
-                // }
+                _ = Self::receiver_await(&mut receiver) => {
+                    // log::info!("反向代理：控制端收到关闭信号");
+                    let value = &mut control.lock().await;
+                    value.count -= 1;
+                    log::info!("反向代理：控制端收到关闭信号，当前:{}", value.count);
+                    if value.count <= 0 {
+                        break;
+                    }
+                    value.control_receiver_close = receiver;
+                }
             }
         }
         Ok(())
