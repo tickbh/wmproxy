@@ -7,7 +7,7 @@ mod upstream;
 mod reverse_helper;
 
 pub use http::HttpConfig;
-pub use stream::StreamConfig;
+pub use stream::{StreamConfig, StreamUdp};
 pub use location::LocationConfig;
 pub use server::ServerConfig;
 pub use upstream::{SingleStreamConfig, UpstreamConfig};

@@ -1,8 +1,8 @@
 use std::{io, net::ToSocketAddrs};
 
 use socket2::{Socket, Domain, Type};
-use tokio::net::{TcpListener};
-use webparse::{BinaryMut, Buf, http2::frame::read_u24};
+use tokio::{net::{TcpListener, UdpSocket}, io::ReadBuf};
+use webparse::{BinaryMut, Buf, http2::frame::read_u24, BufMut};
 
 use crate::{ProxyResult, prot::{ProtFrame, ProtFrameHeader}};
 
@@ -74,4 +74,34 @@ impl Helper {
             )
         }))
     }
+
+    /// 可端口复用的绑定方式，该端口可能被多个进程同时使用
+    pub async fn bind_upd<A: ToSocketAddrs>(addr: A) -> io::Result<UdpSocket> {
+        let addrs = addr.to_socket_addrs()?;
+        let mut last_err = None;
+        for addr in addrs {
+            let socket = Socket::new(Domain::IPV4, Type::DGRAM, None)?;
+            socket.set_nonblocking(true)?;
+            let _ = socket.set_only_v6(false);
+            socket.set_reuse_address(true)?;
+            Self::set_reuse_port(&socket, true)?;
+            socket.bind(&addr.into())?;
+            let listener: std::net::UdpSocket = socket.into();
+            return UdpSocket::from_std(listener);
+        }
+
+        Err(last_err.unwrap_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "could not resolve to any address",
+            )
+        }))
+    }
+
+    // pub async fn udp_recv_from(socket: &UdpSocket, buf: &mut [u8]) -> io::Result<usize> {
+    //     let (s, addr) = socket.recv_from(&mut buf).await?;
+    //     unsafe {
+    //         buf.advance_mut(size);
+    //     }
+    // }
 }

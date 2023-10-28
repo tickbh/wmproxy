@@ -1,13 +1,30 @@
-use std::{collections::HashSet, sync::Arc, net::SocketAddr};
+use std::{
+    collections::{HashMap, HashSet, LinkedList},
+    io,
+    net::SocketAddr,
+    sync::Arc,
+    task::{ready, Poll},
+    time::Instant,
+};
 
-use serde::{Serialize, Deserialize};
-use tokio::{net::TcpListener, sync::Mutex, io::{AsyncRead, AsyncWrite, copy_bidirectional}};
+use futures_core::Stream;
+use rustls::client;
+use serde::{Deserialize, Serialize};
+use tokio::{
+    io::{copy_bidirectional, AsyncRead, AsyncWrite, ReadBuf, Interest},
+    net::{TcpListener, UdpSocket},
+    sync::{
+        mpsc::{channel, Receiver, Sender},
+        Mutex,
+    },
+};
+use tokio_util::sync::PollSender;
+use webparse::{BinaryMut, Buf, BufMut};
 use wenmeng::Server;
 
-use crate::{ProxyResult, Helper, HealthCheck};
+use crate::{HealthCheck, Helper, ProxyResult};
 
-use super::{ServerConfig, UpstreamConfig, ReverseHelper};
-
+use super::{ReverseHelper, ServerConfig, UpstreamConfig};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StreamConfig {
@@ -17,7 +34,6 @@ pub struct StreamConfig {
     pub upstream: Vec<UpstreamConfig>,
 }
 
-
 impl StreamConfig {
     pub fn new() -> Self {
         StreamConfig {
@@ -25,7 +41,7 @@ impl StreamConfig {
             upstream: vec![],
         }
     }
-    
+
     /// 将配置参数提前共享给子级
     pub fn copy_to_child(&mut self) {
         for server in &mut self.server {
@@ -34,30 +50,36 @@ impl StreamConfig {
         }
     }
 
-    pub async fn bind(
-        &mut self,
-    ) -> ProxyResult<Vec<TcpListener>> {
+    pub async fn bind(&mut self) -> ProxyResult<(Vec<TcpListener>, Vec<StreamUdp>)> {
         let mut listeners = vec![];
+        let mut udp_listeners = vec![];
         let mut bind_port = HashSet::new();
         for value in &self.server.clone() {
-
             if bind_port.contains(&value.bind_addr.port()) {
                 continue;
             }
             bind_port.insert(value.bind_addr.port());
-            let listener = Helper::bind(value.bind_addr).await?;
-            listeners.push(listener);
+            if value.bind_mode == "udp" {
+                let listener = Helper::bind_upd(value.bind_addr).await?;
+                udp_listeners.push(StreamUdp::new(listener, value.clone()));
+            } else {
+                let listener = Helper::bind(value.bind_addr).await?;
+                listeners.push(listener);
+            }
         }
 
-        Ok(listeners)
+        Ok((listeners, udp_listeners))
     }
 
-
-    pub async fn process<T>(data: Arc<Mutex<StreamConfig>>, local_addr: SocketAddr, mut inbound: T, addr: SocketAddr) -> ProxyResult<()>
+    pub async fn process<T>(
+        data: Arc<Mutex<StreamConfig>>,
+        local_addr: SocketAddr,
+        mut inbound: T,
+        addr: SocketAddr,
+    ) -> ProxyResult<()>
     where
         T: AsyncRead + AsyncWrite + Unpin + std::marker::Send + 'static,
     {
-        
         let value = data.lock().await;
         for (_, s) in value.server.iter().enumerate() {
             if s.bind_addr.port() == local_addr.port() {
@@ -66,7 +88,217 @@ impl StreamConfig {
                 copy_bidirectional(&mut inbound, &mut connect).await?;
                 break;
             }
-        };
+        }
         Ok(())
+    }
+}
+
+pub struct StreamUdp {
+    pub buf: BinaryMut,
+    pub socket: UdpSocket,
+    pub server: ServerConfig,
+
+    // 如果接收该数据大小为0，那么则代表通知数据关闭
+    pub receiver: Receiver<(Vec<u8>, SocketAddr)>,
+    pub sender: Sender<(Vec<u8>, SocketAddr)>,
+
+    pub cache_data: LinkedList<(Vec<u8>, SocketAddr)>,
+    pub send_cache_data: LinkedList<(Vec<u8>, SocketAddr)>,
+    pub remote_sockets: HashMap<SocketAddr, PollSender<(Vec<u8>, SocketAddr)>>,
+}
+
+impl StreamUdp {
+    pub fn new(socket: UdpSocket, server: ServerConfig) -> Self {
+        let (sender, receiver) = channel(10);
+        Self {
+            buf: BinaryMut::new(),
+            socket,
+            server,
+            receiver,
+            sender,
+            cache_data: LinkedList::new(),
+            send_cache_data: LinkedList::new(),
+            remote_sockets: HashMap::new(),
+        }
+    }
+
+    pub fn local_addr(&self) -> io::Result<SocketAddr> {
+        self.socket.local_addr()
+    }
+
+    pub async fn deal_udp_bind(
+        sender: &mut Sender<(Vec<u8>, SocketAddr)>,
+        mut receiver: Receiver<(Vec<u8>, SocketAddr)>,
+        data: Vec<u8>,
+        origin_addr: SocketAddr,
+        remote_addr: SocketAddr,
+    ) -> io::Result<()> {
+        let udp = match UdpSocket::bind("0.0.0.0:0").await {
+            Ok(udp) => udp,
+            Err(_) => {
+                return Ok(());
+            }
+        };
+        udp.connect(remote_addr).await?;
+        let mut cache = vec![0u8; 9096];
+        let mut send_cache = LinkedList::<Vec<u8>>::new();
+        send_cache.push_back(data);
+        loop {
+            let mut interest = Interest::READABLE;
+            if !send_cache.is_empty() {
+                interest = interest | Interest::WRITABLE;
+            }
+            tokio::select! {
+                v = udp.ready(interest) => {
+                    let r = v?;
+                    if r.is_readable() {
+                        match udp.try_recv_from(&mut cache) {
+                            Ok((s, _)) => {
+                                sender.send((cache[..s].to_vec(), origin_addr)).await.map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "sender close"))?;
+                            },
+                            Err(e) => return Err(e),
+                        }
+                    }
+                    if r.is_writable() {
+                        let value = send_cache.pop_front().unwrap();
+                        match udp.send(&value).await {
+                            Ok(_) => {},
+                            Err(e) => {
+                                return Err(e)
+                            },
+                        }
+                    }
+                }
+                r = receiver.recv() => {
+                    match r {
+                        None => {
+                            return Ok(());
+                        }
+                        Some(v) => {
+                            send_cache.push_back(v.0);
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    pub async fn process_data(&mut self, data: Vec<u8>, addr: SocketAddr) -> ProxyResult<()> {
+        if self.remote_sockets.contains_key(&addr) {
+            self.send_cache_data.push_back((data, addr));
+        } else {
+            let mut remote_addr = None;;
+            for up in &self.server.upstream {
+                if up.name == self.server.server_name {
+                    remote_addr = Some(self.server.upstream[0].get_server_addr()?);
+                }
+            }
+            if remote_addr.is_none() {
+                return Err(crate::ProxyError::Extension("当前负载地址不存在"));
+            }
+
+            let remote_addr = remote_addr.unwrap();
+            let (sender, receiver) = channel(10);
+            self.remote_sockets.insert(addr, PollSender::new(sender));
+            let mut sender_clone = self.sender.clone();
+            tokio::spawn(async move {
+                let _ = Self::deal_udp_bind(&mut sender_clone, receiver, data, addr, remote_addr).await;
+                let _ = sender_clone.send((vec![], addr)).await;
+            });
+        }
+        Ok(())
+    }
+
+    pub fn poll_read(
+        &mut self,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<io::Result<(Vec<u8>, SocketAddr)>>> {
+        self.buf.clear();
+        let (size, client_addr) = {
+            let mut buf = ReadBuf::uninit(self.buf.chunk_mut());
+            let addr = ready!(self.socket.poll_recv_from(cx, &mut buf))?;
+            (buf.filled().len(), addr)
+        };
+        unsafe {
+            self.buf.advance_mut(size);
+        }
+        Poll::Ready(Some(Ok((self.buf.chunk().to_vec(), client_addr))))
+    }
+
+    pub fn poll_sender(
+        &mut self,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<io::Result<()>>> {
+        if self.send_cache_data.is_empty() {
+            return Poll::Pending;
+        }
+        let mut new_cache_data = LinkedList::new();
+        while !self.send_cache_data.is_empty() {
+            let first = self.send_cache_data.pop_front().unwrap();
+            if self.remote_sockets.contains_key(&first.1) {
+                let sender = self.remote_sockets.get_mut(&first.1).unwrap();
+                match sender.poll_reserve(cx) {
+                    Poll::Ready(Ok(_)) => {
+                        let _ = sender.send_item(first);
+                    }
+                    Poll::Ready(Err(_)) => {}
+                    Poll::Pending => {
+                        new_cache_data.push_back(first);
+                    }
+                }
+            }
+        }
+        self.send_cache_data = new_cache_data;
+        Poll::Pending
+    }
+
+    pub fn poll_write(
+        &mut self,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<io::Result<()>>> {
+        loop {
+            match self.receiver.poll_recv(cx) {
+                Poll::Pending => break,
+                Poll::Ready(None) => {
+                    return Poll::Ready(None);
+                }
+                Poll::Ready(Some((val, addr))) => {
+                    self.cache_data.push_back((val, addr));
+                }
+            }
+        }
+        loop {
+            if self.cache_data.is_empty() {
+                break;
+            }
+            let first = self.cache_data.pop_front().unwrap();
+            match self.socket.poll_send_to(cx, &first.0, first.1) {
+                Poll::Pending => {
+                    self.cache_data.push_front((first.0, first.1));
+                    return Poll::Pending;
+                }
+                Poll::Ready(Ok(_)) => {}
+                Poll::Ready(Err(e)) => {
+                    return Poll::Ready(Some(Err(e)));
+                }
+            };
+        }
+
+        return Poll::Pending;
+    }
+}
+
+impl Stream for StreamUdp {
+    type Item = io::Result<(Vec<u8>, SocketAddr)>;
+
+    fn poll_next(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<Self::Item>> {
+        let _ = self.poll_write(cx)?;
+        let _ = self.poll_sender(cx)?;
+        self.poll_read(cx)
     }
 }

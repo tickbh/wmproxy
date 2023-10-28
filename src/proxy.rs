@@ -5,17 +5,17 @@ use std::{
     sync::Arc,
 };
 
-use futures::{future::select_all, FutureExt};
+use futures::{future::select_all, FutureExt, StreamExt};
 
 use tokio::{
     io::{AsyncRead, AsyncWrite},
-    net::{TcpListener, TcpStream}, sync::{mpsc::{channel, Sender, Receiver}, Mutex},
+    net::{TcpListener, TcpStream, UdpSocket}, sync::{mpsc::{channel, Sender, Receiver}, Mutex},
 };
 use tokio_rustls::{rustls, TlsAcceptor, TlsConnector};
 use webparse::BinaryMut;
 
 use crate::{
-    error::ProxyTypeResult, option::ConfigOption, reverse::{HttpConfig, StreamConfig}, CenterClient, CenterServer,
+    error::ProxyTypeResult, option::ConfigOption, reverse::{HttpConfig, StreamConfig, StreamUdp}, CenterClient, CenterServer,
     Flag, HealthCheck, ProxyError, ProxyHttp, ProxyResult, ProxySocks5, OneHealth, ActiveHealth, Helper,
 };
 
@@ -184,6 +184,25 @@ impl Proxy {
             }
         }
 
+        async fn multi_udp_listen_work(
+            listens: &mut Vec<StreamUdp>,
+        ) -> (io::Result<(Vec<u8>, SocketAddr)>, usize) {
+            if !listens.is_empty() {
+                let (data, index, _) =
+                    select_all(listens.iter_mut().map(|listener| {
+                        listener.next().boxed()
+                    })).await;
+                if data.is_none() {
+                    return (Err(io::Error::new(io::ErrorKind::InvalidInput, "read none data")), index)
+                }
+                (data.unwrap(), index)
+            } else {
+                let pend = std::future::pending();
+                let () = pend.await;
+                unreachable!()
+            }
+        }
+
         let (accept, tlss, mut listeners) = if let Some(http) = &mut self.option.http {
             http.bind().await?
         } else {
@@ -191,10 +210,10 @@ impl Proxy {
         };
 
         
-        let mut stream_listeners = if let Some(stream) = &mut self.option.stream {
+        let (mut stream_listeners, mut stream_udp_listeners) = if let Some(stream) = &mut self.option.stream {
             stream.bind().await?
         } else {
-            vec![]
+            (vec![], vec![])
         };
 
         let http = Arc::new(Mutex::new(self.option.http.clone().unwrap_or(HttpConfig::new())));
@@ -285,6 +304,21 @@ impl Proxy {
                         tokio::spawn(async move {
                             let _ = StreamConfig::process(data, local_addr, conn, addr).await;
                         });
+                    }
+                }
+                (result, index) = multi_udp_listen_work(&mut stream_udp_listeners) => {
+                    if let Ok((data, addr)) = result {
+                        log::trace!("反向代理:{}收到客户端连接: {}->{}", "stream", addr, stream_udp_listeners[index].local_addr()?);
+
+                        let udp = &mut stream_udp_listeners[index];
+                        if let Err(e) = udp.process_data(data, addr).await {
+                            log::info!("udp负载均衡的时候发生错误:{:?}", e);
+                        }
+                        // let data = stream.clone();
+                        // let local_addr = stream_udp_listeners[index].local_addr()?;
+                        // tokio::spawn(async move {
+                        //     let _ = StreamConfig::process(data, local_addr, conn, addr).await;
+                        // });
                     }
                 }
                 _ = receiver_close.recv() => {

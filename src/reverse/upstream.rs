@@ -53,6 +53,8 @@ pub struct SingleStreamConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpstreamConfig {
     pub name: String,
+    #[serde(default = "String::new")]
+    pub bind: String,
     #[serde(default = "Vec::new")]
     pub server: Vec<SingleStreamConfig>,
 }

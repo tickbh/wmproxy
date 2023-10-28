@@ -46,9 +46,22 @@ server = [
   {addr="127.0.0.1:8081"}
 ]
 
+
+[[stream.upstream]]
+name = "udp"
+bind = "udp"
+server = [
+  {addr="127.0.0.1:1080"}
+]
+
 [[stream.server]]
 bind_addr = "0.0.0.0:83"
-server_name = "stream"
+server_name = "server"
+
+[[stream.server]]
+bind_addr = "0.0.0.0:84"
+bind_mode = "udp"
+server_name = "udp"
 
 # [[http.server]]
 # bind_addr = "0.0.0.0:81"

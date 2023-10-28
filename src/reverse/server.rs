@@ -2,6 +2,10 @@ use std::{net::SocketAddr};
 use serde::{Deserialize, Serialize};
 use super::{LocationConfig, UpstreamConfig};
 
+fn default_bind_mode() -> String {
+    "tcp".to_string()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServerConfig {
     pub bind_addr: SocketAddr,
@@ -9,6 +13,9 @@ pub struct ServerConfig {
     pub root: Option<String>,
     pub cert: Option<String>,
     pub key: Option<String>,
+
+    #[serde(default = "default_bind_mode")]
+    pub bind_mode: String,
     
     #[serde(default = "Vec::new")]
     pub headers: Vec<Vec<String>>,

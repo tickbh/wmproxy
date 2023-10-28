@@ -645,6 +645,9 @@ impl ConfigOption {
 
     fn try_add_upstream(result: &mut Vec<OneHealth>, already: &mut HashSet<SocketAddr>, configs: &Vec<UpstreamConfig>) {
         for up in configs {
+            if up.bind == "udp" {
+                continue;
+            }
             for s in &up.server {
                 if already.contains(&s.addr) {
                     continue;
