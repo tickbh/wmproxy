@@ -60,7 +60,7 @@ server = [
 name = "udp"
 bind = "udp"
 server = [
-  {addr="127.0.0.1:1080"}
+  {addr="127.0.0.1:8089"}
 ]
 
 # 四层服务器，server_name映射upstream的name
@@ -73,6 +73,7 @@ server_name = "server"
 bind_addr = "0.0.0.0:84"
 bind_mode = "udp"
 server_name = "udp"
+timeout = 5
 
 # [[http.server]]
 # bind_addr = "0.0.0.0:81"

@@ -4,7 +4,7 @@ use std::{
     net::SocketAddr,
     sync::Arc,
     task::{ready, Poll},
-    time::Instant,
+    time::{Instant, Duration},
 };
 
 use futures_core::Stream;
@@ -16,7 +16,7 @@ use tokio::{
     sync::{
         mpsc::{channel, Receiver, Sender},
         Mutex,
-    },
+    }, time::sleep,
 };
 use tokio_util::sync::PollSender;
 use webparse::{BinaryMut, Buf, BufMut};
@@ -24,7 +24,7 @@ use wenmeng::Server;
 
 use crate::{HealthCheck, Helper, ProxyResult};
 
-use super::{ReverseHelper, ServerConfig, UpstreamConfig};
+use super::{ReverseHelper, ServerConfig, UpstreamConfig, server};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StreamConfig {
@@ -93,6 +93,18 @@ impl StreamConfig {
     }
 }
 
+struct InnerUdp {
+    pub sender: PollSender<(Vec<u8>, SocketAddr)>,
+    pub last_time: Instant,
+    pub timeout: Duration,
+}
+
+impl InnerUdp {
+    pub fn is_timeout(&self) -> bool {
+        Instant::now().duration_since(self.last_time) > self.timeout
+    }
+}
+
 pub struct StreamUdp {
     pub buf: BinaryMut,
     pub socket: UdpSocket,
@@ -104,7 +116,7 @@ pub struct StreamUdp {
 
     pub cache_data: LinkedList<(Vec<u8>, SocketAddr)>,
     pub send_cache_data: LinkedList<(Vec<u8>, SocketAddr)>,
-    pub remote_sockets: HashMap<SocketAddr, PollSender<(Vec<u8>, SocketAddr)>>,
+    remote_sockets: HashMap<SocketAddr, InnerUdp>,
 }
 
 impl StreamUdp {
@@ -132,6 +144,7 @@ impl StreamUdp {
         data: Vec<u8>,
         origin_addr: SocketAddr,
         remote_addr: SocketAddr,
+        timeout: Duration,
     ) -> io::Result<()> {
         let udp = match UdpSocket::bind("0.0.0.0:0").await {
             Ok(udp) => udp,
@@ -143,6 +156,7 @@ impl StreamUdp {
         let mut cache = vec![0u8; 9096];
         let mut send_cache = LinkedList::<Vec<u8>>::new();
         send_cache.push_back(data);
+        // let mut delay = tokio::time::timeout(duration, future)
         loop {
             let mut interest = Interest::READABLE;
             if !send_cache.is_empty() {
@@ -180,6 +194,10 @@ impl StreamUdp {
                         }
                     }
                 }
+                _ = sleep(timeout) => {
+                    log::trace!("UDP进程操作超时({:?})，已退出进程", timeout);
+                    return Ok(());
+                }
             }
         }
 
@@ -188,29 +206,37 @@ impl StreamUdp {
 
     pub async fn process_data(&mut self, data: Vec<u8>, addr: SocketAddr) -> ProxyResult<()> {
         if self.remote_sockets.contains_key(&addr) {
-            self.send_cache_data.push_back((data, addr));
-        } else {
-            let mut remote_addr = None;;
-            for up in &self.server.upstream {
-                if up.name == self.server.server_name {
-                    remote_addr = Some(up.get_server_addr()?);
+            {
+                let inner = self.remote_sockets.get_mut(&addr).unwrap();
+                if !inner.is_timeout() {
+                    inner.last_time = Instant::now();
+                    self.send_cache_data.push_back((data, addr));
+                    return Ok(());
                 }
             }
-            if remote_addr.is_none() {
-                return Err(crate::ProxyError::Extension("当前负载地址不存在"));
-            }
-
-            let remote_addr = remote_addr.unwrap();
-            let (sender, receiver) = channel(10);
-            self.remote_sockets.insert(addr, PollSender::new(sender));
-            let mut sender_clone = self.sender.clone();
-            tokio::spawn(async move {
-                if let Err(e) = Self::deal_udp_bind(&mut sender_clone, receiver, data, addr, remote_addr).await {
-                    log::info!("处理UDP信息发生错误，退出:{:?}", e);
-                }
-                let _ = sender_clone.send((vec![], addr)).await;
-            });
+            self.remote_sockets.remove(&addr);
         }
+        let mut remote_addr = None;
+        for up in &self.server.upstream {
+            if up.name == self.server.server_name {
+                remote_addr = Some(up.get_server_addr()?);
+            }
+        }
+        if remote_addr.is_none() {
+            return Err(crate::ProxyError::Extension("当前负载地址不存在"));
+        }
+
+        let remote_addr = remote_addr.unwrap();
+        let (sender, receiver) = channel(10);
+        self.remote_sockets.insert(addr, InnerUdp { sender: PollSender::new(sender), last_time: Instant::now(), timeout: self.server.timeout } );
+        let mut sender_clone = self.sender.clone();
+        let timeout = self.server.timeout.clone();
+        tokio::spawn(async move {
+            if let Err(e) = Self::deal_udp_bind(&mut sender_clone, receiver, data, addr, remote_addr, timeout).await {
+                log::info!("处理UDP信息发生错误，退出:{:?}", e);
+            }
+            let _ = sender_clone.send((vec![], addr)).await;
+        });
         Ok(())
     }
 
@@ -241,7 +267,7 @@ impl StreamUdp {
         while !self.send_cache_data.is_empty() {
             let first = self.send_cache_data.pop_front().unwrap();
             if self.remote_sockets.contains_key(&first.1) {
-                let sender = self.remote_sockets.get_mut(&first.1).unwrap();
+                let sender = &mut self.remote_sockets.get_mut(&first.1).unwrap().sender;
                 match sender.poll_reserve(cx) {
                     Poll::Ready(Ok(_)) => {
                         let _ = sender.send_item(first);
