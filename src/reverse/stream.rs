@@ -139,7 +139,7 @@ impl StreamUdp {
                 return Ok(());
             }
         };
-        udp.connect(remote_addr).await?;
+        // udp.connect(remote_addr).await?;
         let mut cache = vec![0u8; 9096];
         let mut send_cache = LinkedList::<Vec<u8>>::new();
         send_cache.push_back(data);
@@ -156,12 +156,13 @@ impl StreamUdp {
                             Ok((s, _)) => {
                                 sender.send((cache[..s].to_vec(), origin_addr)).await.map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "sender close"))?;
                             },
+                            Err(e) if e.kind() == io::ErrorKind::WouldBlock => {},
                             Err(e) => return Err(e),
                         }
                     }
                     if r.is_writable() {
                         let value = send_cache.pop_front().unwrap();
-                        match udp.send(&value).await {
+                        match udp.send_to(&value, remote_addr).await {
                             Ok(_) => {},
                             Err(e) => {
                                 return Err(e)
@@ -192,7 +193,7 @@ impl StreamUdp {
             let mut remote_addr = None;;
             for up in &self.server.upstream {
                 if up.name == self.server.server_name {
-                    remote_addr = Some(self.server.upstream[0].get_server_addr()?);
+                    remote_addr = Some(up.get_server_addr()?);
                 }
             }
             if remote_addr.is_none() {
@@ -204,7 +205,9 @@ impl StreamUdp {
             self.remote_sockets.insert(addr, PollSender::new(sender));
             let mut sender_clone = self.sender.clone();
             tokio::spawn(async move {
-                let _ = Self::deal_udp_bind(&mut sender_clone, receiver, data, addr, remote_addr).await;
+                if let Err(e) = Self::deal_udp_bind(&mut sender_clone, receiver, data, addr, remote_addr).await {
+                    log::info!("处理UDP信息发生错误，退出:{:?}", e);
+                }
                 let _ = sender_clone.send((vec![], addr)).await;
             });
         }

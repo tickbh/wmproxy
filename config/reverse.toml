@@ -1,10 +1,13 @@
+# 正向代理相关，http/https/socks5等代理配置
 [proxy]
 bind_addr = "0.0.0.0:8090"
 flag = 7
 
+# 反向代理相关，七层协议为http及https
 [http]
 aa = "b"
 
+# 反向代理中的负载均衡地址列表，按名字匹配
 [[http.upstream]]
 name = "server"
 server = [
@@ -12,17 +15,22 @@ server = [
   {addr="127.0.0.1:8081"}
 ]
 
+# 反向代理中的具体服务，可配置多个多组
 [[http.server]]
 bind_addr = "0.0.0.0:82"
 server_name = "soft.wm-proxy.com"
 root=""
+# 若有匹配密钥则表示为SSL连接，反之则为http连接
 #cert="key/soft.wm-proxy.com.pem"
 #key="key/soft.wm-proxy.com.key"
+
+# 请求头返回头相应的处理，如有proxy则为请求头处理，+表示添加，-表示删除，其它表示设置
 headers = [
   ["proxy", "x-forward-for", "$client_ip"],
   ["+", "last-modified", "from proxy"]
 ]
 
+# 按请求路径进行rule匹配，可匹配method，看具体的处理的内容如文件服务或者负载均衡
 [[http.server.location]]
 rule = "/root"
 file_server = { browse = true }
@@ -36,17 +44,18 @@ headers = [
   ["+", "aaa", "bbb"]
 ]
 
-
+# IP的四层协议处理
 [stream]
 
+# 四层协议的负载均衡
 [[stream.upstream]]
 name = "server"
 server = [
   {addr="127.0.0.1:8080", fail_timeout=30},
-  {addr="127.0.0.1:8081"}
+#  {addr="127.0.0.1:8081"}
 ]
 
-
+# 负载均衡，bind为udp则表示udp连接
 [[stream.upstream]]
 name = "udp"
 bind = "udp"
@@ -54,10 +63,12 @@ server = [
   {addr="127.0.0.1:1080"}
 ]
 
+# 四层服务器，server_name映射upstream的name
 [[stream.server]]
 bind_addr = "0.0.0.0:83"
 server_name = "server"
 
+# 四层服务器，udp转发
 [[stream.server]]
 bind_addr = "0.0.0.0:84"
 bind_mode = "udp"
