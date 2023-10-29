@@ -50,6 +50,7 @@ impl StreamConfig {
         }
     }
 
+    /// stream的绑定，按bind_mode区分出udp或者是tcp，返回相应的列表
     pub async fn bind(&mut self) -> ProxyResult<(Vec<TcpListener>, Vec<StreamUdp>)> {
         let mut listeners = vec![];
         let mut udp_listeners = vec![];
@@ -75,7 +76,7 @@ impl StreamConfig {
         data: Arc<Mutex<StreamConfig>>,
         local_addr: SocketAddr,
         mut inbound: T,
-        addr: SocketAddr,
+        _addr: SocketAddr,
     ) -> ProxyResult<()>
     where
         T: AsyncRead + AsyncWrite + Unpin + std::marker::Send + 'static,
@@ -105,17 +106,24 @@ impl InnerUdp {
     }
 }
 
+/// Udp转发的处理结构，缓存一些数值以做中转
 pub struct StreamUdp {
+    /// 读的缓冲类，避免每次都释放
     pub buf: BinaryMut,
+    /// 核心的udp绑定端口
     pub socket: UdpSocket,
     pub server: ServerConfig,
 
-    // 如果接收该数据大小为0，那么则代表通知数据关闭
+    /// 如果接收该数据大小为0，那么则代表通知数据关闭
     pub receiver: Receiver<(Vec<u8>, SocketAddr)>,
+    /// 将发送器传达给每个子协程
     pub sender: Sender<(Vec<u8>, SocketAddr)>,
 
+    /// 接收的缓存数据，无法保证全部直接进行发送完毕
     pub cache_data: LinkedList<(Vec<u8>, SocketAddr)>,
+    /// 发送的缓存数据，无法保证全部直接进行发送完毕
     pub send_cache_data: LinkedList<(Vec<u8>, SocketAddr)>,
+    /// 每个地址绑定的对象，包含Sender，最后操作时间，超时时间
     remote_sockets: HashMap<SocketAddr, InnerUdp>,
 }
 
