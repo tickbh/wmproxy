@@ -113,7 +113,7 @@ impl Proxy {
         let healths = self.option.get_health_check();
         let (sender, receiver) = channel::<Vec<OneHealth>>(1);
         let active = ActiveHealth::new(healths, receiver);
-        active.do_start()?;
+        // active.do_start()?;
         self.health_sender = Some(sender);
         Ok(())
     }

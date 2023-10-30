@@ -12,7 +12,7 @@ aa = "b"
 name = "server"
 server = [
   {addr="127.0.0.1:8080", fail_timeout=30},
-  {addr="127.0.0.1:8081"}
+  # {addr="127.0.0.1:8081"}
 ]
 
 # 反向代理中的具体服务，可配置多个多组
@@ -31,10 +31,10 @@ headers = [
 ]
 
 # 按请求路径进行rule匹配，可匹配method，看具体的处理的内容如文件服务或者负载均衡
-[[http.server.location]]
-rule = "/root"
-file_server = { browse = true }
-proxy_pass = ""
+# [[http.server.location]]
+# rule = "/root"
+# file_server = { browse = true }
+# proxy_pass = ""
 
 [[http.server.location]]
 rule = "/"

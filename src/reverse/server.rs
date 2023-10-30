@@ -39,6 +39,7 @@ impl ServerConfig {
     /// 将配置参数提前共享给子级
     pub fn copy_to_child(&mut self) {
         for l in &mut self.location {
+            l.server_name = Some(self.server_name.clone());
             l.upstream.append(&mut self.upstream.clone());
             l.headers.append(&mut self.headers.clone());
             if l.root.is_none() && self.root.is_some() {
