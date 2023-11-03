@@ -73,7 +73,7 @@ server_name = "server"
 bind_addr = "0.0.0.0:84"
 bind_mode = "udp"
 server_name = "udp"
-timeout = 500
+timeout = "500s"
 
 # [[http.server]]
 # bind_addr = "0.0.0.0:81"

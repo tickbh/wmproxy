@@ -131,10 +131,10 @@ impl LocationConfig {
             }
         };
         let mut res = if url.scheme.is_http() {
-            let client = Client::builder().http2(false).connect_by_stream(stream).await?;
+            let client = Client::builder().connect_by_stream(stream).await?;
             Self::deal_client(req, client).await?
         } else {
-            let client = Client::builder().http2(false).connect_tls_by_stream(stream, url).await?;
+            let client = Client::builder().connect_tls_by_stream(stream, url).await?;
             Self::deal_client(req, client).await?
         };
         HeaderHelper::rewrite_response(&mut res.0, &self.headers);

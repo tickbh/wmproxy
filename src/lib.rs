@@ -14,6 +14,7 @@ mod mapping;
 mod check;
 mod reverse;
 mod control;
+mod config;
 
 pub use error::{ProxyResult, ProxyError};
 pub use flag::Flag;
@@ -27,3 +28,4 @@ pub use prot::{ProtFrame, ProtFrameHeader, ProtClose, ProtData, ProtCreate};
 pub use mapping::*;
 pub use check::*;
 pub use control::*;
+pub use config::*;

@@ -1,15 +1,17 @@
 use std::{net::SocketAddr, time::{Instant, Duration}};
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
-use serde_with::DurationSeconds;
+use serde_with::DisplayFromStr;
+use crate::ConfigDuration;
+
 use super::{LocationConfig, UpstreamConfig};
 
 fn default_bind_mode() -> String {
     "tcp".to_string()
 }
 
-fn connect_timeout() -> Duration {
-    Duration::from_secs(180)
+fn connect_timeout() -> ConfigDuration {
+    ConfigDuration::new(Duration::from_secs(180))
 }
 
 #[serde_as]
@@ -23,9 +25,9 @@ pub struct ServerConfig {
 
     #[serde(default = "default_bind_mode")]
     pub bind_mode: String,
-    #[serde_as(as = "DurationSeconds<u64>")]
+    #[serde_as(as = "DisplayFromStr")]
     #[serde(default = "connect_timeout")]
-    pub timeout: Duration,
+    pub timeout: ConfigDuration,
     
     #[serde(default = "Vec::new")]
     pub headers: Vec<Vec<String>>,
