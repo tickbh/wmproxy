@@ -6,11 +6,11 @@ use tokio::{
     sync::mpsc::{Receiver, Sender},
 };
 use webparse::{HeaderName, Method, Request, Response, Scheme, Url};
-use wenmeng::{Client, FileServer, HeaderHelper, ProtError, ProtResult, RecvStream};
+use wenmeng::{Client, HeaderHelper, ProtError, ProtResult, RecvStream};
 
-use crate::HealthCheck;
+use crate::{HealthCheck, FileServer};
 
-use super::{ReverseHelper, UpstreamConfig};
+use super::{ReverseHelper, UpstreamConfig, common::CommonConfig};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LocationConfig {
@@ -26,6 +26,10 @@ pub struct LocationConfig {
     pub root: Option<String>,
     #[serde(default = "Vec::new")]
     pub upstream: Vec<UpstreamConfig>,
+    
+    #[serde(flatten)]
+    #[serde(default = "CommonConfig::new")]
+    pub comm: CommonConfig,
 }
 
 impl Hash for LocationConfig {
@@ -62,6 +66,7 @@ impl LocationConfig {
             reverse_proxy: None,
             root: None,
             upstream: vec![],
+            comm: CommonConfig::new(),
         }
     }
 

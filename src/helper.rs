@@ -1,8 +1,8 @@
 use std::{io, net::ToSocketAddrs};
 
 use socket2::{Socket, Domain, Type};
-use tokio::{net::{TcpListener, UdpSocket}, io::ReadBuf};
-use webparse::{BinaryMut, Buf, http2::frame::read_u24, BufMut};
+use tokio::{net::{TcpListener, UdpSocket}};
+use webparse::{BinaryMut, Buf, http2::frame::read_u24};
 
 use crate::{ProxyResult, prot::{ProtFrame, ProtFrameHeader}};
 
@@ -78,7 +78,7 @@ impl Helper {
     /// 可端口复用的绑定方式，该端口可能被多个进程同时使用
     pub async fn bind_upd<A: ToSocketAddrs>(addr: A) -> io::Result<UdpSocket> {
         let addrs = addr.to_socket_addrs()?;
-        let mut last_err = None;
+        let last_err = None;
         for addr in addrs {
             let socket = Socket::new(Domain::IPV4, Type::DGRAM, None)?;
             socket.set_nonblocking(true)?;

@@ -1,10 +1,10 @@
-use std::{net::SocketAddr, time::{Instant, Duration}};
+use std::{net::SocketAddr, time::{Duration}};
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 use serde_with::DisplayFromStr;
 use crate::ConfigDuration;
 
-use super::{LocationConfig, UpstreamConfig};
+use super::{LocationConfig, UpstreamConfig, common::CommonConfig};
 
 fn default_bind_mode() -> String {
     "tcp".to_string()
@@ -35,12 +35,18 @@ pub struct ServerConfig {
     pub location: Vec<LocationConfig>,
     #[serde(default = "Vec::new")]
     pub upstream: Vec<UpstreamConfig>,
+
+    
+    #[serde(flatten)]
+    #[serde(default = "CommonConfig::new")]
+    pub comm: CommonConfig,
 }
 
 impl ServerConfig {
     /// 将配置参数提前共享给子级
     pub fn copy_to_child(&mut self) {
         for l in &mut self.location {
+            l.comm.copy_from_parent(&self.comm);
             l.server_name = Some(self.server_name.clone());
             l.upstream.append(&mut self.upstream.clone());
             l.headers.append(&mut self.headers.clone());
@@ -53,6 +59,7 @@ impl ServerConfig {
                     if file_server.prefix.is_empty() {
                         file_server.set_prefix(l.rule.clone());
                     }
+                    file_server.set_common(l.comm.clone());
                 }
             }
         }

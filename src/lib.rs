@@ -15,6 +15,7 @@ mod check;
 mod reverse;
 mod control;
 mod config;
+mod plugins;
 
 pub use error::{ProxyResult, ProxyError};
 pub use flag::Flag;
@@ -29,3 +30,4 @@ pub use mapping::*;
 pub use check::*;
 pub use control::*;
 pub use config::*;
+pub use plugins::*;

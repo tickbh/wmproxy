@@ -8,7 +8,7 @@ use std::{
 };
 
 use futures_core::Stream;
-use rustls::client;
+
 use serde::{Deserialize, Serialize};
 use tokio::{
     io::{copy_bidirectional, AsyncRead, AsyncWrite, ReadBuf, Interest},
@@ -20,11 +20,11 @@ use tokio::{
 };
 use tokio_util::sync::PollSender;
 use webparse::{BinaryMut, Buf, BufMut};
-use wenmeng::Server;
+
 
 use crate::{HealthCheck, Helper, ProxyResult};
 
-use super::{ReverseHelper, ServerConfig, UpstreamConfig, server};
+use super::{ReverseHelper, ServerConfig, UpstreamConfig};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StreamConfig {

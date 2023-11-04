@@ -23,7 +23,7 @@ use tokio_rustls::TlsAcceptor;
 use webparse::{Request, Response};
 use wenmeng::{ProtError, ProtResult, RecvStream, Server};
 
-use super::{ServerConfig, UpstreamConfig, LocationConfig};
+use super::{ServerConfig, UpstreamConfig, LocationConfig, common::CommonConfig};
 
 struct InnerHttpOper {
     pub http: Arc<Mutex<HttpConfig>>,
@@ -45,6 +45,10 @@ pub struct HttpConfig {
     pub server: Vec<ServerConfig>,
     #[serde(default = "Vec::new")]
     pub upstream: Vec<UpstreamConfig>,
+    
+    #[serde(flatten)]
+    #[serde(default = "CommonConfig::new")]
+    pub comm: CommonConfig,
 }
 
 impl HttpConfig {
@@ -52,6 +56,7 @@ impl HttpConfig {
         HttpConfig {
             server: vec![],
             upstream: vec![],
+            comm: CommonConfig::new(),
         }
     }
 
@@ -59,6 +64,7 @@ impl HttpConfig {
     pub fn copy_to_child(&mut self) {
         for server in &mut self.server {
             server.upstream.append(&mut self.upstream.clone());
+            server.comm.copy_from_parent(&self.comm);
             server.copy_to_child();
         }
     }
@@ -185,7 +191,7 @@ impl HttpConfig {
     //         .into_type());
     // }
     
-    async fn inner_operate_by_http(mut req: Request<RecvStream>, cache: &mut HashMap<LocationConfig, (Sender<Request<RecvStream>>, Receiver<Response<RecvStream>>)>, http: Arc<Mutex<HttpConfig>> ) -> ProtResult<Response<RecvStream>> {
+    async fn inner_operate_by_http(req: Request<RecvStream>, cache: &mut HashMap<LocationConfig, (Sender<Request<RecvStream>>, Receiver<Response<RecvStream>>)>, http: Arc<Mutex<HttpConfig>> ) -> ProtResult<Response<RecvStream>> {
 
         let http = http.lock().await;
         let server_len = http.server.len();
@@ -221,7 +227,9 @@ impl HttpConfig {
                             }
                         }
                         let (res, sender, receiver) = l.deal_request(req).await?;
-                        cache.insert(clone, (sender.unwrap(), receiver.unwrap()));
+                        if sender.is_some() && receiver.is_some() {
+                            cache.insert(clone, (sender.unwrap(), receiver.unwrap()));
+                        }
 
                         // value.cache_sender[clone] = (sender.unwrap(), receiver.unwrap());
                         // value.cache_sender.insert(clone, (sender.unwrap(), receiver.unwrap()));

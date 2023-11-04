@@ -2,7 +2,7 @@ use std::{fmt::Display, str::FromStr, io, collections::HashMap};
 use lazy_static::lazy_static;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ConfigSize(u64);
+pub struct ConfigSize(pub u64);
 
 const SIZE_UNIT: [&'static str; 6] = ["", "k", "m", "g", "t", "p"];
 

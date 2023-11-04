@@ -9,7 +9,7 @@ use futures::{future::select_all, FutureExt, StreamExt};
 
 use tokio::{
     io::{AsyncRead, AsyncWrite},
-    net::{TcpListener, TcpStream, UdpSocket}, sync::{mpsc::{channel, Sender, Receiver}, Mutex},
+    net::{TcpListener, TcpStream}, sync::{mpsc::{channel, Sender, Receiver}, Mutex},
 };
 use tokio_rustls::{rustls, TlsAcceptor, TlsConnector};
 use webparse::BinaryMut;
@@ -112,7 +112,7 @@ impl Proxy {
     pub async fn do_start_health_check(&mut self) -> ProxyResult<()> {
         let healths = self.option.get_health_check();
         let (sender, receiver) = channel::<Vec<OneHealth>>(1);
-        let active = ActiveHealth::new(healths, receiver);
+        let _active = ActiveHealth::new(healths, receiver);
         // active.do_start()?;
         self.health_sender = Some(sender);
         Ok(())
