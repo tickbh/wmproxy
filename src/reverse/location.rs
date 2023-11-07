@@ -100,8 +100,10 @@ impl LocationConfig {
         T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     {
         let (mut recv, sender) = client.send2(req.into_type()).await?;
-        let res = recv.recv().await.unwrap();
-        Ok((res, Some(sender), Some(recv)))
+        match recv.recv().await {
+            Some(res) => Ok((res, Some(sender), Some(recv))),
+            None => Err(ProtError::Extension("already close by other")),
+        }
     }
 
     pub async fn deal_reverse_proxy(

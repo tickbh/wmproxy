@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashSet, HashMap},
+    collections::{HashMap, HashSet},
     fs::File,
     io::{self, BufReader},
     net::SocketAddr,
@@ -23,11 +23,12 @@ use tokio_rustls::TlsAcceptor;
 use webparse::{Request, Response};
 use wenmeng::{ProtError, ProtResult, RecvStream, Server};
 
-use super::{ServerConfig, UpstreamConfig, LocationConfig, common::CommonConfig};
+use super::{common::CommonConfig, LocationConfig, ServerConfig, UpstreamConfig};
 
 struct InnerHttpOper {
     pub http: Arc<Mutex<HttpConfig>>,
-    pub cache_sender: HashMap<LocationConfig, (Sender<Request<RecvStream>>, Receiver<Response<RecvStream>>)>
+    pub cache_sender:
+        HashMap<LocationConfig, (Sender<Request<RecvStream>>, Receiver<Response<RecvStream>>)>,
 }
 
 impl InnerHttpOper {
@@ -45,7 +46,7 @@ pub struct HttpConfig {
     pub server: Vec<ServerConfig>,
     #[serde(default = "Vec::new")]
     pub upstream: Vec<UpstreamConfig>,
-    
+
     #[serde(flatten)]
     #[serde(default = "CommonConfig::new")]
     pub comm: CommonConfig,
@@ -190,9 +191,15 @@ impl HttpConfig {
     //         .unwrap()
     //         .into_type());
     // }
-    
-    async fn inner_operate_by_http(req: Request<RecvStream>, cache: &mut HashMap<LocationConfig, (Sender<Request<RecvStream>>, Receiver<Response<RecvStream>>)>, http: Arc<Mutex<HttpConfig>> ) -> ProtResult<Response<RecvStream>> {
 
+    async fn inner_operate_by_http(
+        req: Request<RecvStream>,
+        cache: &mut HashMap<
+            LocationConfig,
+            (Sender<Request<RecvStream>>, Receiver<Response<RecvStream>>),
+        >,
+        http: Arc<Mutex<HttpConfig>>,
+    ) -> ProtResult<Response<RecvStream>> {
         let http = http.lock().await;
         let server_len = http.server.len();
         let host = req.get_host().unwrap_or(String::new());
@@ -218,10 +225,10 @@ impl HttpConfig {
                                         cache.insert(clone, cache_client);
                                         println!("cache client close response");
                                         return Ok(Response::builder()
-                                        .status(503)
-                                        .body("already lose connection")
-                                        .unwrap()
-                                        .into_type());
+                                            .status(503)
+                                            .body("already lose connection")
+                                            .unwrap()
+                                            .into_type());
                                     }
                                 }
                             }
@@ -337,7 +344,11 @@ impl HttpConfig {
     {
         let oper = InnerHttpOper::new(http);
         tokio::spawn(async move {
-            let mut server = Server::new_data(inbound, Some(addr), Arc::new(Mutex::new(oper)));
+            let timeout = oper.http.lock().await.comm.build_timeout();
+            let mut server = Server::builder()
+                .addr(addr)
+                .timeout_layer(timeout)
+                .stream_data(inbound, Arc::new(Mutex::new(oper)));
             if let Err(e) = server.incoming(Self::operate).await {
                 log::info!("反向代理：处理信息时发生错误：{:?}", e);
             }

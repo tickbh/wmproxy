@@ -4,8 +4,7 @@ use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 use serde_with::DisplayFromStr;
 use wenmeng::RateLimitLayer;
-
-
+use wenmeng::TimeoutLayer;
 
 #[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -24,6 +23,8 @@ pub struct CommonConfig {
     pub connect_timeout: Option<ConfigDuration>,
     #[serde_as(as = "Option<DisplayFromStr>")]
     pub timeout: Option<ConfigDuration>,
+    #[serde_as(as = "Option<DisplayFromStr>")]
+    pub ka_timeout: Option<ConfigDuration>,
 
 }
 
@@ -38,6 +39,7 @@ impl CommonConfig {
             write_timeout: None,
             connect_timeout: None,
             timeout: None,
+            ka_timeout: None,
         }
     }
 
@@ -69,6 +71,41 @@ impl CommonConfig {
     pub fn get_rate_limit(&self) -> Option<RateLimitLayer> {
         if self.rate_limit_nums.is_some() && self.rate_limit_per.is_some() {
             return Some(RateLimitLayer::new(self.rate_limit_nums.clone().unwrap().0, self.rate_limit_per.clone().unwrap().into()));
+        } else {
+            None
+        }
+    }
+
+    pub fn build_timeout(&self) -> Option<TimeoutLayer> {
+        let mut timeout = TimeoutLayer::new();
+        let mut has_data = false;
+
+        if let Some(connect) = &self.connect_timeout {
+            timeout.set_connect_timeout(Some(connect.0.clone()));
+            has_data = true;
+        }
+        if let Some(read) = &self.read_timeout {
+            timeout.set_read_timeout(Some(read.0.clone()));
+            has_data = true;
+        }
+
+        if let Some(write) = &self.write_timeout {
+            timeout.set_write_timeout(Some(write.0.clone()));
+            has_data = true;
+        }
+
+        if let Some(t) = &self.timeout {
+            timeout.set_timeout(Some(t.0.clone()));
+            has_data = true;
+        }
+
+        if let Some(ka) = &self.ka_timeout {
+            timeout.set_ka_timeout(Some(ka.0.clone()));
+            has_data = true;
+        }
+
+        if has_data {
+            Some(timeout)
         } else {
             None
         }

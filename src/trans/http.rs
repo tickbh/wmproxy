@@ -122,7 +122,7 @@ impl TransHttp {
         let build = Client::builder();
         let (virtual_sender, virtual_receiver) = channel::<ProtFrame>(10);
         let stream = VirtualStream::new(self.sock_map, self.sender.clone(), virtual_receiver);
-        let mut client = Client::new(build.value().ok().unwrap(), stream);
+        let mut client = Client::new(build.value(), stream);
         let (receiver, sender) = client.split().unwrap();
         let oper = HttpOper {
             receiver,
