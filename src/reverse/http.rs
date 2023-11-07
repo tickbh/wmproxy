@@ -217,12 +217,13 @@ impl HttpConfig {
                                 println!("send request = {:?}", send);
                                 match cache_client.1.recv().await {
                                     Some(res) => {
-                                        println!("cache client receive  response");
-                                        cache.insert(clone, cache_client);
+                                        if res.is_ok() {
+                                            println!("cache client receive  response");
+                                            cache.insert(clone, cache_client);
+                                        }
                                         return res;
                                     }
                                     None => {
-                                        cache.insert(clone, cache_client);
                                         println!("cache client close response");
                                         return Ok(Response::builder()
                                             .status(503)
