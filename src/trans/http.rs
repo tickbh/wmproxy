@@ -25,7 +25,7 @@ pub struct TransHttp {
 }
 
 struct HttpOper {
-    pub receiver: Receiver<Response<RecvStream>>,
+    pub receiver: Receiver<ProtResult<Response<RecvStream>>>,
     pub sender: Sender<Request<RecvStream>>,
     pub virtual_sender: Option<Sender<ProtFrame>>,
     pub sender_work: Sender<(ProtCreate, Sender<ProtFrame>)>,
@@ -102,13 +102,14 @@ impl TransHttp {
         // 将请求发送出去
         value.sender.send(req).await?;
         // 等待返回数据的到来
-        let mut res = value.receiver.recv().await;
-        if res.is_some() {
+        let res = value.receiver.recv().await;
+        if res.is_some() && res.as_ref().unwrap().is_ok() {
+            let mut res = res.unwrap().unwrap();
             if let Some(config) = &value.http_map {
                 // 复写Response的头文件信息
-                HeaderHelper::rewrite_response(res.as_mut().unwrap(), &config.headers);
+                HeaderHelper::rewrite_response(&mut res, &config.headers);
             }
-            return Ok(res.unwrap());
+            return Ok(res);
         } else {
             return Ok(Response::builder().status(503).body("cant trans").ok().unwrap().into_type());
         }

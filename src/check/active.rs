@@ -38,7 +38,7 @@ impl OneHealth {
         let (mut recv, _sender) = client.send2(req.into_type()).await?;
         match recv.recv().await {
             Some(res) => {
-                return Ok(res);
+                return Ok(res?);
             }
             _ => {
                 return Err(io::Error::new(io::ErrorKind::InvalidInput, "").into());

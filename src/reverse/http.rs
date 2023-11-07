@@ -28,7 +28,7 @@ use super::{common::CommonConfig, LocationConfig, ServerConfig, UpstreamConfig};
 struct InnerHttpOper {
     pub http: Arc<Mutex<HttpConfig>>,
     pub cache_sender:
-        HashMap<LocationConfig, (Sender<Request<RecvStream>>, Receiver<Response<RecvStream>>)>,
+        HashMap<LocationConfig, (Sender<Request<RecvStream>>, Receiver<ProtResult<Response<RecvStream>>>)>,
 }
 
 impl InnerHttpOper {
@@ -196,7 +196,7 @@ impl HttpConfig {
         req: Request<RecvStream>,
         cache: &mut HashMap<
             LocationConfig,
-            (Sender<Request<RecvStream>>, Receiver<Response<RecvStream>>),
+            (Sender<Request<RecvStream>>, Receiver<ProtResult<Response<RecvStream>>>),
         >,
         http: Arc<Mutex<HttpConfig>>,
     ) -> ProtResult<Response<RecvStream>> {
@@ -219,7 +219,7 @@ impl HttpConfig {
                                     Some(res) => {
                                         println!("cache client receive  response");
                                         cache.insert(clone, cache_client);
-                                        return Ok(res);
+                                        return res;
                                     }
                                     None => {
                                         cache.insert(clone, cache_client);

@@ -94,14 +94,14 @@ impl LocationConfig {
     ) -> ProtResult<(
         Response<RecvStream>,
         Option<Sender<Request<RecvStream>>>,
-        Option<Receiver<Response<RecvStream>>>,
+        Option<Receiver<ProtResult<Response<RecvStream>>>>,
     )>
     where
         T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     {
         let (mut recv, sender) = client.send2(req.into_type()).await?;
         match recv.recv().await {
-            Some(res) => Ok((res, Some(sender), Some(recv))),
+            Some(res) => Ok((res?, Some(sender), Some(recv))),
             None => Err(ProtError::Extension("already close by other")),
         }
     }
@@ -113,7 +113,7 @@ impl LocationConfig {
     ) -> ProtResult<(
         Response<RecvStream>,
         Option<Sender<Request<RecvStream>>>,
-        Option<Receiver<Response<RecvStream>>>,
+        Option<Receiver<ProtResult<Response<RecvStream>>>>,
     )> {
         let url = TryInto::<Url>::try_into(reverse.clone()).ok();
         if url.is_none() || url.as_ref().unwrap().domain.is_none() {
@@ -154,7 +154,7 @@ impl LocationConfig {
     ) -> ProtResult<(
         Response<RecvStream>,
         Option<Sender<Request<RecvStream>>>,
-        Option<Receiver<Response<RecvStream>>>,
+        Option<Receiver<ProtResult<Response<RecvStream>>>>,
     )> {
         if let Some(file_server) = &self.file_server {
             let res = file_server.deal_request(req).await?;
