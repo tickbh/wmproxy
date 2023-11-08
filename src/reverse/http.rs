@@ -224,8 +224,7 @@ impl HttpConfig {
                                     }
                                     None => {
                                         println!("cache client close response");
-                                        return Ok(Response::builder()
-                                            .status(503)
+                                        return Ok(Response::status503()
                                             .body("already lose connection")
                                             .unwrap()
                                             .into_type());
@@ -241,15 +240,13 @@ impl HttpConfig {
                         return Ok(res);
                     }
                 }
-                return Ok(Response::builder()
-                    .status(503)
+                return Ok(Response::status503()
                     .body("unknow location to deal")
                     .unwrap()
                     .into_type());
             }
         }
-        return Ok(Response::builder()
-            .status(503)
+        return Ok(Response::status503()
             .body("unknow location")
             .unwrap()
             .into_type());
@@ -276,7 +273,12 @@ impl HttpConfig {
             }
             Err(e) => {
                 println!("e === {:?}", e);
-                Ok(Response::status500().body("server inner error")?.into_type())
+                let (is_timeout, is_client) = e.is_read_timeout();
+                if is_timeout && !is_client {
+                    Ok(Response::text().status(408).body("operate timeout")?.into_type())
+                } else {
+                    Ok(Response::status500().body("server inner error")?.into_type())
+                }
             }
         }
     }

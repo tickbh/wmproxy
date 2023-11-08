@@ -21,7 +21,7 @@ server = [
 [[http.server]]
 bind_addr = "0.0.0.0:82"
 server_name = "soft.wm-proxy.com"
-proxy_connect_timeout="1ms"
+proxy_connect_timeout="1s"
 proxy_read_timeout="1ms"
 proxy_write_timeout="1ms"
 root=""
@@ -45,7 +45,7 @@ proxy_pass = ""
 
 [[http.server.location]]
 rule = "/"
-method = "get"
+# method = "get"
 reverse_proxy = "http://server"
 headers = [
   ["+", "aaa", "bbb"]
