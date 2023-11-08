@@ -75,16 +75,8 @@ lazy_static! {
 }
 
 
-fn default_root() -> String {
-    CURRENT_DIR.to_string()
-}
-
 fn default_mimetype() -> String {
     "application/octet-stream".to_string()
-}
-
-fn default_bool_true() -> bool {
-    true
 }
 
 fn default_status() -> u16 {

@@ -1,8 +1,7 @@
 use crate::ConfigDuration;
-use crate::ConfigSize;
+use crate::{ConfigSize, DisplayFromStrOrNumber};
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
-use serde_with::DisplayFromStr;
 use wenmeng::RateLimitLayer;
 use wenmeng::TimeoutLayer;
 
@@ -10,27 +9,27 @@ use wenmeng::TimeoutLayer;
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CommonConfig {
     pub max_read_buf: Option<usize>,
-    #[serde_as(as = "Option<DisplayFromStr>")]
+    #[serde_as(as = "Option<DisplayFromStrOrNumber>")]
     pub rate_limit_nums: Option<ConfigSize>,
-    #[serde_as(as = "Option<DisplayFromStr>")]
+    #[serde_as(as = "Option<DisplayFromStrOrNumber>")]
     pub rate_limit_per: Option<ConfigDuration>,
 
-    #[serde_as(as = "Option<DisplayFromStr>")]
+    #[serde_as(as = "Option<DisplayFromStrOrNumber>")]
     pub client_read_timeout: Option<ConfigDuration>,
-    #[serde_as(as = "Option<DisplayFromStr>")]
+    #[serde_as(as = "Option<DisplayFromStrOrNumber>")]
     pub client_write_timeout: Option<ConfigDuration>,
-    #[serde_as(as = "Option<DisplayFromStr>")]
+    #[serde_as(as = "Option<DisplayFromStrOrNumber>")]
     pub client_timeout: Option<ConfigDuration>,
-    #[serde_as(as = "Option<DisplayFromStr>")]
+    #[serde_as(as = "Option<DisplayFromStrOrNumber>")]
     pub client_ka_timeout: Option<ConfigDuration>,
 
-    #[serde_as(as = "Option<DisplayFromStr>")]
+    #[serde_as(as = "Option<DisplayFromStrOrNumber>")]
     pub proxy_connect_timeout: Option<ConfigDuration>,
-    #[serde_as(as = "Option<DisplayFromStr>")]
+    #[serde_as(as = "Option<DisplayFromStrOrNumber>")]
     pub proxy_read_timeout: Option<ConfigDuration>,
-    #[serde_as(as = "Option<DisplayFromStr>")]
+    #[serde_as(as = "Option<DisplayFromStrOrNumber>")]
     pub proxy_write_timeout: Option<ConfigDuration>,
-    #[serde_as(as = "Option<DisplayFromStr>")]
+    #[serde_as(as = "Option<DisplayFromStrOrNumber>")]
     pub proxy_timeout: Option<ConfigDuration>,
 }
 

@@ -47,6 +47,7 @@ impl FromStr for ConfigSize {
     type Err=io::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
+        println!("try from str = {:?}", s);
         if s.len() == 0 {
             return Err(io::Error::new(io::ErrorKind::InvalidInput, ""));
         }

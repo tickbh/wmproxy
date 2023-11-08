@@ -236,11 +236,14 @@ impl StreamUdp {
 
         let remote_addr = remote_addr.unwrap();
         let (sender, receiver) = channel(10);
-        self.remote_sockets.insert(addr, InnerUdp { sender: PollSender::new(sender), last_time: Instant::now(), timeout: self.server.timeout.0 } );
+        let mut timeout = Duration::new(60, 0);
+        if self.server.comm.client_timeout.is_some() {
+            timeout = self.server.comm.client_timeout.clone().unwrap().0;
+        }
+        self.remote_sockets.insert(addr, InnerUdp { sender: PollSender::new(sender), last_time: Instant::now(), timeout } );
         let mut sender_clone = self.sender.clone();
-        let timeout = self.server.timeout.clone();
         tokio::spawn(async move {
-            if let Err(e) = Self::deal_udp_bind(&mut sender_clone, receiver, data, addr, remote_addr, timeout.0).await {
+            if let Err(e) = Self::deal_udp_bind(&mut sender_clone, receiver, data, addr, remote_addr, timeout).await {
                 log::info!("处理UDP信息发生错误，退出:{:?}", e);
             }
             let _ = sender_clone.send((vec![], addr)).await;
