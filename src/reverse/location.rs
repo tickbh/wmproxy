@@ -131,17 +131,24 @@ impl LocationConfig {
         }
         req.headers_mut()
             .insert(HeaderName::HOST, url.domain.clone().unwrap());
+        let proxy_timeout = self.comm.build_proxy_timeout();
+
+        let mut connect_timeout = None;
+        if proxy_timeout.is_some() {
+            connect_timeout = proxy_timeout.as_ref().unwrap().connect_timeout.clone();
+        }
+        println!("timeout = {:?}", connect_timeout);
         let stream = match url.get_connect_url() {
-            Some(connect) => HealthCheck::connect(&connect).await?,
+            Some(connect) => HealthCheck::connect_timeout(&connect, connect_timeout).await?,
             None => {
                 return Err(ProtError::Extension("get url error"));
             }
         };
         let mut res = if url.scheme.is_http() {
-            let client = Client::builder().connect_by_stream(stream).await?;
+            let client = Client::builder().timeout_layer(proxy_timeout).connect_by_stream(stream).await?;
             Self::deal_client(req, client).await?
         } else {
-            let client = Client::builder().connect_tls_by_stream(stream, url).await?;
+            let client = Client::builder().timeout_layer(proxy_timeout).connect_tls_by_stream(stream, url).await?;
             Self::deal_client(req, client).await?
         };
         HeaderHelper::rewrite_response(&mut res.0, &self.headers);

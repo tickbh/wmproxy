@@ -216,7 +216,7 @@ impl Proxy {
             (vec![], vec![])
         };
 
-        let http = Arc::new(Mutex::new(self.option.http.clone().unwrap_or(HttpConfig::new())));
+        let servers = self.option.http.clone().unwrap_or(HttpConfig::new()).convert_server_config();
         let stream = Arc::new(Mutex::new(self.option.stream.clone().unwrap_or(StreamConfig::new())));
         let mut http_listener = None;
         let mut https_listener = None;
@@ -282,17 +282,32 @@ impl Proxy {
                 }
                 (result, index) = multi_tcp_listen_work(&mut listeners) => {
                     if let Ok((conn, addr)) = result {
+                        let local_port = listeners[index].local_addr()?.port();
                         log::trace!("反向代理:{}收到客户端连接: {}->{}", if tlss[index] { "https" } else { "http" }, addr, listeners[index].local_addr()?);
+                        let mut local_servers = vec![];
+                        for s in &servers {
+                            if (*s).bind_addr.port() != local_port {
+                                continue;
+                            }
+                            local_servers.push(s.clone());
+                        }
                         if tlss[index] {
                             let tls_accept = accept.clone().unwrap();
-                            let http = http.clone();
                             tokio::spawn(async move {
                                 if let Ok(stream) = tls_accept.accept(conn).await {
-                                    let _ = HttpConfig::process(http, stream, addr).await;
+                                    let data = stream.get_ref();
+                                    let server_name = data.1.server_name().clone().map(|s| s.to_string());
+                                    for s in &local_servers {
+                                        if server_name.is_some() && &s.server_name == server_name.as_ref().unwrap() {
+                                            let _ = HttpConfig::process(vec![s.clone()], stream, addr).await;
+                                            return;
+                                        }
+                                    }
+                                    let _ = HttpConfig::process(local_servers, stream, addr).await;
                                 }
                             });
                         } else {
-                            let _ = HttpConfig::process(http.clone(), conn, addr).await;
+                            let _ = HttpConfig::process(local_servers, conn, addr).await;
                         }
                     }
                 }

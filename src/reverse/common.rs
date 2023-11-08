@@ -16,16 +16,22 @@ pub struct CommonConfig {
     pub rate_limit_per: Option<ConfigDuration>,
 
     #[serde_as(as = "Option<DisplayFromStr>")]
-    pub read_timeout: Option<ConfigDuration>,
+    pub client_read_timeout: Option<ConfigDuration>,
     #[serde_as(as = "Option<DisplayFromStr>")]
-    pub write_timeout: Option<ConfigDuration>,
+    pub client_write_timeout: Option<ConfigDuration>,
     #[serde_as(as = "Option<DisplayFromStr>")]
-    pub connect_timeout: Option<ConfigDuration>,
+    pub client_timeout: Option<ConfigDuration>,
     #[serde_as(as = "Option<DisplayFromStr>")]
-    pub timeout: Option<ConfigDuration>,
-    #[serde_as(as = "Option<DisplayFromStr>")]
-    pub ka_timeout: Option<ConfigDuration>,
+    pub client_ka_timeout: Option<ConfigDuration>,
 
+    #[serde_as(as = "Option<DisplayFromStr>")]
+    pub proxy_connect_timeout: Option<ConfigDuration>,
+    #[serde_as(as = "Option<DisplayFromStr>")]
+    pub proxy_read_timeout: Option<ConfigDuration>,
+    #[serde_as(as = "Option<DisplayFromStr>")]
+    pub proxy_write_timeout: Option<ConfigDuration>,
+    #[serde_as(as = "Option<DisplayFromStr>")]
+    pub proxy_timeout: Option<ConfigDuration>,
 }
 
 impl CommonConfig {
@@ -35,11 +41,15 @@ impl CommonConfig {
             rate_limit_nums: None,
             rate_limit_per: None,
             
-            read_timeout: None,
-            write_timeout: None,
-            connect_timeout: None,
-            timeout: None,
-            ka_timeout: None,
+            client_read_timeout: None,
+            client_write_timeout: None,
+            client_timeout: None,
+            client_ka_timeout: None,
+
+            proxy_connect_timeout: None,
+            proxy_timeout: None,
+            proxy_read_timeout: None,
+            proxy_write_timeout: None,
         }
     }
 
@@ -54,17 +64,17 @@ impl CommonConfig {
         if self.rate_limit_per.is_none() && parent.rate_limit_per.is_some() {
             self.rate_limit_per = parent.rate_limit_per.clone();
         }
-        if self.read_timeout.is_none() && parent.read_timeout.is_some() {
-            self.read_timeout = parent.read_timeout.clone();
+        if self.client_read_timeout.is_none() && parent.client_read_timeout.is_some() {
+            self.client_read_timeout = parent.client_read_timeout.clone();
         }
-        if self.write_timeout.is_none() && parent.write_timeout.is_some() {
-            self.write_timeout = parent.write_timeout.clone();
+        if self.client_write_timeout.is_none() && parent.client_write_timeout.is_some() {
+            self.client_write_timeout = parent.client_write_timeout.clone();
         }
-        if self.connect_timeout.is_none() && parent.connect_timeout.is_some() {
-            self.connect_timeout = parent.connect_timeout.clone();
+        if self.proxy_connect_timeout.is_none() && parent.proxy_connect_timeout.is_some() {
+            self.proxy_connect_timeout = parent.proxy_connect_timeout.clone();
         }
-        if self.timeout.is_none() && parent.timeout.is_some() {
-            self.timeout = parent.timeout.clone();
+        if self.client_timeout.is_none() && parent.client_timeout.is_some() {
+            self.client_timeout = parent.client_timeout.clone();
         }
     }
 
@@ -75,31 +85,58 @@ impl CommonConfig {
             None
         }
     }
-
-    pub fn build_timeout(&self) -> Option<TimeoutLayer> {
+    
+    pub fn build_proxy_timeout(&self) -> Option<TimeoutLayer> {
         let mut timeout = TimeoutLayer::new();
         let mut has_data = false;
 
-        if let Some(connect) = &self.connect_timeout {
+        if let Some(connect) = &self.proxy_connect_timeout {
             timeout.set_connect_timeout(Some(connect.0.clone()));
             has_data = true;
         }
-        if let Some(read) = &self.read_timeout {
+
+        if let Some(read) = &self.proxy_read_timeout {
             timeout.set_read_timeout(Some(read.0.clone()));
             has_data = true;
         }
 
-        if let Some(write) = &self.write_timeout {
+        if let Some(write) = &self.proxy_write_timeout {
             timeout.set_write_timeout(Some(write.0.clone()));
             has_data = true;
         }
 
-        if let Some(t) = &self.timeout {
+        if let Some(t) = &self.proxy_timeout {
             timeout.set_timeout(Some(t.0.clone()));
             has_data = true;
         }
 
-        if let Some(ka) = &self.ka_timeout {
+        if has_data {
+            Some(timeout)
+        } else {
+            None
+        }
+    }
+
+    pub fn build_client_timeout(&self) -> Option<TimeoutLayer> {
+        let mut timeout = TimeoutLayer::new();
+        let mut has_data = false;
+
+        if let Some(read) = &self.client_read_timeout {
+            timeout.set_read_timeout(Some(read.0.clone()));
+            has_data = true;
+        }
+
+        if let Some(write) = &self.client_write_timeout {
+            timeout.set_write_timeout(Some(write.0.clone()));
+            has_data = true;
+        }
+
+        if let Some(t) = &self.client_timeout {
+            timeout.set_timeout(Some(t.0.clone()));
+            has_data = true;
+        }
+
+        if let Some(ka) = &self.client_ka_timeout {
             timeout.set_ka_timeout(Some(ka.0.clone()));
             has_data = true;
         }

@@ -224,4 +224,20 @@ impl HealthCheck {
             )
         }))
     }
+
+    
+    // 将TcpStream::connect函数替换成这个函数，将自动启用被动健康检查
+    pub async fn connect_timeout<A>(addr: &A, connect: Option<Duration>) -> io::Result<TcpStream>
+    where
+        A: ToSocketAddrs,
+    {
+        if connect.is_none() {
+            HealthCheck::connect(addr).await
+        } else {
+            match tokio::time::timeout(connect.unwrap(), HealthCheck::connect(addr)).await {
+                Ok(s) => s,
+                Err(_) => return Err(io::Error::new(io::ErrorKind::NotConnected, "timeout")),
+            }
+        }
+    }
 }

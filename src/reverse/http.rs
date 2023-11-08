@@ -26,15 +26,15 @@ use wenmeng::{ProtError, ProtResult, RecvStream, Server};
 use super::{common::CommonConfig, LocationConfig, ServerConfig, UpstreamConfig};
 
 struct InnerHttpOper {
-    pub http: Arc<Mutex<HttpConfig>>,
+    pub servers: Vec<Arc<ServerConfig>>,
     pub cache_sender:
         HashMap<LocationConfig, (Sender<Request<RecvStream>>, Receiver<ProtResult<Response<RecvStream>>>)>,
 }
 
 impl InnerHttpOper {
-    pub fn new(http: Arc<Mutex<HttpConfig>>) -> Self {
+    pub fn new(http: Vec<Arc<ServerConfig>>) -> Self {
         Self {
-            http,
+            servers: http,
             cache_sender: HashMap::new(),
         }
     }
@@ -198,13 +198,12 @@ impl HttpConfig {
             LocationConfig,
             (Sender<Request<RecvStream>>, Receiver<ProtResult<Response<RecvStream>>>),
         >,
-        http: Arc<Mutex<HttpConfig>>,
+        servers: Vec<Arc<ServerConfig>>,
     ) -> ProtResult<Response<RecvStream>> {
-        let http = http.lock().await;
-        let server_len = http.server.len();
+        let server_len = servers.len();
         let host = req.get_host().unwrap_or(String::new());
         // 不管有没有匹配, 都执行最后一个
-        for (index, s) in http.server.iter().enumerate() {
+        for (index, s) in servers.iter().enumerate() {
             if s.server_name == host || host.is_empty() || index == server_len - 1 {
                 let path = req.path().clone();
                 for l in s.location.iter() {
@@ -239,10 +238,6 @@ impl HttpConfig {
                             cache.insert(clone, (sender.unwrap(), receiver.unwrap()));
                         }
 
-                        // value.cache_sender[clone] = (sender.unwrap(), receiver.unwrap());
-                        // value.cache_sender.insert(clone, (sender.unwrap(), receiver.unwrap()));
-                        // value.sender = sender;
-                        // value.receiver = receiver;
                         return Ok(res);
                     }
                 }
@@ -267,85 +262,47 @@ impl HttpConfig {
         }
         let data = data.unwrap();
         let mut value = data.lock().await;
-        let http = value.http.clone();
-        // let v = {
-        //     let http = value.http.lock().await;
-        //     Self::inner_http_request(&http, req).await
-        // };
-        // let http = value.http.clone().lock().await;
-
-        return Self::inner_operate_by_http(req, &mut value.cache_sender, http).await;
-        // let server_len = http.server.len();
-        // let host = req.get_host().unwrap_or(String::new());
-        // // 不管有没有匹配, 都执行最后一个
-        // for (index, s) in http.server.iter().enumerate() {
-        //     if s.server_name == host || host.is_empty() || index == server_len - 1 {
-        //         let path = req.path().clone();
-        //         for l in s.location.iter() {
-        //             if l.is_match_rule(&path, req.method()) {
-        //                 let clone = l.clone_only_hash();
-        //                 if value.cache_sender.contains_key(&clone) {
-        //                     let mut cache = value.cache_sender.remove(&clone).unwrap();
-        //                     if !cache.0.is_closed() {
-        //                         cache.0.send(req).await;
-        //                         match cache.1.recv().await {
-        //                             Some(res) => {
-        //                                 value.cache_sender.insert(clone, cache);
-        //                                 return Ok(res);
-        //                             }
-        //                             None => {
-        //                                 return Ok(Response::builder()
-        //                                 .status(503)
-        //                                 .body("already lose connection")
-        //                                 .unwrap()
-        //                                 .into_type());
-        //                             }
-        //                         }
-        //                     }
-        //                 }
-        //                 let (res, sender, receiver) = l.deal_request(req).await?;
-        //                 drop(http);
-        //                 value.cache_sender.insert(clone, (sender.unwrap(), receiver.unwrap()));
-
-        //                 // value.cache_sender[clone] = (sender.unwrap(), receiver.unwrap());
-        //                 // value.cache_sender.insert(clone, (sender.unwrap(), receiver.unwrap()));
-        //                 // value.sender = sender;
-        //                 // value.receiver = receiver;
-        //                 return Ok(res);
-        //             }
-        //         }
-        //         return Ok(Response::builder()
-        //             .status(503)
-        //             .body("unknow location to deal")
-        //             .unwrap()
-        //             .into_type());
-        //     }
-        // }
-        // return Ok(Response::builder()
-        //     .status(503)
-        //     .body("unknow location")
-        //     .unwrap()
-        //     .into_type());
+        let servers = value.servers.clone();
+        return Self::inner_operate_by_http(req, &mut value.cache_sender, servers).await;
+        
     }
 
     async fn operate(req: Request<RecvStream>) -> ProtResult<Response<RecvStream>> {
         // body的内容可能重新解密又再重新再加过密, 后续可考虑直接做数据
-        let mut value = Self::inner_operate(req).await?;
-        value.headers_mut().insert("server", "wmproxy");
-        Ok(value)
+        match Self::inner_operate(req).await {
+            Ok(mut value) => {
+                value.headers_mut().insert("server", "wmproxy");
+                Ok(value)
+            }
+            Err(e) => {
+                println!("e === {:?}", e);
+                Ok(Response::status500().body("server inner error")?.into_type())
+            }
+        }
+    }
+
+    pub fn convert_server_config(&self) -> Vec<Arc<ServerConfig>> {
+        let mut vec = vec![];
+        for v in &self.server {
+            vec.push(Arc::new(v.clone()));
+        }
+        vec
     }
 
     pub async fn process<T>(
-        http: Arc<Mutex<HttpConfig>>,
+        servers: Vec<Arc<ServerConfig>>,
         inbound: T,
         addr: SocketAddr,
     ) -> ProxyResult<()>
     where
         T: AsyncRead + AsyncWrite + Unpin + std::marker::Send + 'static,
     {
-        let oper = InnerHttpOper::new(http);
+        if servers.is_empty() {
+            return Err(crate::ProxyError::Extension("unknown server"));
+        }
+        let oper = InnerHttpOper::new(servers);
         tokio::spawn(async move {
-            let timeout = oper.http.lock().await.comm.build_timeout();
+            let timeout = oper.servers[0].comm.build_client_timeout();
             let mut server = Server::builder()
                 .addr(addr)
                 .timeout_layer(timeout)
