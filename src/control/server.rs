@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use tokio::{sync::{mpsc::{Sender, channel, Receiver}, Mutex}, net::TcpListener};
-use webparse::{Request, Response};
+use webparse::{Request, Response, HeaderName};
 use wenmeng::{Server, RecvStream, ProtResult, ProtError};
 
 use crate::{ConfigOption, Proxy, ProxyResult};
@@ -95,6 +95,7 @@ impl ControlServer {
             "/now" => {
                 if let Ok(data) = serde_json::to_string_pretty(&value.option) {
                     return Ok(Response::text()
+                    .header(HeaderName::CONTENT_TYPE, "application/json; charset=utf-8")
                     .body(data)
                     .unwrap()
                     .into_type());
@@ -145,7 +146,7 @@ impl ControlServer {
     pub async fn start_control(control: Arc<Mutex<ControlServer>>) -> ProxyResult<()> {
         let listener = {
             let value = &control.lock().await.option;
-            TcpListener::bind(format!("127.0.0.1:{}", value.control)).await?
+            TcpListener::bind(value.control).await?
         };
 
         loop {

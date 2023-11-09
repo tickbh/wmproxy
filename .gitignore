@@ -2,3 +2,4 @@
 Cargo.lock
 *.pid
 /key
+.cargo

@@ -257,8 +257,8 @@ pub struct ProxyConfig {
     pub(crate) mappings: Vec<MappingConfig>,
 }
 
-pub fn default_control_port() -> u16 {
-    8837
+pub fn default_control_port() -> SocketAddr {
+    "127.0.0.1:8837".parse().unwrap()
 }
 
 /// 代理类, 一个代理类启动一种类型的代理
@@ -273,7 +273,7 @@ pub struct ConfigOption {
     #[serde(default)]
     pub(crate) stream: Option<StreamConfig>,
     #[serde(default="default_control_port")]
-    pub(crate) control: u16,
+    pub(crate) control: SocketAddr,
 }
 
 impl Default for ProxyConfig {

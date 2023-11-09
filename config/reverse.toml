@@ -1,4 +1,5 @@
 # 正向代理相关，http/https/socks5等代理配置
+control = "127.0.0.1:8837"
 [proxy]
 bind_addr = "0.0.0.0:8090"
 flag = 7
@@ -38,7 +39,6 @@ headers = [
 # 按请求路径进行rule匹配，可匹配method，看具体的处理的内容如文件服务或者负载均衡
 [[http.server.location]]
 rate_limit_nums =4
-
 rate_limit_per =1
 rule = "/root"
 file_server = { browse = true }
