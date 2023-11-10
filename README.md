@@ -17,6 +17,11 @@ cd wmproxy
 cargo install --path .
 ```
 
+```docker
+docker pull dreamwhat/wmproxy
+docker run -p 82:82 -p 8090:8090 -p 127.0.0.1:8837:8837 --name proxy_bash dreamwhat/wmproxy /bin/./wmproxy -b -b 0.0.0.0:8090
+```
+
 ### 使用
 默认端口为8090端口，默认监听地址为127.0.0.1
 ```bash
@@ -75,7 +80,7 @@ proxy:
 
 2. 在远程启动代理
 ```bash
-wmproxy --user proxy --pass proxy -b 0.0.0.0 -p 8091 --tc
+wmproxy --user proxy --pass proxy -b 0.0.0.0:8091 --tc
 ```
 或者
 ```bash

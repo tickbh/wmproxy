@@ -1,12 +1,6 @@
 # syntax=docker/dockerfile:1
 
-# Comments are provided throughout this file to help you get started.
-# If you need more help, visit the Dockerfile reference guide at
-# https://docs.docker.com/engine/reference/builder/
-
-################################################################################
-# Create a stage for building the application.
-
+# 拉取了可以编译的RUST版本
 ARG RUST_VERSION=1.71.1
 ARG APP_NAME=wmproxy
 FROM rust:${RUST_VERSION}-slim-bullseye AS build
@@ -20,6 +14,7 @@ WORKDIR /app
 # Leverage a bind mount to the src directory to avoid having to copy the
 # source code into the container. Once built, copy the executable to an
 # output directory before the cache mounted /app/target is unmounted.
+# 挂载相应的文件目录结构
 RUN --mount=type=bind,source=src,target=src \
     --mount=type=bind,source=Cargo.toml,target=Cargo.toml \
     --mount=type=bind,source=.cargo,target=.cargo \
@@ -43,6 +38,9 @@ EOF
 # most recent version of that tag when you build your Dockerfile. If
 # reproducability is important, consider using a digest
 # (e.g., debian@sha256:ac707220fbd7b67fc19b112cee8170b41a9e97f703f588b2cdbbcdcecdd8af57).
+
+# 用较小的发行版本做载体，保证较小的image
+# 目标image中不包含Rust环境
 FROM debian:bullseye-slim AS final
 
 # Create a non-privileged user that the app will run under.
@@ -63,7 +61,7 @@ COPY --from=build /bin/wmproxy /bin/
 COPY config /etc/config
 
 # Expose the port that the application listens on.
-EXPOSE 82:82 8837:8837
+EXPOSE 82:82 8837:8837 8090:8090
 
 
 # What the container should run when it is started.
