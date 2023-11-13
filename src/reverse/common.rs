@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
-use crate::ConfigDuration;
+use crate::{ConfigDuration, ConfigLog};
 use crate::{ConfigSize, DisplayFromStrOrNumber};
 use serde::{Deserialize, Serialize};
-use serde_with::serde_as;
+use serde_with::{serde_as, DisplayFromStr, MapFirstKeyWins};
 use wenmeng::RateLimitLayer;
 use wenmeng::TimeoutLayer;
 
@@ -38,7 +38,10 @@ pub struct CommonConfig {
     pub log_format: HashMap<String, String>,
     #[serde(default = "HashMap::new")]
     pub log_names: HashMap<String, String>,
-    
+    #[serde_as(as = "Option<DisplayFromStr>")]
+    pub access_log: Option<ConfigLog>,
+    #[serde_as(as = "Option<DisplayFromStr>")]
+    pub error_log: Option<ConfigLog>,
 }
 
 impl CommonConfig {
@@ -60,6 +63,9 @@ impl CommonConfig {
 
             log_format: HashMap::new(),
             log_names: HashMap::new(),
+
+            access_log: None,
+            error_log: None,
         }
     }
 
@@ -85,6 +91,18 @@ impl CommonConfig {
         }
         if self.client_timeout.is_none() && parent.client_timeout.is_some() {
             self.client_timeout = parent.client_timeout.clone();
+        }
+        for h in &parent.log_names {
+            self.log_names.insert(h.0.clone(), h.1.clone());
+        }
+        for h in &parent.log_format {
+            self.log_format.insert(h.0.clone(), h.1.clone());
+        }
+        if self.access_log.is_none() {
+            self.access_log = parent.access_log.clone();
+        }
+        if self.error_log.is_none() {
+            self.error_log = parent.error_log.clone();
         }
     }
 
@@ -157,4 +175,13 @@ impl CommonConfig {
             None
         }
     }
+    
+    pub fn get_log_names(&self, names: &mut HashMap<String, String>)  {
+        for val in &self.log_names         {
+            if !names.contains_key(val.0) {
+                names.insert(val.0.clone(), val.1.clone());
+            }
+        }
+    }
+
 }

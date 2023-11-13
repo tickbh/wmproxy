@@ -9,6 +9,17 @@ flag = 7
 aa = "b"
 
 max_read_buf = 1024000
+access_log = "acess main"
+error_log = "acess main"
+
+[http.log_format]
+main = "xxx"
+debug = "$client_addr"
+
+[http.log_names]
+access = "logs/access.log"
+error = "logs/error.log"
+default = "logs/default.log"
 
 # 反向代理中的负载均衡地址列表，按名字匹配
 [[http.upstream]]

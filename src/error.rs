@@ -1,11 +1,11 @@
-use std::{io, fmt::Debug};
+use std::{io, fmt::Debug, path::Display};
 
 use tokio::{net::TcpStream, io::{AsyncRead, AsyncWrite}};
 use webparse::{WebError, BinaryMut};
 use wenmeng::ProtError;
 
 // #[derive(Debug)]
-pub enum ProxyError<T>
+pub enum ProxyError<T = TcpStream>
 where T : AsyncRead + AsyncWrite + Unpin {
     IoError(io::Error),
     WebError(WebError),
@@ -80,6 +80,25 @@ where T : AsyncRead + AsyncWrite + Unpin {
 
 impl<T> Debug for ProxyError<T>
 where T : AsyncRead + AsyncWrite + Unpin {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::IoError(arg0) => f.debug_tuple("IoError").field(arg0).finish(),
+            Self::WebError(arg0) => f.debug_tuple("WebError").field(arg0).finish(),
+            Self::ProtError(arg0) => f.debug_tuple("ProtErr").field(arg0).finish(),
+            Self::Continue(_arg0) => f.debug_tuple("Continue").finish(),
+            Self::VerifyFail => write!(f, "VerifyFail"),
+            Self::UnknownHost => write!(f, "UnknownHost"),
+            Self::SizeNotMatch => write!(f, "SizeNotMatch"),
+            Self::TooShort => write!(f, "TooShort"),
+            Self::ProtErr => write!(f, "ProtErr"),
+            Self::ProtNoSupport => write!(f, "ProtNoSupport"),
+            Self::Extension(arg0) => f.debug_tuple("Extension").field(arg0).finish(),
+        }
+    }
+}
+
+impl<T> std::fmt::Display for ProxyError<T>
+where T : AsyncRead + AsyncWrite + Unpin  {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::IoError(arg0) => f.debug_tuple("IoError").field(arg0).finish(),

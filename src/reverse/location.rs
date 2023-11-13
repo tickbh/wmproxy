@@ -1,4 +1,4 @@
-use std::hash::Hash;
+use std::{hash::Hash, collections::HashMap};
 
 use serde::{Deserialize, Serialize};
 use tokio::{
@@ -171,5 +171,9 @@ impl LocationConfig {
             return self.deal_reverse_proxy(req, reverse.clone()).await;
         }
         return Err(ProtError::Extension("unknow data"));
+    }
+
+    pub fn get_log_names(&self, names: &mut HashMap<String, String>)  {
+        self.comm.get_log_names(names);
     }
 }

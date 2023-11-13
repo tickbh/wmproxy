@@ -1,12 +1,36 @@
 // #![deny(warnings)]
 
-use wmproxy::{ConfigOption, ProxyResult, ControlServer};
+use wmproxy::{ConfigOption, ProxyResult, ControlServer, Helper};
+use log::{error, info, warn, LevelFilter};
+use log4rs::{
+    append::console::ConsoleAppender,
+    config::{Appender, Root},
+    encode::json::JsonEncoder,
+};
 
 
 
 async fn run_main() -> ProxyResult<()> {
-    env_logger::init();
+    // let stdout: ConsoleAppender = ConsoleAppender::builder()
+    // .encoder(Box::new(JsonEncoder::new()))
+    // .build();
+    // let log_config = log4rs::config::Config::builder()
+    //     .appender(Appender::builder().build("stdout", Box::new(stdout)))
+    //     .build(Root::builder().appender("stdout").build(LevelFilter::Info))
+    //     .unwrap();
+    // log4rs::init_config(log_config).unwrap();
+    // let stdout: ConsoleAppender = ConsoleAppender::builder()
+    // .encoder(Box::new(JsonEncoder::new()))
+    // .build();
+    // let log_config = log4rs::config::Config::builder()
+    //     .appender(Appender::builder().build("stdout", Box::new(stdout)))
+    //     .build(Root::builder().appender("stdout").build(LevelFilter::Info))
+    //     .unwrap();
+    // log4rs::init_config(log_config).unwrap();
+
+    // env_logger::init();
     let option = ConfigOption::parse_env()?;
+    Helper::try_init_log(&option);
     let control = ControlServer::new(option);
     control.start_serve().await?;
     Ok(())

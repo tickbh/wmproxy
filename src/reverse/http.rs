@@ -47,7 +47,6 @@ pub struct HttpConfig {
     #[serde(default = "Vec::new")]
     pub upstream: Vec<UpstreamConfig>,
 
-
     #[serde(flatten)]
     #[serde(default = "CommonConfig::new")]
     pub comm: CommonConfig,
@@ -315,5 +314,12 @@ impl HttpConfig {
             }
         });
         Ok(())
+    }
+    
+    pub fn get_log_names(&self, names: &mut HashMap<String, String>)  {
+        self.comm.get_log_names(names);
+        for s in &self.server {
+            s.get_log_names(names);
+        }
     }
 }

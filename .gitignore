@@ -3,3 +3,4 @@ Cargo.lock
 *.pid
 /key
 .cargo
+/logs/*.log

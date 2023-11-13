@@ -1,10 +1,12 @@
 use std::{io, net::ToSocketAddrs};
 
+use log::LevelFilter;
+use log4rs::{append::{console::ConsoleAppender, file::FileAppender}, encode::json::JsonEncoder, config::{Appender, Root}};
 use socket2::{Socket, Domain, Type};
 use tokio::{net::{TcpListener, UdpSocket}};
 use webparse::{BinaryMut, Buf, http2::frame::read_u24};
 
-use crate::{ProxyResult, prot::{ProtFrame, ProtFrameHeader}};
+use crate::{ProxyResult, prot::{ProtFrame, ProtFrameHeader}, ConfigOption};
 
 pub struct Helper;
 
@@ -96,6 +98,28 @@ impl Helper {
                 "could not resolve to any address",
             )
         }))
+    }
+
+    pub fn try_init_log(option: &ConfigOption) {
+        let log_names = option.get_log_names();
+        let mut log_config = log4rs::config::Config::builder();
+        let mut root = Root::builder();
+        for (name, path) in log_names {
+            let appender = FileAppender::builder().build(path).unwrap();
+            if name == "default" {
+                root = root.appender(name.clone());
+            }
+            log_config = log_config.appender(Appender::builder().build(name, Box::new(appender)));
+            
+        }
+        if !option.disable_stdout {
+            let stdout: ConsoleAppender = ConsoleAppender::builder().build();
+            log_config = log_config.appender(Appender::builder().build("stdout", Box::new(stdout)));
+            root = root.appender("stdout");
+        }
+
+        let log_config = log_config.build(root.build(LevelFilter::Info)).unwrap();
+        log4rs::init_config(log_config).unwrap();
     }
 
     // pub async fn udp_recv_from(socket: &UdpSocket, buf: &mut [u8]) -> io::Result<usize> {

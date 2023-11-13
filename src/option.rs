@@ -4,7 +4,7 @@ use std::{
     net::{IpAddr, SocketAddr},
     path::PathBuf,
     sync::Arc,
-    time::Duration, collections::HashSet,
+    time::Duration, collections::{HashSet, HashMap},
 };
 
 use commander::Commander;
@@ -274,6 +274,8 @@ pub struct ConfigOption {
     pub(crate) stream: Option<StreamConfig>,
     #[serde(default="default_control_port")]
     pub(crate) control: SocketAddr,
+    #[serde(default)]
+    pub(crate) disable_stdout: bool,
 }
 
 impl Default for ProxyConfig {
@@ -640,6 +642,7 @@ impl ConfigOption {
             http: None,
             stream: None,
             control: default_control_port(),
+            disable_stdout: false,
         })
     }
 
@@ -686,5 +689,13 @@ impl ConfigOption {
         }
 
         result
+    }
+
+    pub fn get_log_names(&self) -> HashMap<String, String> {
+        let mut names = HashMap::new();
+        if let Some(http) = &self.http {
+            http.get_log_names(&mut names);
+        }
+        names
     }
 }

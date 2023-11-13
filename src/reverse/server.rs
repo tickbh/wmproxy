@@ -1,4 +1,4 @@
-use std::{net::SocketAddr, time::{Duration}};
+use std::{net::SocketAddr, time::{Duration}, collections::HashMap};
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 use crate::ConfigDuration;
@@ -53,6 +53,14 @@ impl ServerConfig {
                     file_server.set_common(l.comm.clone());
                 }
             }
+        }
+    }
+
+    
+    pub fn get_log_names(&self, names: &mut HashMap<String, String>)  {
+        self.comm.get_log_names(names);
+        for l in &self.location {
+            l.get_log_names(names);
         }
     }
 }
