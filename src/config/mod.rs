@@ -1,12 +1,13 @@
 
 mod size;
 mod duration;
+mod log;
 
 use std::{str::FromStr, fmt::{Display, self}, marker::PhantomData};
 
 pub use self::size::ConfigSize;
 pub use self::duration::ConfigDuration;
-
+pub use self::log::ConfigLog;
 
 use serde::{Serializer, Deserializer, de::{Visitor, Error, self}};
 use serde_with::{SerializeAs, DeserializeAs};
@@ -53,6 +54,7 @@ where
                 value.parse::<Self::Value>().map_err(de::Error::custom)
             }
 
+            /// 将数字转成字符串从而能调用FromStr函数
             fn visit_i64<E>(self, v: i64) -> Result<Self::Value, E>
                 where
                     E: Error, {

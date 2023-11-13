@@ -47,6 +47,7 @@ pub struct HttpConfig {
     #[serde(default = "Vec::new")]
     pub upstream: Vec<UpstreamConfig>,
 
+
     #[serde(flatten)]
     #[serde(default = "CommonConfig::new")]
     pub comm: CommonConfig,

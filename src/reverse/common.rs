@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::ConfigDuration;
 use crate::{ConfigSize, DisplayFromStrOrNumber};
 use serde::{Deserialize, Serialize};
@@ -31,6 +33,12 @@ pub struct CommonConfig {
     pub proxy_write_timeout: Option<ConfigDuration>,
     #[serde_as(as = "Option<DisplayFromStrOrNumber>")]
     pub proxy_timeout: Option<ConfigDuration>,
+
+    #[serde(default = "HashMap::new")]
+    pub log_format: HashMap<String, String>,
+    #[serde(default = "HashMap::new")]
+    pub log_names: HashMap<String, String>,
+    
 }
 
 impl CommonConfig {
@@ -49,6 +57,9 @@ impl CommonConfig {
             proxy_timeout: None,
             proxy_read_timeout: None,
             proxy_write_timeout: None,
+
+            log_format: HashMap::new(),
+            log_names: HashMap::new(),
         }
     }
 
