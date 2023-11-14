@@ -1,4 +1,4 @@
-use std::{io, net::ToSocketAddrs, collections::HashMap};
+use std::{io, net::ToSocketAddrs, collections::HashMap, cell::RefCell, sync::Arc};
 
 use log::{LevelFilter, Record, Level, log_enabled};
 use log4rs::{append::{console::ConsoleAppender, file::FileAppender}, encode::json::JsonEncoder, config::{Appender, Root, Logger}};
@@ -6,9 +6,11 @@ use socket2::{Socket, Domain, Type};
 use tokio::{net::{TcpListener, UdpSocket}};
 use webparse::{BinaryMut, Buf, http2::frame::read_u24, Request};
 use wenmeng::RecvStream;
-
 use crate::{ProxyResult, prot::{ProtFrame, ProtFrameHeader}, ConfigOption, ConfigLog, log::{PatternEncoder, writer::simple::SimpleWriter, Encode, ProxyRecord}};
 
+thread_local! {
+    static FORMAT_PATTERN_CACHE: RefCell<HashMap<&'static str, Arc<PatternEncoder>>> = RefCell::new(HashMap::new());
+}
 pub struct Helper;
 
 impl Helper {
@@ -106,7 +108,7 @@ impl Helper {
         let mut log_config = log4rs::config::Config::builder();
         let mut root = Root::builder();
         for (name, path) in log_names {
-            let appender = FileAppender::builder().build(path).unwrap();
+            let appender = FileAppender::builder().encoder(Box::new(log4rs::encode::pattern::PatternEncoder::new("{d(%Y-%m-%d %H:%M:%S)} {m}{n}"))).build(path).unwrap();
             if name == "default" {
                 root = root.appender(name.clone());
             }
@@ -126,8 +128,16 @@ impl Helper {
     pub fn log_acess(log_formats: &HashMap<String, String>, access: &Option<ConfigLog>, req: &Request<RecvStream>) {
         if let Some(access) = access {
             if let Some(formats) = log_formats.get(&access.format) {
-                    if log_enabled!(target: &access.name, log::Level::Info) {
-                    let pw = PatternEncoder::new(formats);
+                if log_enabled!(target: &access.name, log::Level::Info) {
+                    
+                    let pw = FORMAT_PATTERN_CACHE.with(|m| {
+                        if !m.borrow().contains_key(&**formats) {
+                            let p = PatternEncoder::new(formats);
+                            m.borrow_mut().insert(Box::leak(formats.clone().into_boxed_str()), Arc::new(p));
+                        }
+                        m.borrow()[&**formats].clone()
+                    });
+                    
                     let record = ProxyRecord::new_req(Record::builder().level(Level::Info).build(), req);
                     let mut buf = vec![];
                     pw.encode(

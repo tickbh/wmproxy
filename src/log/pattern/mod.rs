@@ -497,6 +497,22 @@ impl<'a> From<Piece<'a>> for Chunk {
                     }
                 }
                 "client_ip" => no_args(&formatter.args, parameters, FormattedChunk::ClientIp),
+                "client_user" => no_args(&formatter.args, parameters, FormattedChunk::ClientUser),
+                "url" => no_args(&formatter.args, parameters, FormattedChunk::Url),
+                "path" => no_args(&formatter.args, parameters, FormattedChunk::Path),
+                "query" => no_args(&formatter.args, parameters, FormattedChunk::Query),
+                "host" => no_args(&formatter.args, parameters, FormattedChunk::Host),
+                "status" => no_args(&formatter.args, parameters, FormattedChunk::Status),
+                "up_status" => no_args(&formatter.args, parameters, FormattedChunk::UpstreamStatus),
+                "body_bytes_sent" => no_args(&formatter.args, parameters, FormattedChunk::BodyBytesSent),
+                "referer" => no_args(&formatter.args, parameters, FormattedChunk::Referer),
+                "user_agent" => no_args(&formatter.args, parameters, FormattedChunk::UserAgent),
+                "cookie" => no_args(&formatter.args, parameters, FormattedChunk::Cookie),
+                "ssl_protocol" => no_args(&formatter.args, parameters, FormattedChunk::SslProtocol),
+                "ssl_cipher" => no_args(&formatter.args, parameters, FormattedChunk::SslCipher),
+                "up_addr" => no_args(&formatter.args, parameters, FormattedChunk::UpstreamAddr),
+                "request_time" => no_args(&formatter.args, parameters, FormattedChunk::RequestTime),
+                "up_response_time" => no_args(&formatter.args, parameters, FormattedChunk::UpstreamResponseTime),
 
                 "" => {
                     if formatter.args.len() != 1 {
@@ -556,17 +572,19 @@ enum FormattedChunk {
 
     /// for request or response
     ClientIp,
-    RemoteUser,
-    Request,
-    HttpHost,
+    ClientUser,
+    Url,
+    Path,
+    Query,
+    Host,
     Status,
-    UpstreamStatus,
-    BodyBytesSent,
-    HttpReferer,
-    HttpUserAgent,
-    HttpCookie,
+    Referer,
+    UserAgent,
+    Cookie,
     SslProtocol,
     SslCipher,
+    UpstreamStatus,
+    BodyBytesSent,
     UpstreamAddr,
     RequestTime,
     UpstreamResponseTime,
@@ -630,12 +648,75 @@ impl FormattedChunk {
             }
             FormattedChunk::ClientIp => {
                 if let Some(req) = record.req {
-                    if let Some(client_ip) = req.headers().system_get(&"$client_ip".to_string()) {
+                    if let Some(client_ip) = req.headers().system_get(&"{client_ip}".to_string()) {
                         w.write(client_ip.as_bytes())?;
                     } else {
                         w.write("unknow".as_bytes())?;
                     };
                 }
+                Ok(())
+            }
+            FormattedChunk::ClientUser => {
+                Ok(())
+            }
+            FormattedChunk::Url => {
+                if let Some(req) = record.req {
+                    w.write_fmt(format_args!("{}", req.url()))?;
+                }
+                Ok(())
+            }
+            FormattedChunk::Path => {
+                if let Some(req) = record.req {
+                    w.write_fmt(format_args!("{}", req.url().path))?;
+                }
+                Ok(())
+            }
+            FormattedChunk::Query => {
+                if let Some(req) = record.req {
+                    w.write_fmt(format_args!("{}", req.url().query.as_ref().unwrap_or(&String::new())))?;
+                }
+                Ok(())
+            }
+            FormattedChunk::Host => {
+                if let Some(req) = record.req {
+                    w.write_fmt(format_args!("{}", req.get_host().unwrap_or(String::new())))?;
+                }
+                Ok(())
+            }
+            FormattedChunk::Referer => {
+                if let Some(req) = record.req {
+                    w.write_fmt(format_args!("{}", req.get_referer().unwrap_or(String::new())))?;
+                }
+                Ok(())
+            }
+            FormattedChunk::UserAgent => {
+                if let Some(req) = record.req {
+                    w.write_fmt(format_args!("{}", req.get_user_agent().unwrap_or(String::new())))?;
+                }
+                Ok(())
+            }
+            FormattedChunk::Cookie => {
+                if let Some(req) = record.req {
+                    w.write_fmt(format_args!("{}", req.get_cookie().unwrap_or(String::new())))?;
+                }
+                Ok(())
+            }
+            FormattedChunk::Status => {
+                if let Some(res) = record.res {
+                    w.write_fmt(format_args!("{}", res.status()))?;
+                }
+                Ok(())
+            }
+            FormattedChunk::UpstreamStatus => {
+                // if let Some(res) = record.res {
+                //     w.write_fmt(format_args!("{}", res.status()))?;
+                // }
+                Ok(())
+            }
+            FormattedChunk::BodyBytesSent => {
+                // if let Some(res) = record.res {
+                //     w.write_fmt(format_args!("{}", res.status()))?;
+                // }
                 Ok(())
             }
             _ => {

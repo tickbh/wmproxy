@@ -16,8 +16,8 @@ proxy:
       local_addr: 127.0.0.1:8080
       domain: localhost
       headers:
-        - [proxy, +, x-forward-for, $client_ip]
-        - [proxy, +, from, $url]
+        - [proxy, +, x-forward-for, "{client_ip}"]
+        - [proxy, +, from, "{url}"]
         - [+, key, value]
         - [-, etag]
         - [+, last-modified, aaaa]

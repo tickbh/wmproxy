@@ -215,7 +215,7 @@ impl FileServer {
         req: Request<RecvStream>,
     ) -> ProtResult<Response<RecvStream>> {
         Helper::log_acess(&self.comm.log_format, &self.comm.access_log, &req);
-        let path = req.path().clone();
+        let path = req.url().path.clone();
         // 无效前缀，无法处理
         if !path.starts_with(&self.prefix) {
             return Ok(self.ret_error_msg("unknow path"));

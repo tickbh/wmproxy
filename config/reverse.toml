@@ -13,7 +13,7 @@ access_log = "access main"
 error_log = "access main"
 
 [http.log_format]
-main = "{d(%Y-%m-%d %H:%M:%S)} {client_ip} {l}"
+main = "{d(%Y-%m-%d %H:%M:%S)} {client_ip} {l} {url} path:{path} query:{query} host:{host} {status} {up_status} {referer} {user_agent} {cookie}"
 debug = "$client_addr"
 
 [http.log_names]
@@ -43,7 +43,7 @@ root=""
 
 # 请求头返回头相应的处理，如有proxy则为请求头处理，+表示添加，-表示删除，其它表示设置
 headers = [
-  ["proxy", "x-forward-for", "$client_ip"],
+  ["proxy", "x-forward-for", "{client_ip}"],
   ["+", "last-modified", "from proxy"]
 ]
 
