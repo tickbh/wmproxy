@@ -9,11 +9,11 @@ flag = 7
 aa = "b"
 
 max_read_buf = 1024000
-access_log = "acess main"
-error_log = "acess main"
+access_log = "access main"
+error_log = "access main"
 
 [http.log_format]
-main = "xxx"
+main = "{d(%Y-%m-%d %H:%M:%S)} {client_ip} {l}"
 debug = "$client_addr"
 
 [http.log_names]

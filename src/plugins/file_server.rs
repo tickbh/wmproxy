@@ -7,6 +7,7 @@ use std::path::{Path};
 use tokio::fs::File;
 use webparse::{BinaryMut, Buf, HeaderName, Request, Response};
 
+use crate::Helper;
 use crate::plugins::calc_file_size;
 use crate::reverse::CommonConfig;
 
@@ -213,6 +214,7 @@ impl FileServer {
         &self,
         req: Request<RecvStream>,
     ) -> ProtResult<Response<RecvStream>> {
+        Helper::log_acess(&self.comm.log_format, &self.comm.access_log, &req);
         let path = req.path().clone();
         // 无效前缀，无法处理
         if !path.starts_with(&self.prefix) {

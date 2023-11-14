@@ -1,12 +1,13 @@
-use std::{io, net::ToSocketAddrs};
+use std::{io, net::ToSocketAddrs, collections::HashMap};
 
-use log::LevelFilter;
-use log4rs::{append::{console::ConsoleAppender, file::FileAppender}, encode::json::JsonEncoder, config::{Appender, Root}};
+use log::{LevelFilter, Record, Level, log_enabled};
+use log4rs::{append::{console::ConsoleAppender, file::FileAppender}, encode::json::JsonEncoder, config::{Appender, Root, Logger}};
 use socket2::{Socket, Domain, Type};
 use tokio::{net::{TcpListener, UdpSocket}};
-use webparse::{BinaryMut, Buf, http2::frame::read_u24};
+use webparse::{BinaryMut, Buf, http2::frame::read_u24, Request};
+use wenmeng::RecvStream;
 
-use crate::{ProxyResult, prot::{ProtFrame, ProtFrameHeader}, ConfigOption};
+use crate::{ProxyResult, prot::{ProtFrame, ProtFrameHeader}, ConfigOption, ConfigLog, log::{PatternEncoder, writer::simple::SimpleWriter, Encode, ProxyRecord}};
 
 pub struct Helper;
 
@@ -109,8 +110,8 @@ impl Helper {
             if name == "default" {
                 root = root.appender(name.clone());
             }
-            log_config = log_config.appender(Appender::builder().build(name, Box::new(appender)));
-            
+            log_config = log_config.appender(Appender::builder().build(name.clone(), Box::new(appender)));
+            log_config = log_config.logger(Logger::builder().appender(name.clone()).additive(false).build(name.clone(), LevelFilter::Info));
         }
         if !option.disable_stdout {
             let stdout: ConsoleAppender = ConsoleAppender::builder().build();
@@ -120,6 +121,24 @@ impl Helper {
 
         let log_config = log_config.build(root.build(LevelFilter::Info)).unwrap();
         log4rs::init_config(log_config).unwrap();
+    }
+
+    pub fn log_acess(log_formats: &HashMap<String, String>, access: &Option<ConfigLog>, req: &Request<RecvStream>) {
+        if let Some(access) = access {
+            if let Some(formats) = log_formats.get(&access.format) {
+                    if log_enabled!(target: &access.name, log::Level::Info) {
+                    let pw = PatternEncoder::new(formats);
+                    let record = ProxyRecord::new_req(Record::builder().level(Level::Info).build(), req);
+                    let mut buf = vec![];
+                    pw.encode(
+                        &mut SimpleWriter(&mut buf),
+                        &record,
+                    )
+                    .unwrap();
+                    log::info!(target: &access.name, "{}", String::from_utf8_lossy(&buf[..]));
+                }
+            }
+        }
     }
 
     // pub async fn udp_recv_from(socket: &UdpSocket, buf: &mut [u8]) -> io::Result<usize> {

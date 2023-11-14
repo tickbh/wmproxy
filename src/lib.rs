@@ -16,6 +16,7 @@ mod reverse;
 mod control;
 mod config;
 mod plugins;
+pub mod log;
 
 pub use error::{ProxyResult, ProxyError};
 pub use flag::Flag;
