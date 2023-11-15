@@ -161,7 +161,7 @@ impl ControlServer {
                     tokio::spawn(async move {
                         let mut server = Server::new_data(conn, Some(addr), cc);
                         if let Err(e) = server.incoming(Self::operate).await {
-                            log::info!("反向代理：处理信息时发生错误：{:?}", e);
+                            log::info!("控制中心：处理信息时发生错误：{:?}", e);
                         }
                     });
                     let value = &mut control.lock().await;

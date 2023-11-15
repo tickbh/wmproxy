@@ -301,7 +301,6 @@ impl FileServer {
                         );
                     }
                     op_ref.put_slice("</tr>".as_bytes());
-                    println!("{:?}", entry.path());
                 }
             }
             binary.put_slice(folder_binary.chunk());
@@ -359,7 +358,6 @@ impl FileServer {
                     };
                     // 如果预压缩文件存在
                     if new.exists() {
-                        println!("convert to new file {}", new.to_string_lossy());
                         let file = File::open(new).await?;
                         let data_size = file.metadata().await?.len();
                         let mut recv = RecvStream::new_file(file, data_size);

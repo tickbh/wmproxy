@@ -212,18 +212,17 @@ impl HttpConfig {
                         if cache.contains_key(&clone) {
                             let mut cache_client = cache.remove(&clone).unwrap();
                             if !cache_client.0.is_closed() {
-                                let send = cache_client.0.send(req).await;
-                                println!("send request = {:?}", send);
+                                let _send = cache_client.0.send(req).await;
                                 match cache_client.1.recv().await {
                                     Some(res) => {
                                         if res.is_ok() {
-                                            println!("cache client receive  response");
+                                            log::trace!("cache client receive  response");
                                             cache.insert(clone, cache_client);
                                         }
                                         return res;
                                     }
                                     None => {
-                                        println!("cache client close response");
+                                        log::trace!("cache client close response");
                                         return Ok(Response::status503()
                                             .body("already lose connection")
                                             .unwrap()
@@ -272,7 +271,7 @@ impl HttpConfig {
                 Ok(value)
             }
             Err(e) => {
-                println!("e === {:?}", e);
+                log::trace!("处理HTTP服务发生错误: {:?}", e);
                 let (is_timeout, is_client) = e.is_read_timeout();
                 if is_timeout && !is_client {
                     Ok(Response::text().status(408).body("operate timeout")?.into_type())
@@ -310,7 +309,9 @@ impl HttpConfig {
                 .timeout_layer(timeout)
                 .stream_data(inbound, Arc::new(Mutex::new(oper)));
             if let Err(e) = server.incoming(Self::operate).await {
-                log::info!("反向代理：处理信息时发生错误：{:?}", e);
+                if e.is_io() {
+                    log::info!("反向代理：处理信息时发生错误：{:?}", e);
+                }
             }
         });
         Ok(())

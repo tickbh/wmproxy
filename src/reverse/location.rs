@@ -137,7 +137,6 @@ impl LocationConfig {
         if proxy_timeout.is_some() {
             connect_timeout = proxy_timeout.as_ref().unwrap().connect_timeout.clone();
         }
-        println!("timeout = {:?}", connect_timeout);
         let stream = match url.get_connect_url() {
             Some(connect) => HealthCheck::connect_timeout(&connect, connect_timeout).await?,
             None => {
