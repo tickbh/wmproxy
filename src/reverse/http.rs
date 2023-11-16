@@ -63,9 +63,11 @@ impl HttpConfig {
 
     /// 将配置参数提前共享给子级
     pub fn copy_to_child(&mut self) {
+        self.comm.pre_deal();
         for server in &mut self.server {
             server.upstream.append(&mut self.upstream.clone());
             server.comm.copy_from_parent(&self.comm);
+            server.comm.pre_deal();
             server.copy_to_child();
         }
     }
@@ -309,7 +311,7 @@ impl HttpConfig {
                 .timeout_layer(timeout)
                 .stream_data(inbound, Arc::new(Mutex::new(oper)));
             if let Err(e) = server.incoming(Self::operate).await {
-                if e.is_io() {
+                if !e.is_io() {
                     log::info!("反向代理：处理信息时发生错误：{:?}", e);
                 }
             }

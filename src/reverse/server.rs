@@ -38,6 +38,7 @@ impl ServerConfig {
     pub fn copy_to_child(&mut self) {
         for l in &mut self.location {
             l.comm.copy_from_parent(&self.comm);
+            l.comm.pre_deal();
             l.server_name = Some(self.server_name.clone());
             l.upstream.append(&mut self.upstream.clone());
             l.headers.append(&mut self.headers.clone());

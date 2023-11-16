@@ -106,6 +106,12 @@ impl CommonConfig {
         }
     }
 
+    pub fn pre_deal(&mut self) {
+        if let Some(err) = &mut self.error_log {
+            err.as_error();
+        }
+    }
+
     pub fn get_rate_limit(&self) -> Option<RateLimitLayer> {
         if self.rate_limit_nums.is_some() && self.rate_limit_per.is_some() {
             return Some(RateLimitLayer::new(self.rate_limit_nums.clone().unwrap().0, self.rate_limit_per.clone().unwrap().into()));

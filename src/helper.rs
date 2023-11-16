@@ -1,5 +1,6 @@
-use std::{io, net::ToSocketAddrs, collections::HashMap, cell::RefCell, sync::Arc};
+use std::{io, net::ToSocketAddrs, collections::HashMap, cell::RefCell, sync::{Arc, Mutex}, str::FromStr};
 
+use lazy_static::lazy_static;
 use log::{LevelFilter, Record, Level, log_enabled};
 use log4rs::{append::{console::ConsoleAppender, file::FileAppender}, encode::json::JsonEncoder, config::{Appender, Root, Logger}};
 use socket2::{Socket, Domain, Type};
@@ -11,6 +12,12 @@ use crate::{ProxyResult, prot::{ProtFrame, ProtFrameHeader}, ConfigOption, Confi
 thread_local! {
     static FORMAT_PATTERN_CACHE: RefCell<HashMap<&'static str, Arc<PatternEncoder>>> = RefCell::new(HashMap::new());
 }
+
+lazy_static! {
+    static ref LOG4RS_HANDLE: Mutex<Option<log4rs::Handle>> = Mutex::new(None);
+}
+
+
 pub struct Helper;
 
 impl Helper {
@@ -108,13 +115,22 @@ impl Helper {
         let mut log_config = log4rs::config::Config::builder();
         let mut root = Root::builder();
         for (name, path) in log_names {
+            let (path, level) = {
+                let vals: Vec<&str> = path.split(' ').collect();
+                if vals.len() == 1 {
+                    (path, Level::Info)
+                } else {
+                    (vals[0].to_string(), Level::from_str(vals[1]).ok().unwrap_or(Level::Info))
+                }
+            };
             let appender = FileAppender::builder().encoder(Box::new(log4rs::encode::pattern::PatternEncoder::new("{d(%Y-%m-%d %H:%M:%S)} {m}{n}"))).build(path).unwrap();
             if name == "default" {
                 root = root.appender(name.clone());
             }
             log_config = log_config.appender(Appender::builder().build(name.clone(), Box::new(appender)));
-            log_config = log_config.logger(Logger::builder().appender(name.clone()).additive(false).build(name.clone(), LevelFilter::Info));
+            log_config = log_config.logger(Logger::builder().appender(name.clone()).additive(false).build(name.clone(), level.to_level_filter()));
         }
+        
         if !option.disable_stdout {
             let stdout: ConsoleAppender = ConsoleAppender::builder().build();
             log_config = log_config.appender(Appender::builder().build("stdout", Box::new(stdout)));
@@ -122,14 +138,23 @@ impl Helper {
         }
 
         let log_config = log_config.build(root.build(LevelFilter::Info)).unwrap();
-        log4rs::init_config(log_config).unwrap();
+        if LOG4RS_HANDLE.lock().unwrap().is_some() {
+            LOG4RS_HANDLE.lock().unwrap().as_mut().unwrap().set_config(log_config);
+        } else {
+            let handle = log4rs::init_config(log_config).unwrap();
+            *LOG4RS_HANDLE.lock().unwrap() = Some(handle);
+        }
     }
 
     pub fn log_acess(log_formats: &HashMap<String, String>, access: &Option<ConfigLog>, req: &Request<RecvStream>) {
         if let Some(access) = access {
             if let Some(formats) = log_formats.get(&access.format) {
-                if log_enabled!(target: &access.name, log::Level::Info) {
-                    
+                log::error!(target: &access.name, "this is error");
+                log::warn!(target: &access.name, "this is warn");
+                log::info!(target: &access.name, "this is info");
+                log::debug!(target: &access.name, "this is debug");
+                log::trace!(target: &access.name, "this is trace");
+                if log_enabled!(target: &access.name, access.level) {
                     let pw = FORMAT_PATTERN_CACHE.with(|m| {
                         if !m.borrow().contains_key(&**formats) {
                             let p = PatternEncoder::new(formats);
@@ -145,7 +170,14 @@ impl Helper {
                         &record,
                     )
                     .unwrap();
-                    log::info!(target: &access.name, "{}", String::from_utf8_lossy(&buf[..]));
+                    match access.level {
+                        Level::Error => log::error!(target: &access.name, "{}", String::from_utf8_lossy(&buf[..])),
+                        Level::Warn => log::warn!(target: &access.name, "{}", String::from_utf8_lossy(&buf[..])),
+                        Level::Info => log::info!(target: &access.name, "{}", String::from_utf8_lossy(&buf[..])),
+                        Level::Debug => log::debug!(target: &access.name, "{}", String::from_utf8_lossy(&buf[..])),
+                        Level::Trace => log::trace!(target: &access.name, "{}", String::from_utf8_lossy(&buf[..])),
+                    };
+                    
                 }
             }
         }

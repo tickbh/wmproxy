@@ -8,8 +8,6 @@ use log4rs::{
     encode::json::JsonEncoder,
 };
 
-
-
 async fn run_main() -> ProxyResult<()> {
     // let stdout: ConsoleAppender = ConsoleAppender::builder()
     // .encoder(Box::new(JsonEncoder::new()))
