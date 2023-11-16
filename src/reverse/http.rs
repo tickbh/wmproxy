@@ -27,8 +27,13 @@ use super::{common::CommonConfig, LocationConfig, ServerConfig, UpstreamConfig};
 
 struct InnerHttpOper {
     pub servers: Vec<Arc<ServerConfig>>,
-    pub cache_sender:
-        HashMap<LocationConfig, (Sender<Request<RecvStream>>, Receiver<ProtResult<Response<RecvStream>>>)>,
+    pub cache_sender: HashMap<
+        LocationConfig,
+        (
+            Sender<Request<RecvStream>>,
+            Receiver<ProtResult<Response<RecvStream>>>,
+        ),
+    >,
 }
 
 impl InnerHttpOper {
@@ -157,48 +162,14 @@ impl HttpConfig {
         Ok((Some(TlsAcceptor::from(Arc::new(config))), tlss, listeners))
     }
 
-    // async fn inner_http_request(
-    //     http: &HttpConfig,
-    //     req: Request<RecvStream>,
-    // ) -> ProtResult<(
-    //     Response<RecvStream>,
-    //     Option<Sender<Request<RecvStream>>>,
-    //     Option<Receiver<Response<RecvStream>>>,
-    // )> {
-    //     let http = value.http.lock().await;
-    //     let server_len = http.server.len();
-    //     let host = req.get_host().unwrap_or(String::new());
-    //     // 不管有没有匹配, 都执行最后一个
-    //     for (index, s) in http.server.iter().enumerate() {
-    //         if s.server_name == host || host.is_empty() || index == server_len - 1 {
-    //             let path = req.path().clone();
-    //             for l in s.location.iter() {
-    //                 if l.is_match_rule(&path, req.method()) {
-    //                     let (res, sender, receiver) = l.deal_request(req).await?;
-    //                     value.sender = sender;
-    //                     value.receiver = receiver;
-    //                     return Ok(res);
-    //                 }
-    //             }
-    //             return Ok(Response::builder()
-    //                 .status(503)
-    //                 .body("unknow location to deal")
-    //                 .unwrap()
-    //                 .into_type());
-    //         }
-    //     }
-    //     return Ok(Response::builder()
-    //         .status(503)
-    //         .body("unknow location")
-    //         .unwrap()
-    //         .into_type());
-    // }
-
     async fn inner_operate_by_http(
         req: Request<RecvStream>,
         cache: &mut HashMap<
             LocationConfig,
-            (Sender<Request<RecvStream>>, Receiver<ProtResult<Response<RecvStream>>>),
+            (
+                Sender<Request<RecvStream>>,
+                Receiver<ProtResult<Response<RecvStream>>>,
+            ),
         >,
         servers: Vec<Arc<ServerConfig>>,
     ) -> ProtResult<Response<RecvStream>> {
@@ -262,7 +233,6 @@ impl HttpConfig {
         let mut value = data.lock().await;
         let servers = value.servers.clone();
         return Self::inner_operate_by_http(req, &mut value.cache_sender, servers).await;
-        
     }
 
     async fn operate(req: Request<RecvStream>) -> ProtResult<Response<RecvStream>> {
@@ -276,9 +246,14 @@ impl HttpConfig {
                 log::trace!("处理HTTP服务发生错误: {:?}", e);
                 let (is_timeout, is_client) = e.is_read_timeout();
                 if is_timeout && !is_client {
-                    Ok(Response::text().status(408).body("operate timeout")?.into_type())
+                    Ok(Response::text()
+                        .status(408)
+                        .body("operate timeout")?
+                        .into_type())
                 } else {
-                    Ok(Response::status500().body("server inner error")?.into_type())
+                    Ok(Response::status500()
+                        .body("server inner error")?
+                        .into_type())
                 }
             }
         }
@@ -311,15 +286,19 @@ impl HttpConfig {
                 .timeout_layer(timeout)
                 .stream_data(inbound, Arc::new(Mutex::new(oper)));
             if let Err(e) = server.incoming(Self::operate).await {
-                if !e.is_io() {
-                    log::info!("反向代理：处理信息时发生错误：{:?}", e);
+                if server.get_req_num() == 0 {
+                    log::info!("反向代理：未处理任何请求时发生错误：{:?}", e);
+                } else {
+                    if !e.is_io() {
+                        log::info!("反向代理：处理信息时发生错误：{:?}", e);
+                    }
                 }
             }
         });
         Ok(())
     }
-    
-    pub fn get_log_names(&self, names: &mut HashMap<String, String>)  {
+
+    pub fn get_log_names(&self, names: &mut HashMap<String, String>) {
         self.comm.get_log_names(names);
         for s in &self.server {
             s.get_log_names(names);

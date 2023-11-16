@@ -9,15 +9,14 @@ flag = 7
 aa = "b"
 
 max_read_buf = 1024000
-access_log = "access main debug"
-error_log = "access debug"
+access_log = "access main trace"
+error_log = "error debug"
 
 [http.log_format]
-main = "{d(%Y-%m-%d %H:%M:%S)} {client_ip} {l} {url} path:{path} query:{query} host:{host} {status} {up_status} {referer} {user_agent} {cookie}"
-debug = "$client_addr"
+main = "{d(%Y-%m-%d %H:%M:%S)} {client_ip} {l} {url} path:{path} query:{query} host:{host} status: {status} {up_status} referer: {referer} user_agent: {user_agent} cookie: {cookie}"
 
 [http.log_names]
-access = "logs/access.log info"
+access = "logs/access.log trace"
 error = "logs/error.log"
 default = "logs/default.log"
 

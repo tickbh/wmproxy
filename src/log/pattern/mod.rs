@@ -651,7 +651,7 @@ impl FormattedChunk {
                     if let Some(client_ip) = req.headers().system_get(&"{client_ip}".to_string()) {
                         w.write(client_ip.as_bytes())?;
                     } else {
-                        w.write("unknow".as_bytes())?;
+                        w.write("???".as_bytes())?;
                     };
                 }
                 Ok(())
@@ -662,48 +662,64 @@ impl FormattedChunk {
             FormattedChunk::Url => {
                 if let Some(req) = record.req {
                     w.write_fmt(format_args!("{}", req.url()))?;
+                } else {
+                    w.write("???".as_bytes())?;
                 }
                 Ok(())
             }
             FormattedChunk::Path => {
                 if let Some(req) = record.req {
                     w.write_fmt(format_args!("{}", req.url().path))?;
+                } else {
+                    w.write("???".as_bytes())?;
                 }
                 Ok(())
             }
             FormattedChunk::Query => {
                 if let Some(req) = record.req {
                     w.write_fmt(format_args!("{}", req.url().query.as_ref().unwrap_or(&String::new())))?;
+                } else {
+                    w.write("???".as_bytes())?;
                 }
                 Ok(())
             }
             FormattedChunk::Host => {
                 if let Some(req) = record.req {
                     w.write_fmt(format_args!("{}", req.get_host().unwrap_or(String::new())))?;
+                } else {
+                    w.write("???".as_bytes())?;
                 }
                 Ok(())
             }
             FormattedChunk::Referer => {
                 if let Some(req) = record.req {
                     w.write_fmt(format_args!("{}", req.get_referer().unwrap_or(String::new())))?;
+                } else {
+                    w.write("???".as_bytes())?;
                 }
                 Ok(())
             }
             FormattedChunk::UserAgent => {
                 if let Some(req) = record.req {
                     w.write_fmt(format_args!("{}", req.get_user_agent().unwrap_or(String::new())))?;
+                } else {
+                    w.write("???".as_bytes())?;
                 }
                 Ok(())
             }
             FormattedChunk::Cookie => {
                 if let Some(req) = record.req {
                     w.write_fmt(format_args!("{}", req.get_cookie().unwrap_or(String::new())))?;
+                } else {
+                    w.write("???".as_bytes())?;
                 }
                 Ok(())
             }
             FormattedChunk::Status => {
                 if let Some(res) = record.res {
                     w.write_fmt(format_args!("{}", res.status()))?;
+                } else {
+                    w.write("???".as_bytes())?;
                 }
                 Ok(())
             }

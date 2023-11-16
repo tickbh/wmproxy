@@ -8,7 +8,7 @@ use tokio::{
 use webparse::{HeaderName, Method, Request, Response, Scheme, Url};
 use wenmeng::{Client, HeaderHelper, ProtError, ProtResult, RecvStream};
 
-use crate::{HealthCheck, FileServer};
+use crate::{HealthCheck, FileServer, Helper};
 
 use super::{ReverseHelper, UpstreamConfig, common::CommonConfig};
 
@@ -162,6 +162,7 @@ impl LocationConfig {
         Option<Sender<Request<RecvStream>>>,
         Option<Receiver<ProtResult<Response<RecvStream>>>>,
     )> {
+        Helper::log_acess(&self.comm.log_format, &self.comm.access_log, &req);
         if let Some(file_server) = &self.file_server {
             let res = file_server.deal_request(req).await?;
             return Ok((res, None, None));
