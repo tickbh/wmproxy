@@ -3,6 +3,7 @@ use std::{
     sync::Arc, fmt::Debug, net::SocketAddr,
 };
 
+use async_trait::async_trait;
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWrite},
     sync::{
@@ -13,9 +14,17 @@ use tokio::{
 use webparse::{
     Request, Response,
 };
-use wenmeng::{Client, ProtResult, RecvStream, Server, HeaderHelper, ProtError};
+use wenmeng::{Client, ProtResult, RecvStream, Server, HeaderHelper, ProtError, OperateTrait, RecvRequest, RecvResponse};
 
 use crate::{MappingConfig, ProtCreate, ProtFrame, ProxyError, VirtualStream};
+
+struct Operate;
+#[async_trait]
+impl OperateTrait for Operate {
+    async fn operate(&self, req: &mut RecvRequest) -> ProtResult<RecvResponse> {
+        TransHttp::operate(req).await
+    }
+}
 
 pub struct TransHttp {
     sender: Sender<ProtFrame>,
@@ -51,7 +60,7 @@ impl TransHttp {
     }
 
     async fn operate(
-        req: Request<RecvStream>
+        req: &mut Request<RecvStream>
     ) -> ProtResult<Response<RecvStream>> {
         let mut value = Self::inner_operate(req).await?;
         value.headers_mut().insert("server", "wmproxy");
@@ -59,7 +68,7 @@ impl TransHttp {
     }
 
     async fn inner_operate(
-        mut req: Request<RecvStream>
+        req: &mut Request<RecvStream>
     ) -> ProtResult<Response<RecvStream>> {
         let data = req.extensions_mut().remove::<Arc<Mutex<HttpOper>>>();
         if data.is_none() {
@@ -96,11 +105,11 @@ impl TransHttp {
 
         if let Some(config) = &value.http_map {
             // 复写Request的头文件信息
-            HeaderHelper::rewrite_request(&mut req, &config.headers);
+            HeaderHelper::rewrite_request(req, &config.headers);
         }
 
         // 将请求发送出去
-        value.sender.send(req).await?;
+        value.sender.send(req.replace_clone(RecvStream::empty())).await?;
         // 等待返回数据的到来
         let res = value.receiver.recv().await;
         if res.is_some() && res.as_ref().unwrap().is_ok() {
@@ -138,7 +147,7 @@ impl TransHttp {
         tokio::spawn( async move {
             let _ = client.wait_operate().await;
         });
-        if let Err(e) = server.incoming(Self::operate).await {
+        if let Err(e) = server.incoming(Operate).await {
             log::info!("处理内网穿透时发生错误：{:?}", e);
         };
         Ok(())

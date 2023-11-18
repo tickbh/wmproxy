@@ -7,6 +7,7 @@ use std::{
 };
 
 use crate::{Helper, ProxyResult};
+use async_trait::async_trait;
 use rustls::{
     server::ResolvesServerCertUsingSni,
     sign::{self, CertifiedKey},
@@ -21,9 +22,19 @@ use tokio::{
 };
 use tokio_rustls::TlsAcceptor;
 use webparse::{Request, Response};
-use wenmeng::{ProtError, ProtResult, RecvStream, Server};
+use wenmeng::{ProtError, ProtResult, RecvStream, Server, OperateTrait, RecvRequest, RecvResponse};
 
 use super::{common::CommonConfig, LocationConfig, ServerConfig, UpstreamConfig};
+
+
+struct Operate;
+#[async_trait]
+impl OperateTrait for Operate {
+    async fn operate(&self, req: &mut RecvRequest) -> ProtResult<RecvResponse> {
+        HttpConfig::operate(req).await
+    }
+}
+
 
 struct InnerHttpOper {
     pub servers: Vec<Arc<ServerConfig>>,
@@ -163,7 +174,7 @@ impl HttpConfig {
     }
 
     async fn inner_operate_by_http(
-        req: Request<RecvStream>,
+        req: &mut Request<RecvStream>,
         cache: &mut HashMap<
             LocationConfig,
             (
@@ -185,7 +196,7 @@ impl HttpConfig {
                         if cache.contains_key(&clone) {
                             let mut cache_client = cache.remove(&clone).unwrap();
                             if !cache_client.0.is_closed() {
-                                let _send = cache_client.0.send(req).await;
+                                let _send = cache_client.0.send(req.replace_clone(RecvStream::empty())).await;
                                 match cache_client.1.recv().await {
                                     Some(res) => {
                                         if res.is_ok() {
@@ -224,7 +235,7 @@ impl HttpConfig {
             .into_type());
     }
 
-    async fn inner_operate(mut req: Request<RecvStream>) -> ProtResult<Response<RecvStream>> {
+    async fn inner_operate(req: &mut Request<RecvStream>) -> ProtResult<Response<RecvStream>> {
         let data = req.extensions_mut().remove::<Arc<Mutex<InnerHttpOper>>>();
         if data.is_none() {
             return Err(ProtError::Extension("unknow data"));
@@ -235,7 +246,7 @@ impl HttpConfig {
         return Self::inner_operate_by_http(req, &mut value.cache_sender, servers).await;
     }
 
-    async fn operate(req: Request<RecvStream>) -> ProtResult<Response<RecvStream>> {
+    async fn operate(req: &mut Request<RecvStream>) -> ProtResult<Response<RecvStream>> {
         // body的内容可能重新解密又再重新再加过密, 后续可考虑直接做数据
         match Self::inner_operate(req).await {
             Ok(mut value) => {
@@ -285,7 +296,7 @@ impl HttpConfig {
                 .addr(addr)
                 .timeout_layer(timeout)
                 .stream_data(inbound, Arc::new(Mutex::new(oper)));
-            if let Err(e) = server.incoming(Self::operate).await {
+            if let Err(e) = server.incoming(Operate).await {
                 if server.get_req_num() == 0 {
                     log::info!("反向代理：未处理任何请求时发生错误：{:?}", e);
                 } else {

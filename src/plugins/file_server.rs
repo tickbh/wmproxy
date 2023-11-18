@@ -212,7 +212,7 @@ impl FileServer {
 
     pub async fn deal_request(
         &self,
-        req: Request<RecvStream>,
+        req: &mut Request<RecvStream>,
     ) -> ProtResult<Response<RecvStream>> {
         let path = req.url().path.clone();
         // 无效前缀，无法处理

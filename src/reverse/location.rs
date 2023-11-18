@@ -89,7 +89,7 @@ impl LocationConfig {
     }
 
     async fn deal_client<T>(
-        req: Request<RecvStream>,
+        req: &mut Request<RecvStream>,
         client: Client<T>,
     ) -> ProtResult<(
         Response<RecvStream>,
@@ -99,7 +99,7 @@ impl LocationConfig {
     where
         T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     {
-        let (mut recv, sender) = client.send2(req.into_type()).await?;
+        let (mut recv, sender) = client.send2(req.replace_clone(RecvStream::empty())).await?;
         match recv.recv().await {
             Some(res) => Ok((res?, Some(sender), Some(recv))),
             None => Err(ProtError::Extension("already close by other")),
@@ -108,7 +108,7 @@ impl LocationConfig {
 
     pub async fn deal_reverse_proxy(
         &self,
-        mut req: Request<RecvStream>,
+        req: &mut Request<RecvStream>,
         reverse: String,
     ) -> ProtResult<(
         Response<RecvStream>,
@@ -156,7 +156,7 @@ impl LocationConfig {
 
     pub async fn deal_request(
         &self,
-        req: Request<RecvStream>,
+        req: &mut Request<RecvStream>,
     ) -> ProtResult<(
         Response<RecvStream>,
         Option<Sender<Request<RecvStream>>>,

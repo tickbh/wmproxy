@@ -42,10 +42,7 @@ serde_with="3.4.0"
 serde_yaml = "0.9"
 serde_json = "1.0.107"
 toml = "0.8.2"
-# webparse = { version = "0.2.0"}
-# wenmeng={version="0.2.0"}
 lazy_static = "1.4.0"
-
 rand = "0.8.5"
 socket2 = "0.5.5"
 
@@ -53,6 +50,10 @@ log4rs="1.2.0"
 
 chrono = "0.4.31"
 
+async-trait = "0.1.74"
+
+# webparse = { version = "0.2.0"}
+# wenmeng={version="0.2.0"}
 [dependencies.webparse]
 path = "../webparse"
 

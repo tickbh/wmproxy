@@ -32,9 +32,9 @@ server = [
 [[http.server]]
 bind_addr = "0.0.0.0:82"
 server_name = "soft.wm-proxy.com"
-proxy_connect_timeout="1s"
-proxy_read_timeout="1ms"
-proxy_write_timeout="1ms"
+proxy_connect_timeout="10s"
+proxy_read_timeout="10s"
+proxy_write_timeout="10s"
 root=""
 # 若有匹配密钥则表示为SSL连接，反之则为http连接
 #cert="key/soft.wm-proxy.com.pem"

@@ -2,10 +2,10 @@
 
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use tokio::{sync::{mpsc::{Sender, channel, Receiver}, Mutex}, net::TcpListener};
 use webparse::{Request, Response, HeaderName};
-use wenmeng::{Server, RecvStream, ProtResult, ProtError};
-
+use wenmeng::{Server, RecvStream, ProtResult, ProtError, OperateTrait, RecvRequest, RecvResponse};
 use crate::{ConfigOption, Proxy, ProxyResult, Helper};
 
 /// 控制端，可以对配置进行热更新
@@ -20,6 +20,14 @@ pub struct ControlServer {
     control_receiver_close: Option<Receiver<()>>,
     /// 服务的引用计数
     count: i32,
+}
+
+struct Operate;
+#[async_trait]
+impl OperateTrait for Operate {
+    async fn operate(&self, req: &mut RecvRequest) -> ProtResult<RecvResponse> {
+        ControlServer::call_operate(req).await
+    }
 }
 
 impl ControlServer {
@@ -67,7 +75,7 @@ impl ControlServer {
         Ok(())
     }
 
-    async fn inner_operate(mut req: Request<RecvStream>) -> ProtResult<Response<RecvStream>> {
+    async fn inner_operate(req: &mut Request<RecvStream>) -> ProtResult<Response<RecvStream>> {
         let data = req.extensions_mut().remove::<Arc<Mutex<ControlServer>>>();
         if data.is_none() {
             return Err(ProtError::Extension("unknow data"));
@@ -127,7 +135,7 @@ impl ControlServer {
             .into_type());
     }
 
-    async fn operate(req: Request<RecvStream>) -> ProtResult<Response<RecvStream>> {
+    async fn call_operate(req: &mut Request<RecvStream>) -> ProtResult<Response<RecvStream>> {
         // body的内容可能重新解密又再重新再加过密, 后续可考虑直接做数据
         let mut value = Self::inner_operate(req).await?;
         value.headers_mut().insert("server", "wmproxy");
@@ -161,7 +169,7 @@ impl ControlServer {
                     let cc = control.clone();
                     tokio::spawn(async move {
                         let mut server = Server::new_data(conn, Some(addr), cc);
-                        if let Err(e) = server.incoming(Self::operate).await {
+                        if let Err(e) = server.incoming(Operate).await {
                             log::info!("控制中心：处理信息时发生错误：{:?}", e);
                         }
                     });
