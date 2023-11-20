@@ -99,6 +99,7 @@ impl LocationConfig {
     where
         T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     {
+        println!("处理客户端!!!!");
         let (mut recv, sender) = client.send2(req.replace_clone(RecvStream::empty())).await?;
         match recv.recv().await {
             Some(res) => Ok((res?, Some(sender), Some(recv))),
@@ -168,6 +169,7 @@ impl LocationConfig {
             return Ok((res, None, None));
         }
         if let Some(reverse) = &self.reverse_proxy {
+            println!("反向代理");
             return self.deal_reverse_proxy(req, reverse.clone()).await;
         }
         return Err(ProtError::Extension("unknow data"));

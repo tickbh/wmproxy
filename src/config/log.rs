@@ -1,5 +1,5 @@
 
-use std::{fmt::Display, str::FromStr, net::TcpStream};
+use std::{fmt::Display, str::FromStr};
 
 use crate::ProxyError;
 

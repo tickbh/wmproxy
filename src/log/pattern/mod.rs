@@ -120,7 +120,7 @@
 //! [MDC]: https://crates.io/crates/log-mdc
 
 use chrono::{Local, Utc};
-use log::{Level, Record};
+use log::{Level};
 use std::{default::Default, io, process, thread};
 
 // use crate::crate::log::{
@@ -642,7 +642,7 @@ impl FormattedChunk {
                 }
                 Ok(())
             }
-            FormattedChunk::Mdc(ref key, ref default) => {
+            FormattedChunk::Mdc(ref _key, ref _default) => {
                 // log_mdc::get(key, |v| write!(w, "{}", v.unwrap_or(default)))
                 Ok(())
             }

@@ -7,7 +7,7 @@ pub use self::pattern::*;
 pub use self::proxy_record::*;
 
 
-use log::Record;
+
 use std::{fmt, io};
 
 pub mod writer;

@@ -1,7 +1,7 @@
-use std::{net::SocketAddr, time::{Duration}, collections::HashMap};
+use std::{net::SocketAddr, collections::HashMap};
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
-use crate::ConfigDuration;
+
 
 use super::{LocationConfig, UpstreamConfig, common::CommonConfig};
 

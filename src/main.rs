@@ -1,18 +1,8 @@
 // #![deny(warnings)]
 
 use wmproxy::{ConfigOption, ProxyResult, ControlServer, Helper};
-use log::{error, info, warn, LevelFilter};
-use log4rs::{
-    append::console::ConsoleAppender,
-    config::{Appender, Root},
-    encode::json::JsonEncoder,
-};
-use async_trait::async_trait;
 
-#[async_trait]
-trait Advertisement {
-    async fn run(&self);
-}
+
 
 async fn run_main() -> ProxyResult<()> {
     let option = ConfigOption::parse_env()?;

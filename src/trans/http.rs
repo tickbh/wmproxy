@@ -7,22 +7,26 @@ use async_trait::async_trait;
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWrite},
     sync::{
-        mpsc::{channel, Sender, Receiver},
-        Mutex, RwLock,
+        mpsc::{channel, Sender, Receiver}, RwLock,
     },
 };
 use webparse::{
     Request, Response,
 };
-use wenmeng::{Client, ProtResult, RecvStream, Server, HeaderHelper, ProtError, OperateTrait, RecvRequest, RecvResponse};
+use wenmeng::{Client, ProtResult, RecvStream, Server, HeaderHelper, OperateTrait, RecvRequest, RecvResponse};
 
 use crate::{MappingConfig, ProtCreate, ProtFrame, ProxyError, VirtualStream};
 
-struct Operate;
+struct Operate {
+    oper: HttpOper,
+}
+
 #[async_trait]
 impl OperateTrait for Operate {
-    async fn operate(&self, req: &mut RecvRequest) -> ProtResult<RecvResponse> {
-        TransHttp::operate(req).await
+    async fn operate(&mut self, req: &mut RecvRequest) -> ProtResult<RecvResponse> {
+        let mut value = TransHttp::inner_operate(req, &mut self.oper).await?;
+        value.headers_mut().insert("server", "wmproxy");
+        Ok(value)
     }
 }
 
@@ -59,24 +63,11 @@ impl TransHttp {
         }
     }
 
-    async fn operate(
-        req: &mut Request<RecvStream>
-    ) -> ProtResult<Response<RecvStream>> {
-        let mut value = Self::inner_operate(req).await?;
-        value.headers_mut().insert("server", "wmproxy");
-        Ok(value)
-    }
-
     async fn inner_operate(
-        req: &mut Request<RecvStream>
+        req: &mut Request<RecvStream>,
+        oper: &mut HttpOper,
     ) -> ProtResult<Response<RecvStream>> {
-        let data = req.extensions_mut().remove::<Arc<Mutex<HttpOper>>>();
-        if data.is_none() {
-            return Err(ProtError::Extension("unknow data"));
-        }
-        let data = data.unwrap();
-        let mut value = data.lock().await;
-        let sender = value.virtual_sender.take();
+        let sender = oper.virtual_sender.take();
         // 传在该参数则为第一次, 第一次的时候发送Create创建绑定连接
         if sender.is_some() {
             let host_name = req.get_host().unwrap_or(String::new());
@@ -85,7 +76,7 @@ impl TransHttp {
                 let mut config = None;
                 let mut is_find = false;
                 {
-                    let read = value.mappings.read().await;
+                    let read = oper.mappings.read().await;
                     for v in &*read {
                         if v.domain == host_name {
                             is_find = true;
@@ -96,25 +87,25 @@ impl TransHttp {
                 if !is_find {
                     return Ok(Response::builder().status(404).body("not found").ok().unwrap().into_type());
                 }
-                value.http_map = config;
+                oper.http_map = config;
             }
 
-            let create = ProtCreate::new(value.sock_map, Some(req.get_host().unwrap_or(String::new())));
-            let _ = value.sender_work.send((create, sender.unwrap())).await;
+            let create = ProtCreate::new(oper.sock_map, Some(req.get_host().unwrap_or(String::new())));
+            let _ = oper.sender_work.send((create, sender.unwrap())).await;
         }
 
-        if let Some(config) = &value.http_map {
+        if let Some(config) = &oper.http_map {
             // 复写Request的头文件信息
             HeaderHelper::rewrite_request(req, &config.headers);
         }
 
         // 将请求发送出去
-        value.sender.send(req.replace_clone(RecvStream::empty())).await?;
+        oper.sender.send(req.replace_clone(RecvStream::empty())).await?;
         // 等待返回数据的到来
-        let res = value.receiver.recv().await;
+        let res = oper.receiver.recv().await;
         if res.is_some() && res.as_ref().unwrap().is_ok() {
             let mut res = res.unwrap().unwrap();
-            if let Some(config) = &value.http_map {
+            if let Some(config) = &oper.http_map {
                 // 复写Response的头文件信息
                 HeaderHelper::rewrite_response(&mut res, &config.headers);
             }
@@ -143,11 +134,13 @@ impl TransHttp {
             mappings: self.mappings.clone(),
             http_map: None,
         };
-        let mut server = Server::new_data(inbound, Some(addr), Arc::new(Mutex::new(oper)) );
+        let mut server = Server::new(inbound, Some(addr));
         tokio::spawn( async move {
             let _ = client.wait_operate().await;
         });
-        if let Err(e) = server.incoming(Operate).await {
+        if let Err(e) = server.incoming(Operate {
+            oper,
+        }).await {
             log::info!("处理内网穿透时发生错误：{:?}", e);
         };
         Ok(())

@@ -1,4 +1,4 @@
-use std::{io, fmt::Debug, path::Display};
+use std::{io, fmt::Debug};
 
 use tokio::{net::TcpStream, io::{AsyncRead, AsyncWrite}};
 use webparse::{WebError, BinaryMut};

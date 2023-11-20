@@ -17,7 +17,6 @@ use log::{log_enabled, Level, LevelFilter, Record};
 use log4rs::{
     append::{console::ConsoleAppender, file::FileAppender},
     config::{Appender, Logger, Root},
-    encode::json::JsonEncoder,
 };
 use socket2::{Domain, Socket, Type};
 use tokio::net::{TcpListener, UdpSocket};

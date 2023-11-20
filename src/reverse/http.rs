@@ -18,7 +18,6 @@ use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::TcpListener,
     sync::mpsc::{Receiver, Sender},
-    sync::Mutex,
 };
 use tokio_rustls::TlsAcceptor;
 use webparse::{Request, Response};
@@ -27,11 +26,14 @@ use wenmeng::{ProtError, ProtResult, RecvStream, Server, OperateTrait, RecvReque
 use super::{common::CommonConfig, LocationConfig, ServerConfig, UpstreamConfig};
 
 
-struct Operate;
+struct Operate {
+    inner: InnerHttpOper,
+}
+
 #[async_trait]
 impl OperateTrait for Operate {
-    async fn operate(&self, req: &mut RecvRequest) -> ProtResult<RecvResponse> {
-        HttpConfig::operate(req).await
+    async fn operate(&mut self, req: &mut RecvRequest) -> ProtResult<RecvResponse> {
+        HttpConfig::operate(req, &mut self.inner).await
     }
 }
 
@@ -196,6 +198,7 @@ impl HttpConfig {
                         if cache.contains_key(&clone) {
                             let mut cache_client = cache.remove(&clone).unwrap();
                             if !cache_client.0.is_closed() {
+                                println!("do req data by cache");
                                 let _send = cache_client.0.send(req.replace_clone(RecvStream::empty())).await;
                                 match cache_client.1.recv().await {
                                     Some(res) => {
@@ -215,6 +218,7 @@ impl HttpConfig {
                                 }
                             }
                         }
+                        println!("do req data by new");
                         let (res, sender, receiver) = l.deal_request(req).await?;
                         if sender.is_some() && receiver.is_some() {
                             cache.insert(clone, (sender.unwrap(), receiver.unwrap()));
@@ -235,20 +239,14 @@ impl HttpConfig {
             .into_type());
     }
 
-    async fn inner_operate(req: &mut Request<RecvStream>) -> ProtResult<Response<RecvStream>> {
-        let data = req.extensions_mut().remove::<Arc<Mutex<InnerHttpOper>>>();
-        if data.is_none() {
-            return Err(ProtError::Extension("unknow data"));
-        }
-        let data = data.unwrap();
-        let mut value = data.lock().await;
-        let servers = value.servers.clone();
-        return Self::inner_operate_by_http(req, &mut value.cache_sender, servers).await;
+    async fn inner_operate(req: &mut Request<RecvStream>, data: &mut InnerHttpOper) -> ProtResult<Response<RecvStream>> {
+        let servers = data.servers.clone();
+        return Self::inner_operate_by_http(req, &mut data.cache_sender, servers).await;
     }
 
-    async fn operate(req: &mut Request<RecvStream>) -> ProtResult<Response<RecvStream>> {
+    async fn operate(req: &mut Request<RecvStream>, data: &mut InnerHttpOper) -> ProtResult<Response<RecvStream>> {
         // body的内容可能重新解密又再重新再加过密, 后续可考虑直接做数据
-        match Self::inner_operate(req).await {
+        match Self::inner_operate(req, data).await {
             Ok(mut value) => {
                 value.headers_mut().insert("server", "wmproxy");
                 Ok(value)
@@ -295,8 +293,10 @@ impl HttpConfig {
             let mut server = Server::builder()
                 .addr(addr)
                 .timeout_layer(timeout)
-                .stream_data(inbound, Arc::new(Mutex::new(oper)));
-            if let Err(e) = server.incoming(Operate).await {
+                .stream(inbound);
+            if let Err(e) = server.incoming(Operate {
+                inner: oper,
+            }).await {
                 if server.get_req_num() == 0 {
                     log::info!("反向代理：未处理任何请求时发生错误：{:?}", e);
                 } else {
