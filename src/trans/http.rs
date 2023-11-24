@@ -1,19 +1,17 @@
-use std::{
-    io::{Read},
-    sync::Arc, fmt::Debug, net::SocketAddr,
-};
+use std::{fmt::Debug, io::Read, net::SocketAddr, sync::Arc};
 
 use async_trait::async_trait;
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWrite},
     sync::{
-        mpsc::{channel, Sender, Receiver}, RwLock,
+        mpsc::{channel, Receiver, Sender},
+        RwLock,
     },
 };
-use webparse::{
-    Request, Response,
+use webparse::{Request, Response};
+use wenmeng::{
+    Client, HeaderHelper, OperateTrait, ProtResult, RecvRequest, RecvResponse, RecvStream, Server,
 };
-use wenmeng::{Client, ProtResult, RecvStream, Server, HeaderHelper, OperateTrait, RecvRequest, RecvResponse};
 
 use crate::{MappingConfig, ProtCreate, ProtFrame, ProxyError, VirtualStream};
 
@@ -46,7 +44,6 @@ struct HttpOper {
     pub mappings: Arc<RwLock<Vec<MappingConfig>>>,
     pub http_map: Option<MappingConfig>,
 }
-
 
 impl TransHttp {
     pub fn new(
@@ -85,12 +82,18 @@ impl TransHttp {
                     }
                 }
                 if !is_find {
-                    return Ok(Response::builder().status(404).body("not found").ok().unwrap().into_type());
+                    return Ok(Response::builder()
+                        .status(404)
+                        .body("not found")
+                        .ok()
+                        .unwrap()
+                        .into_type());
                 }
                 oper.http_map = config;
             }
 
-            let create = ProtCreate::new(oper.sock_map, Some(req.get_host().unwrap_or(String::new())));
+            let create =
+                ProtCreate::new(oper.sock_map, Some(req.get_host().unwrap_or(String::new())));
             let _ = oper.sender_work.send((create, sender.unwrap())).await;
         }
 
@@ -100,7 +103,9 @@ impl TransHttp {
         }
 
         // 将请求发送出去
-        oper.sender.send(req.replace_clone(RecvStream::empty())).await?;
+        oper.sender
+            .send(req.replace_clone(RecvStream::empty()))
+            .await?;
         // 等待返回数据的到来
         let res = oper.receiver.recv().await;
         if res.is_some() && res.as_ref().unwrap().is_ok() {
@@ -111,7 +116,12 @@ impl TransHttp {
             }
             return Ok(res);
         } else {
-            return Ok(Response::builder().status(503).body("cant trans").ok().unwrap().into_type());
+            return Ok(Response::builder()
+                .status(503)
+                .body("cant trans")
+                .ok()
+                .unwrap()
+                .into_type());
         }
     }
 
@@ -135,12 +145,10 @@ impl TransHttp {
             http_map: None,
         };
         let mut server = Server::new(inbound, Some(addr));
-        tokio::spawn( async move {
+        tokio::spawn(async move {
             let _ = client.wait_operate().await;
         });
-        if let Err(e) = server.incoming(Operate {
-            oper,
-        }).await {
+        if let Err(e) = server.incoming(Operate { oper }).await {
             log::info!("处理内网穿透时发生错误：{:?}", e);
         };
         Ok(())

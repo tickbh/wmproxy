@@ -3,10 +3,10 @@ use std::{
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, ToSocketAddrs},
 };
 
-use crate::{error::ProxyTypeResult, ProxyError, ProxyResult, HealthCheck};
+use crate::{error::ProxyTypeResult, HealthCheck, ProxyError, ProxyResult};
 use tokio::{
     io::{copy_bidirectional, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf},
-    net::{UdpSocket},
+    net::UdpSocket,
     sync::broadcast::{channel, Receiver, Sender},
     try_join,
 };
@@ -324,12 +324,10 @@ impl ProxySocks5 {
     /// | 1  |  1  | X'00' |  1   | Variable |    2     |
     /// +----+-----+-------+------+----------+----------+
     /// https://datatracker.ietf.org/doc/html/rfc1928#section-6
-    pub async fn tcp_write_reply<T>(
-        stream: &mut T,
-        succ: bool,
-        addr: SocketAddr,
-    ) -> ProxyResult<()>
-    where T: AsyncRead + AsyncWrite + Unpin {
+    pub async fn tcp_write_reply<T>(stream: &mut T, succ: bool, addr: SocketAddr) -> ProxyResult<()>
+    where
+        T: AsyncRead + AsyncWrite + Unpin,
+    {
         let mut buf = BinaryMut::with_capacity(100);
         buf.put_slice(&vec![SOCKS5_VERSION, if succ { 0 } else { 1 }, 0x00]);
         Self::encode_socket_addr(&mut buf, &addr)?;
@@ -345,7 +343,9 @@ impl ProxySocks5 {
     /// 在UDP 关联请求的回复中，BND.PORT和BND.ADDR字段指示客户端必须发送UDP请求消息以进行中继的端口号/地址。
     /// https://datatracker.ietf.org/doc/html/rfc1928#section-7
     pub async fn udp_execute_assoc<T>(mut stream: T, bind_ip: IpAddr) -> ProxyResult<()>
-    where T: AsyncRead + AsyncWrite + Unpin {
+    where
+        T: AsyncRead + AsyncWrite + Unpin,
+    {
         let peer_sock = UdpSocket::bind("0.0.0.0:0").await?;
         let port = peer_sock.local_addr()?.port();
         ProxySocks5::tcp_write_reply(&mut stream, true, SocketAddr::new(bind_ip, port)).await?;
@@ -375,7 +375,9 @@ impl ProxySocks5 {
         mut receiver: Receiver<()>,
         sender: Sender<()>,
     ) -> ProxyResult<()>
-    where T: AsyncRead + AsyncWrite + Unpin {
+    where
+        T: AsyncRead + AsyncWrite + Unpin,
+    {
         let mut buf = [0u8; 100];
         loop {
             let n = tokio::select! {
@@ -466,7 +468,9 @@ impl ProxySocks5 {
     }
 
     async fn udp_transfer<T>(stream: T, inbound: UdpSocket) -> ProxyResult<()>
-    where T: AsyncRead + AsyncWrite + Unpin {
+    where
+        T: AsyncRead + AsyncWrite + Unpin,
+    {
         let outbound = UdpSocket::bind("0.0.0.0:0").await?;
         // 使tcp断开的时候通知udp结束关联,结束处理函数
         let (sender, receiver) = channel::<()>(1);
