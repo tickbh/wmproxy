@@ -14,6 +14,7 @@ use rustls::{
     Certificate, PrivateKey,
 };
 use serde::{Deserialize, Serialize};
+use serde_with::{serde_as, DisplayFromStr};
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::TcpListener,
@@ -23,7 +24,7 @@ use tokio_rustls::TlsAcceptor;
 use webparse::{Request, Response};
 use wenmeng::{ProtError, ProtResult, RecvStream, Server, OperateTrait, RecvRequest, RecvResponse};
 
-use super::{common::CommonConfig, LocationConfig, ServerConfig, UpstreamConfig};
+use super::{common::CommonConfig, LocationConfig, ServerConfig, UpstreamConfig, limit_req::LimitReqZone};
 
 
 struct Operate {
@@ -58,12 +59,17 @@ impl InnerHttpOper {
     }
 }
 
+#[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HttpConfig {
     #[serde(default = "Vec::new")]
     pub server: Vec<ServerConfig>,
     #[serde(default = "Vec::new")]
     pub upstream: Vec<UpstreamConfig>,
+    
+    #[serde_as(as = "HashMap<_, DisplayFromStr>")]
+    #[serde(default = "HashMap::new")]
+    pub limit_req_zone: HashMap<String, LimitReqZone>,
 
     #[serde(flatten)]
     #[serde(default = "CommonConfig::new")]
@@ -75,6 +81,7 @@ impl HttpConfig {
         HttpConfig {
             server: vec![],
             upstream: vec![],
+            limit_req_zone: HashMap::new(),
             comm: CommonConfig::new(),
         }
     }
