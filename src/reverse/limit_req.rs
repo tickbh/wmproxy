@@ -42,18 +42,18 @@ pub struct LimitReqMiddleware {
 
 #[async_trait]
 impl Middleware for LimitReqMiddleware {
-    async fn process_request(&mut self, request: &mut RecvRequest) -> ProtResult<()> {
+    async fn process_request(&mut self, request: &mut RecvRequest) -> ProtResult<Option<RecvResponse>> {
         if let Some(client_ip) = request.headers().system_get(&"{client_ip}".to_string()) {
             match LimitReqData::recv_new_req(&self.req.zone, client_ip, self.req.burst)? {
-                LimitResult::Ok => return Ok(()),
+                LimitResult::Ok => return Ok(None),
                 LimitResult::Refuse => todo!(),
                 LimitResult::Delay(delay) => {
                     tokio::time::sleep(delay).await;
-                    return Ok(());
+                    return Ok(None);
                 },
             }
         }
-        Ok(())
+        Ok(None)
     }
     async fn process_response(
         &mut self,

@@ -51,7 +51,7 @@ log4rs="1.2.0"
 chrono = "0.4.31"
 
 async-trait = "0.1.74"
-# rbtree = "0.1.5"
+rbtree = "0.1.7"
 
 # webparse = { version = "0.2.0"}
 # wenmeng={version="0.2.0"}
@@ -60,6 +60,3 @@ path = "../webparse"
 
 [dependencies.wenmeng]
 path = "../wenmeng"
-
-[dependencies.rbtree]
-path = "../rbtree-rs"
