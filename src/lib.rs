@@ -17,6 +17,7 @@ mod control;
 mod config;
 mod plugins;
 pub mod log;
+mod data;
 
 pub use error::{ProxyResult, ProxyError};
 pub use flag::Flag;
