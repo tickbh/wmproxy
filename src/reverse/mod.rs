@@ -15,4 +15,4 @@ pub use server::ServerConfig;
 pub use upstream::{SingleStreamConfig, UpstreamConfig};
 pub use reverse_helper::ReverseHelper;
 pub use common::CommonConfig;
-pub use limit_req::LimitReqMiddleware;
+pub use limit_req::{LimitReqMiddleware, LimitReqZone, LimitReq};

@@ -596,14 +596,7 @@ impl ConfigOption {
                 }
             };
 
-            // let mut option = serde_yaml::from_str::<ProxyOption>(&contents).unwrap();
-            if let Some(http) = &mut option.http {
-                http.copy_to_child();
-            }
-            if let Some(stream) = &mut option.stream {
-                stream.copy_to_child();
-            }
-            println!("options = {:?}", option);
+            option.after_load_option()?;
             return Ok(option);
         }
 
@@ -644,6 +637,18 @@ impl ConfigOption {
             control: default_control_port(),
             disable_stdout: false,
         })
+    }
+
+    pub fn after_load_option(&mut self) -> ProxyResult<()> {
+        if let Some(http) = &mut self.http {
+            http.after_load_option()?;
+        }
+        
+        if let Some(stream) = &mut self.stream {
+            stream.copy_to_child();
+        }
+        println!("options = {:?}", self);
+        Ok(())
     }
 
     fn try_add_upstream(result: &mut Vec<OneHealth>, already: &mut HashSet<SocketAddr>, configs: &Vec<UpstreamConfig>) {

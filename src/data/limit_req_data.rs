@@ -25,6 +25,7 @@ pub struct LimitReqData {
     last_remove: Instant,
 }
 
+#[derive(Debug)]
 pub enum LimitResult {
     Ok,
     Refuse,

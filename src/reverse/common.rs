@@ -7,6 +7,8 @@ use serde_with::{serde_as, DisplayFromStr};
 use wenmeng::RateLimitLayer;
 use wenmeng::TimeoutLayer;
 
+use super::LimitReq;
+
 #[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CommonConfig {
@@ -42,6 +44,8 @@ pub struct CommonConfig {
     pub access_log: Option<ConfigLog>,
     #[serde_as(as = "Option<DisplayFromStr>")]
     pub error_log: Option<ConfigLog>,
+    #[serde_as(as = "Option<DisplayFromStr>")]
+    pub limit_req: Option<LimitReq>,
 }
 
 impl CommonConfig {
@@ -66,6 +70,8 @@ impl CommonConfig {
 
             access_log: None,
             error_log: None,
+
+            limit_req: None,
         }
     }
 
@@ -103,6 +109,9 @@ impl CommonConfig {
         }
         if self.error_log.is_none() {
             self.error_log = parent.error_log.clone();
+        }
+        if self.limit_req.is_none() {
+            self.limit_req = parent.limit_req.clone();
         }
     }
 

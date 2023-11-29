@@ -1,5 +1,6 @@
 use std::{fmt::Display, str::FromStr, time::Duration};
 
+use webparse::Response;
 use wenmeng::{HeaderHelper, Middleware};
 
 use async_trait::async_trait;
@@ -11,13 +12,13 @@ use crate::{data::LimitReqData, data::LimitResult, ConfigDuration, ConfigSize, P
 #[derive(Debug, Clone)]
 pub struct LimitReqZone {
     /// 键值的匹配方式
-    key: String,
+    pub key: String,
     /// IP个数
-    limit: u64,
+    pub limit: u64,
     /// 周期内可以通行的数据
-    nums: u64,
+    pub nums: u64,
     /// 每个周期的时间
-    per: Duration,
+    pub per: Duration,
 }
 
 impl LimitReqZone {
@@ -31,26 +32,48 @@ impl LimitReqZone {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LimitReq {
     zone: String,
     burst: u64,
+}
+
+impl LimitReq {
+    pub fn new(zone: String, burst: u64) -> Self {
+        Self { zone, burst }
+    }
 }
 
 pub struct LimitReqMiddleware {
     req: LimitReq,
 }
 
+impl LimitReqMiddleware {
+    pub fn new(req: LimitReq) -> Self {
+        Self { req }
+    }
+}
+
 #[async_trait]
 impl Middleware for LimitReqMiddleware {
-    async fn process_request(&mut self, request: &mut RecvRequest) -> ProtResult<Option<RecvResponse>> {
+    async fn process_request(
+        &mut self,
+        request: &mut RecvRequest,
+    ) -> ProtResult<Option<RecvResponse>> {
         if let Some(client_ip) = request.headers().system_get(&"{client_ip}".to_string()) {
+            let a = LimitReqData::recv_new_req(&self.req.zone, client_ip, self.req.burst)?;
+            println!("a === {:?}", a);
             match LimitReqData::recv_new_req(&self.req.zone, client_ip, self.req.burst)? {
                 LimitResult::Ok => return Ok(None),
-                LimitResult::Refuse => todo!(),
+                LimitResult::Refuse => {
+                    return Ok(Some(
+                        Response::text().status(404).body("limit req")?.into_type(),
+                    ));
+                }
                 LimitResult::Delay(delay) => {
                     tokio::time::sleep(delay).await;
                     return Ok(None);
-                },
+                }
             }
         }
         Ok(None)
@@ -58,7 +81,7 @@ impl Middleware for LimitReqMiddleware {
     async fn process_response(
         &mut self,
         _request: &mut RecvRequest,
-        response: &mut RecvResponse,
+        _response: &mut RecvResponse,
     ) -> ProtResult<()> {
         Ok(())
     }
@@ -87,7 +110,7 @@ impl FromStr for LimitReqZone {
         let mut per = Duration::new(0, 0);
         for idx in 1..v.len() {
             let key_value = v[idx].split("=").map(|k| k.trim()).collect::<Vec<&str>>();
-            if key_value.len() == 0 {
+            if key_value.len() <= 1 {
                 return Err(ProxyError::Extension("未知的LimitReq"));
             }
             match key_value[0] {
@@ -119,5 +142,42 @@ impl FromStr for LimitReqZone {
         }
 
         Ok(LimitReqZone::new(key, limit, nums, per))
+    }
+}
+
+impl Display for LimitReq {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("zone={} brust={}", self.zone, self.burst))
+    }
+}
+
+impl FromStr for LimitReq {
+    type Err = ProxyError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let v = s.split(" ").collect::<Vec<&str>>();
+        let mut zone = String::new();
+        let mut brust = 0;
+        for idx in 0..v.len() {
+            let key_value = v[idx].split("=").map(|k| k.trim()).collect::<Vec<&str>>();
+            if key_value.len() <= 1 {
+                return Err(ProxyError::Extension("未知的LimitReq"));
+            }
+            match key_value[0] {
+                "zone" => {
+                    zone = key_value[1].to_string();
+                }
+                "brust" => {
+                    brust = key_value[1]
+                        .parse::<u64>()
+                        .map_err(|_e| ProxyError::Extension("parse error"))?;
+                }
+                _ => {
+                    return Err(ProxyError::Extension("未知的LimitReq"));
+                }
+            }
+        }
+
+        Ok(LimitReq::new(zone, brust))
     }
 }

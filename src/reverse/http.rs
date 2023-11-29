@@ -6,7 +6,7 @@ use std::{
     sync::Arc,
 };
 
-use crate::{Helper, ProxyResult};
+use crate::{Helper, ProxyResult, data::LimitReqData};
 use async_trait::async_trait;
 use rustls::{
     server::ResolvesServerCertUsingSni,
@@ -22,9 +22,9 @@ use tokio::{
 };
 use tokio_rustls::TlsAcceptor;
 use webparse::{Request, Response};
-use wenmeng::{ProtError, ProtResult, RecvStream, Server, OperateTrait, RecvRequest, RecvResponse};
+use wenmeng::{ProtError, ProtResult, RecvStream, Server, OperateTrait, RecvRequest, RecvResponse, Middleware};
 
-use super::{common::CommonConfig, LocationConfig, ServerConfig, UpstreamConfig, limit_req::LimitReqZone};
+use super::{common::CommonConfig, LocationConfig, ServerConfig, UpstreamConfig, limit_req::LimitReqZone, LimitReqMiddleware};
 
 
 struct Operate {
@@ -35,6 +35,12 @@ struct Operate {
 impl OperateTrait for Operate {
     async fn operate(&mut self, req: &mut RecvRequest) -> ProtResult<RecvResponse> {
         HttpConfig::operate(req, &mut self.inner).await
+    }
+    
+    async fn middle_operate(&mut self, req: &mut RecvRequest, middles: &mut Vec<Box<dyn Middleware>>) -> ProtResult<()> {
+        let _req = req;
+        let _middle = middles;
+        Ok(())
     }
 }
 
@@ -84,6 +90,15 @@ impl HttpConfig {
             limit_req_zone: HashMap::new(),
             comm: CommonConfig::new(),
         }
+    }
+
+
+    pub fn after_load_option(&mut self) -> ProtResult<()> {
+        self.copy_to_child();
+        for (k, zone) in &self.limit_req_zone {
+            LimitReqData::cache(k.to_string(), zone.limit, zone.nums, zone.per)?;
+        }
+        Ok(())
     }
 
     /// 将配置参数提前共享给子级
@@ -201,6 +216,11 @@ impl HttpConfig {
                 let path = req.path().clone();
                 for l in s.location.iter() {
                     if l.is_match_rule(&path, req.method()) {
+                        if let Some(limit_req) = &l.comm.limit_req {
+                            if let Some(res) = LimitReqMiddleware::new(limit_req.clone()).process_request(req).await? {
+                                return Ok(res);
+                            }
+                        }
                         let clone = l.clone_only_hash();
                         if cache.contains_key(&clone) {
                             let mut cache_client = cache.remove(&clone).unwrap();
@@ -224,14 +244,14 @@ impl HttpConfig {
                                     }
                                 }
                             }
+                        } else {
+                            println!("do req data by new");
+                            let (res, sender, receiver) = l.deal_request(req).await?;
+                            if sender.is_some() && receiver.is_some() {
+                                cache.insert(clone, (sender.unwrap(), receiver.unwrap()));
+                            }
+                            return Ok(res);
                         }
-                        println!("do req data by new");
-                        let (res, sender, receiver) = l.deal_request(req).await?;
-                        if sender.is_some() && receiver.is_some() {
-                            cache.insert(clone, (sender.unwrap(), receiver.unwrap()));
-                        }
-
-                        return Ok(res);
                     }
                 }
                 return Ok(Response::status503()
@@ -301,6 +321,7 @@ impl HttpConfig {
                 .addr(addr)
                 .timeout_layer(timeout)
                 .stream(inbound);
+            
             if let Err(e) = server.incoming(Operate {
                 inner: oper,
             }).await {
