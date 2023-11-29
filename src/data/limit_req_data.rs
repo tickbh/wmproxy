@@ -9,11 +9,13 @@ use std::{borrow::Borrow, sync::RwLock};
 
 
 lazy_static! {
-    static ref GLOABL_LIMIT_REQ: RwLock<HashMap<&'static str, LimitReqData>> =
+    // 静态全局请求限制
+    static ref GLOBAL_LIMIT_REQ: RwLock<HashMap<&'static str, LimitReqData>> =
         RwLock::new(HashMap::new());
 }
 
 pub struct LimitReqData {
+    /// 记录所有的ip数据的限制情况
     ips: HashMap<String, InnerLimit>,
     /// IP个数
     limit: u64,
@@ -22,6 +24,7 @@ pub struct LimitReqData {
     /// 每个周期的时间
     per: Duration,
 
+    /// 最后清理IP的时间
     last_remove: Instant,
 }
 
@@ -114,7 +117,7 @@ impl LimitReqData {
     }
 
     pub fn cache(key: String, limit: u64, nums: u64, per: Duration) -> ProtResult<()> {
-        let mut write = GLOABL_LIMIT_REQ
+        let mut write = GLOBAL_LIMIT_REQ
             .write()
             .map_err(|_| ProtError::Extension("unlock error"))?;
         if write.contains_key(&*key) {
@@ -125,7 +128,7 @@ impl LimitReqData {
     }
 
     pub fn recv_new_req(key: &str, ip: &String, burst: u64) -> ProtResult<LimitResult> {
-        let mut write = GLOABL_LIMIT_REQ
+        let mut write = GLOBAL_LIMIT_REQ
             .write()
             .map_err(|_| ProtError::Extension("unlock error"))?;
         if !write.contains_key(&*key) {
