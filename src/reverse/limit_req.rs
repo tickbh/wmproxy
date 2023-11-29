@@ -61,8 +61,8 @@ impl Middleware for LimitReqMiddleware {
         request: &mut RecvRequest,
     ) -> ProtResult<Option<RecvResponse>> {
         if let Some(client_ip) = request.headers().system_get(&"{client_ip}".to_string()) {
-            let a = LimitReqData::recv_new_req(&self.req.zone, client_ip, self.req.burst)?;
-            println!("a === {:?}", a);
+            // let a = LimitReqData::recv_new_req(&self.req.zone, client_ip, self.req.burst)?;
+            // println!("a === {:?}", a);
             match LimitReqData::recv_new_req(&self.req.zone, client_ip, self.req.burst)? {
                 LimitResult::Ok => return Ok(None),
                 LimitResult::Refuse => {
@@ -131,8 +131,8 @@ impl FromStr for LimitReqZone {
                     nums = rate
                         .parse::<u64>()
                         .map_err(|_e| ProxyError::Extension("parse error"))?;
-
-                    let s = ConfigDuration::from_str(format!("1{}", rate_key[1]).as_str())?;
+                    
+                    let s = ConfigDuration::from_str(rate_key[1])?;
                     per = s.0;
                 }
                 _ => {

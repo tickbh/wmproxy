@@ -21,7 +21,7 @@ error = "logs/error.log"
 default = "logs/default.log"
 
 [http.limit_req_zone]
-limit = "{client_ip} limit=10m rate=10r/s"
+limit = "{client_ip} limit=10m rate=10r/min"
 
 # 反向代理中的负载均衡地址列表，按名字匹配
 [[http.upstream]]

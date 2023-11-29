@@ -34,22 +34,22 @@ impl FromStr for ConfigDuration {
 
         let d = if s.ends_with("ms") {
             let new = s.trim_end_matches("ms");
-            let s = new.parse::<u64>().map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, ""))?;
+            let s = new.parse::<u64>().ok().unwrap_or(1u64);
             Duration::new(0, (s * 1000_000) as u32)
         } else if s.ends_with("h") {
             let new = s.trim_end_matches("h");
-            let s = new.parse::<u64>().map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, ""))?;
+            let s = new.parse::<u64>().unwrap_or(1u64);
             Duration::new(s * 3600, 0)
         } else if s.ends_with("min") {
             let new = s.trim_end_matches("min");
-            let s = new.parse::<u64>().map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, ""))?;
+            let s = new.parse::<u64>().unwrap_or(1u64);
             Duration::new(s * 60, 0)
         } else if s.ends_with("s") {
             let new = s.trim_end_matches("s");
-            let s = new.parse::<u64>().map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, ""))?;
+            let s = new.parse::<u64>().unwrap_or(1u64);
             Duration::new(s, 0)
         } else {
-            let s = s.parse::<u64>().map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, ""))?;
+            let s = s.parse::<u64>().unwrap_or(1u64);
             Duration::new(s, 0)
         };
 

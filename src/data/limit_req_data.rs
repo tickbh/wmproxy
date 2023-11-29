@@ -68,7 +68,36 @@ impl LimitReqData {
         }
     }
 
+    pub fn try_remove_unuse(&mut self) {
+        // 未超过限制数
+        if self.ips.len() < self.limit as usize / 10 {
+            return;
+        }
+
+        let now = Instant::now();
+
+        // 未超过当前时间轮回的100倍
+        if now.sub(self.last_remove) < 100 * self.per {
+            return;
+        }
+
+        self.last_remove = now;
+
+        let mut remove_keys = vec![];
+        for (key, value) in &self.ips {
+            if now.sub(value.last) > 50 * self.per {
+                remove_keys.push(key.clone());
+            }
+        }
+
+        for key in remove_keys {
+            self.ips.remove(&key);
+        }
+
+    }
+
     pub fn inner_recv_new_req(&mut self, ip: &String, burst: u64) -> ProtResult<LimitResult> {
+        
         if self.ips.contains_key(ip) {
             let nums = self.ips.get_mut(ip).unwrap().recv_req(&self.per);
             if nums <= self.nums {
