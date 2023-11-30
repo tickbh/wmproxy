@@ -1,3 +1,15 @@
+// Copyright 2022 - 2023 Wenmeng See the COPYRIGHT
+// file at the top-level directory of this distribution.
+// 
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// http://www.apache.org/licenses/LICENSE-2.0>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
+// 
+// Author: tickbh
+// -----
+// Created Date: 2023/10/18 02:32:23
+
 use std::{
     collections::{HashMap, HashSet},
     fs::File,
@@ -245,7 +257,7 @@ impl HttpConfig {
                                 }
                             }
                         } else {
-                            println!("do req data by new");
+                            log::trace!("do req data by new");
                             let (res, sender, receiver) = l.deal_request(req).await?;
                             if sender.is_some() && receiver.is_some() {
                                 cache.insert(clone, (sender.unwrap(), receiver.unwrap()));
