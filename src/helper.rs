@@ -22,7 +22,7 @@ use std::{
 use crate::{
     log::{writer::simple::SimpleWriter, Encode, PatternEncoder, ProxyRecord},
     prot::{ProtFrame, ProtFrameHeader},
-    ConfigLog, ConfigOption, ProxyResult,
+    ConfigLog, ConfigOption, ProxyResult, ConfigHeader, HeaderOper,
 };
 use lazy_static::lazy_static;
 use log::{log_enabled, Level, LevelFilter, Record};
@@ -32,8 +32,8 @@ use log4rs::{
 };
 use socket2::{Domain, Socket, Type};
 use tokio::net::{TcpListener, UdpSocket};
-use webparse::{http2::frame::read_u24, BinaryMut, Buf, Request};
-use wenmeng::RecvStream;
+use webparse::{http2::frame::read_u24, BinaryMut, Buf, Request, Serialize, Response};
+use wenmeng::{RecvStream, HeaderHelper};
 
 thread_local! {
     static FORMAT_PATTERN_CACHE: RefCell<HashMap<&'static str, Arc<PatternEncoder>>> = RefCell::new(HashMap::new());
@@ -246,6 +246,80 @@ impl Helper {
             }
         }
     }
+
+
+    pub fn rewrite_request<T>(request: &mut Request<T>, headers: &Vec<ConfigHeader>)
+    where
+        T: Serialize,
+    {
+        for h in headers {
+            if !h.is_proxy {
+                continue;
+            }
+            Self::rewrite_header(Some(request), None, &h);
+        }
+    }
+
+    pub fn rewrite_response<T>(response: &mut Response<T>, headers: &Vec<ConfigHeader>)
+    where
+        T: Serialize,
+    {
+        for h in headers {
+            if h.is_proxy {
+                continue;
+            }
+
+            Self::rewrite_header(None, Some(response), &h);
+            
+        }
+    }
+
+    pub fn rewrite_header<T: Serialize>(mut request: Option<&mut Request<T>>, mut response: Option<&mut Response<T>>, value: &ConfigHeader) {
+
+        match &value.oper {
+            HeaderOper::Add => {
+                let v = HeaderHelper::convert_value(&mut request, &mut response, value.key.clone());
+                if request.is_some() {
+                    request.unwrap().headers_mut().push(value.key.to_string(), v);
+                } else {
+                    response.unwrap().headers_mut().push(value.key.to_string(), v);
+                }
+            }
+            HeaderOper::Del => {
+                if request.is_some() {
+                    request.unwrap().headers_mut().remove(&value.key);
+                } else {
+                    response.unwrap().headers_mut().remove(&value.key);
+                }
+            }
+            HeaderOper::Default => {
+                let contains = if request.is_some() {
+                    request.as_ref().unwrap().headers().contains(&value.key)
+                } else {
+                    response.as_ref().unwrap().headers().contains(&value.key)
+                };
+
+                if contains {
+                    return;
+                }
+                let v = HeaderHelper::convert_value(&mut request, &mut response, value.val.clone());
+                if request.is_some() {
+                    request.unwrap().headers_mut().push(value.key.to_string(), v);
+                } else {
+                    response.unwrap().headers_mut().push(value.key.to_string(), v);
+                }
+            }
+            _ => {
+                let v = HeaderHelper::convert_value(&mut request, &mut response, value.key.clone());
+                if request.is_some() {
+                    request.unwrap().headers_mut().push(value.key.to_string(), v);
+                } else {
+                    response.unwrap().headers_mut().push(value.key.to_string(), v);
+                }
+            }
+        }
+    }
+    
 
     // pub async fn udp_recv_from(socket: &UdpSocket, buf: &mut [u8]) -> io::Result<usize> {
     //     let (s, addr) = socket.recv_from(&mut buf).await?;

@@ -45,16 +45,8 @@ root = ""
 
 # 请求头返回头相应的处理，如有proxy则为请求头处理，+表示添加，-表示删除，其它表示设置
 headers = [
-  [
-    "proxy",
-    "x-forward-for",
-    "{client_ip}",
-  ],
-  [
-    "+",
-    "last-modified",
-    "from proxy",
-  ],
+  "proxy x-forward-for {client_ip}",
+  # "+ last-modified 'from proxy'",
 ]
 limit_req = "zone=limit brust=1"
 
@@ -70,7 +62,7 @@ proxy_pass = ""
 rule = "/"
 # method = "get"
 reverse_proxy = "http://server"
-headers = [["+", "aaa", "bbb"]]
+headers = ["+ aaa bbb"]
 
 # IP的四层协议处理
 [stream]

@@ -25,7 +25,7 @@ use wenmeng::{
     Client, HeaderHelper, OperateTrait, ProtResult, RecvRequest, RecvResponse, RecvStream, Server,
 };
 
-use crate::{MappingConfig, ProtCreate, ProtFrame, ProxyError, VirtualStream};
+use crate::{MappingConfig, ProtCreate, ProtFrame, ProxyError, VirtualStream, Helper};
 
 struct Operate {
     oper: HttpOper,
@@ -111,7 +111,7 @@ impl TransHttp {
 
         if let Some(config) = &oper.http_map {
             // 复写Request的头文件信息
-            HeaderHelper::rewrite_request(req, &config.headers);
+            Helper::rewrite_request(req, &config.headers);
         }
 
         // 将请求发送出去
@@ -124,7 +124,7 @@ impl TransHttp {
             let mut res = res.unwrap().unwrap();
             if let Some(config) = &oper.http_map {
                 // 复写Response的头文件信息
-                HeaderHelper::rewrite_response(&mut res, &config.headers);
+                Helper::rewrite_response(&mut res, &config.headers);
             }
             return Ok(res);
         } else {
@@ -145,7 +145,7 @@ impl TransHttp {
         let build = Client::builder();
         let (virtual_sender, virtual_receiver) = channel::<ProtFrame>(10);
         let stream = VirtualStream::new(self.sock_map, self.sender.clone(), virtual_receiver);
-        let mut client = Client::new(build.value(), stream);
+        let mut client = Client::new(build.value(), wenmeng::MaybeHttpsStream::Http(stream));
         let (receiver, sender) = client.split().unwrap();
         let oper = HttpOper {
             receiver,

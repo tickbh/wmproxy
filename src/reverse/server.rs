@@ -12,8 +12,10 @@
 
 use std::{net::SocketAddr, collections::HashMap};
 use serde::{Deserialize, Serialize};
-use serde_with::serde_as;
+use serde_with::{serde_as, DisplayFromStr};
 
+
+use crate::ConfigHeader;
 
 use super::{LocationConfig, UpstreamConfig, common::CommonConfig};
 
@@ -33,8 +35,9 @@ pub struct ServerConfig {
     #[serde(default = "default_bind_mode")]
     pub bind_mode: String,
     
+    #[serde_as(as = "Vec<DisplayFromStr>")]
     #[serde(default = "Vec::new")]
-    pub headers: Vec<Vec<String>>,
+    pub headers: Vec<ConfigHeader>,
     #[serde(default = "Vec::new")]
     pub location: Vec<LocationConfig>,
     #[serde(default = "Vec::new")]

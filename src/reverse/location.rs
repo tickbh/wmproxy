@@ -13,6 +13,7 @@
 use std::{hash::Hash, collections::HashMap};
 
 use serde::{Deserialize, Serialize};
+use serde_with::{serde_as, DisplayFromStr};
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     sync::mpsc::{Receiver, Sender},
@@ -20,16 +21,19 @@ use tokio::{
 use webparse::{HeaderName, Method, Request, Response, Scheme, Url};
 use wenmeng::{Client, HeaderHelper, ProtError, ProtResult, RecvStream};
 
-use crate::{HealthCheck, FileServer, Helper};
+use crate::{HealthCheck, FileServer, Helper, ConfigHeader};
 
 use super::{ReverseHelper, UpstreamConfig, common::CommonConfig};
 
+#[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LocationConfig {
     pub rule: String,
     pub file_server: Option<FileServer>,
+
+    #[serde_as(as = "Vec<DisplayFromStr>")]
     #[serde(default = "Vec::new")]
-    pub headers: Vec<Vec<String>>,
+    pub headers: Vec<ConfigHeader>,
     pub reverse_proxy: Option<String>,
     /// 请求方法
     pub method: Option<String>,
@@ -100,16 +104,14 @@ impl LocationConfig {
         }
     }
 
-    async fn deal_client<T>(
+    async fn deal_client(
         req: &mut Request<RecvStream>,
-        client: Client<T>,
+        client: Client,
     ) -> ProtResult<(
         Response<RecvStream>,
         Option<Sender<Request<RecvStream>>>,
         Option<Receiver<ProtResult<Response<RecvStream>>>>,
     )>
-    where
-        T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     {
         println!("处理客户端!!!!");
         let (mut recv, sender) = client.send2(req.replace_clone(RecvStream::empty())).await?;
@@ -163,7 +165,7 @@ impl LocationConfig {
             let client = Client::builder().timeout_layer(proxy_timeout).connect_tls_by_stream(stream, url).await?;
             Self::deal_client(req, client).await?
         };
-        HeaderHelper::rewrite_response(&mut res.0, &self.headers);
+        Helper::rewrite_response(&mut res.0, &self.headers);
         Ok(res)
     }
 

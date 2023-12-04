@@ -1,12 +1,21 @@
+// Copyright 2022 - 2023 Wenmeng See the COPYRIGHT
+// file at the top-level directory of this distribution.
+//
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// http://www.apache.org/licenses/LICENSE-2.0>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
+//
+// Author: tickbh
+// -----
+// Created Date: 2023/11/28 10:14:47
+
 use lazy_static::lazy_static;
-use rbtree::RBTree;
-use wenmeng::{ProtResult, ProtError};
-use std::borrow::Cow;
 use std::collections::HashMap;
 use std::ops::Sub;
 use std::time::{Duration, Instant};
 use std::{borrow::Borrow, sync::RwLock};
-
+use wenmeng::{ProtError, ProtResult};
 
 lazy_static! {
     // 静态全局请求限制
@@ -96,19 +105,21 @@ impl LimitReqData {
         for key in remove_keys {
             self.ips.remove(&key);
         }
-
     }
 
     pub fn inner_recv_new_req(&mut self, ip: &String, burst: u64) -> ProtResult<LimitResult> {
-        
+        self.try_remove_unuse();
+        if self.ips.len() >= self.limit as usize {
+            return Ok(LimitResult::Refuse);
+        }
         if self.ips.contains_key(ip) {
             let nums = self.ips.get_mut(ip).unwrap().recv_req(&self.per);
             if nums <= self.nums {
-                return Ok(LimitResult::Ok)
+                return Ok(LimitResult::Ok);
             } else if nums <= self.nums + burst {
-                return Ok(LimitResult::Delay(self.per))
+                return Ok(LimitResult::Delay(self.per));
             } else {
-                return Ok(LimitResult::Refuse)
+                return Ok(LimitResult::Refuse);
             }
         } else {
             self.ips.insert(ip.clone(), InnerLimit::new());

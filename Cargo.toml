@@ -53,6 +53,9 @@ chrono = "0.4.31"
 async-trait = "0.1.74"
 rbtree = "0.1.7"
 
+regex = "1.10.2"
+
+
 # webparse = { version = "0.2.0"}
 # wenmeng={version="0.2.0"}
 [dependencies.webparse]

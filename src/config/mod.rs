@@ -1,13 +1,27 @@
+// Copyright 2022 - 2023 Wenmeng See the COPYRIGHT
+// file at the top-level directory of this distribution.
+// 
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// http://www.apache.org/licenses/LICENSE-2.0>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
+// 
+// Author: tickbh
+// -----
+// Created Date: 2023/11/10 02:21:22
+
 
 mod size;
 mod duration;
 mod log;
+mod header;
 
 use std::{str::FromStr, fmt::{Display, self}, marker::PhantomData};
 
 pub use self::size::ConfigSize;
 pub use self::duration::ConfigDuration;
 pub use self::log::ConfigLog;
+pub use self::header::{ConfigHeader, HeaderOper};
 
 use serde::{Serializer, Deserializer, de::{Visitor, Error, self}};
 use serde_with::{SerializeAs, DeserializeAs};

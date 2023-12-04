@@ -14,7 +14,7 @@ use webparse::{Buf, BufMut, BinaryMut, must_have};
 
 use crate::{
     prot::{ProtFlag, ProtKind},
-    ProxyResult, MappingConfig,
+    ProxyResult, MappingConfig, HeaderOper, ConfigHeader,
 };
 
 use super::{ProtFrameHeader, read_short_string, write_short_string};
@@ -48,13 +48,12 @@ impl ProtMapping {
             must_have!(buf, 2)?;
             let len = buf.get_u16();
             for _ in 0 .. len {
-                let mut header = vec![];
-                must_have!(buf, 1)?;
-                let sub_len = buf.get_u8();
-                for _ in 0..sub_len {
-                    header.push(read_short_string(&mut buf)?);
-                }
-                headers.push(header);
+                must_have!(buf, 2)?;
+                let is_proxy = buf.get_u8() != 0;
+                let oper = HeaderOper::from_u8(buf.get_u8());
+                let key = read_short_string(&mut buf)?;
+                let val = read_short_string(&mut buf)?;
+                headers.push(ConfigHeader::new(oper, is_proxy, key, val));
             }
             mappings.push(MappingConfig::new(name, mode, domain, headers));
         }
@@ -75,10 +74,10 @@ impl ProtMapping {
             write_short_string(&mut cache_buf, &m.domain)?;
             cache_buf.put_u16(m.headers.len() as u16);
             for value in m.headers {
-                cache_buf.put_u8(value.len() as u8);
-                for s in value {
-                    write_short_string(&mut cache_buf, &s)?;
-                }
+                cache_buf.put_u8(value.is_proxy as u8);
+                cache_buf.put_u8(value.oper.to_u8());
+                write_short_string(&mut cache_buf, &value.key)?;
+                write_short_string(&mut cache_buf, &value.val)?;
             }
         }
         head.length = cache_buf.remaining() as u32;
