@@ -52,8 +52,7 @@ limit_req = "zone=limit brust=1"
 
 # 按请求路径进行rule匹配，可匹配method，看具体的处理的内容如文件服务或者负载均衡
 [[http.server.location]]
-rate_limit_nums = 4
-rate_limit_per = 1
+rate_limit = "4k/s"
 rule = "/root"
 file_server = { browse = true }
 proxy_pass = ""

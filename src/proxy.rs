@@ -1,11 +1,11 @@
 // Copyright 2022 - 2023 Wenmeng See the COPYRIGHT
 // file at the top-level directory of this distribution.
-// 
+//
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
-// 
+//
 // Author: tickbh
 // -----
 // Created Date: 2023/09/15 11:37:09
@@ -21,14 +21,21 @@ use futures::{future::select_all, FutureExt, StreamExt};
 
 use tokio::{
     io::{AsyncRead, AsyncWrite},
-    net::{TcpListener, TcpStream}, sync::{mpsc::{channel, Sender, Receiver}, Mutex},
+    net::{TcpListener, TcpStream},
+    sync::{
+        mpsc::{channel, Receiver, Sender},
+        Mutex,
+    },
 };
 use tokio_rustls::{rustls, TlsAcceptor, TlsConnector};
 use webparse::BinaryMut;
 
 use crate::{
-    error::ProxyTypeResult, option::ConfigOption, reverse::{HttpConfig, StreamConfig, StreamUdp}, CenterClient, CenterServer,
-    Flag, HealthCheck, ProxyError, ProxyHttp, ProxyResult, ProxySocks5, OneHealth, ActiveHealth, Helper,
+    error::ProxyTypeResult,
+    option::ConfigOption,
+    reverse::{HttpConfig, StreamConfig, StreamUdp},
+    ActiveHealth, CenterClient, CenterServer, Flag, HealthCheck, Helper, OneHealth, ProxyError,
+    ProxyHttp, ProxyResult, ProxySocks5,
 };
 
 pub struct Proxy {
@@ -121,6 +128,56 @@ impl Proxy {
         Ok(())
     }
 
+    async fn tcp_listen_work(listen: &Option<TcpListener>) -> Option<(TcpStream, SocketAddr)> {
+        if listen.is_some() {
+            match listen.as_ref().unwrap().accept().await {
+                Ok((tcp, addr)) => Some((tcp, addr)),
+                Err(_e) => None,
+            }
+        } else {
+            let pend = std::future::pending();
+            let () = pend.await;
+            None
+        }
+    }
+
+    async fn multi_tcp_listen_work(
+        listens: &mut Vec<TcpListener>,
+    ) -> (io::Result<(TcpStream, SocketAddr)>, usize) {
+        if !listens.is_empty() {
+            let (conn, index, _) =
+                select_all(listens.iter_mut().map(|listener| listener.accept().boxed())).await;
+            (conn, index)
+        } else {
+            let pend = std::future::pending();
+            let () = pend.await;
+            unreachable!()
+        }
+    }
+
+    async fn multi_udp_listen_work(
+        listens: &mut Vec<StreamUdp>,
+    ) -> (io::Result<(Vec<u8>, SocketAddr)>, usize) {
+        if !listens.is_empty() {
+            let (data, index, _) =
+                select_all(listens.iter_mut().map(|listener| listener.next().boxed())).await;
+            if data.is_none() {
+                return (
+                    Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "read none data",
+                    )),
+                    index,
+                );
+            }
+            (data.unwrap(), index)
+        } else {
+            let pend = std::future::pending();
+            let () = pend.await;
+            unreachable!()
+        }
+    }
+
     pub async fn do_start_health_check(&mut self) -> ProxyResult<()> {
         let healths = self.option.get_health_check();
         let (sender, receiver) = channel::<Vec<OneHealth>>(1);
@@ -130,90 +187,20 @@ impl Proxy {
         Ok(())
     }
 
-    pub async fn start_serve(&mut self, mut receiver_close: Receiver<()>, mut sender_close: Option<Sender<()>>) -> ProxyResult<()> {
+    pub async fn start_serve(
+        &mut self,
+        mut receiver_close: Receiver<()>,
+        mut sender_close: Option<Sender<()>>,
+    ) -> ProxyResult<()> {
         log::trace!("开始启动服务器，正在加载配置中");
-        let mut proxy_accept = None;
-        let mut client = None;
-        let mut center_listener = None;
-        if let Some(option) = &mut self.option.proxy {
-            let addr = option.bind_addr.clone();
-            proxy_accept = option.get_tls_accept().await.ok();
-            client = option.get_tls_request().await.ok();
-            if option.center {
-                if let Some(server) = option.server.clone() {
-                    let mut center_client = CenterClient::new(
-                        option.clone(),
-                        server,
-                        client.clone(),
-                        option.domain.clone(),
-                        option.mappings.clone(),
-                    );
-                    match center_client.connect().await {
-                        Ok(true) => (),
-                        Ok(false) => {
-                            log::error!("未能正确连上服务端:{:?}", option.server.unwrap());
-                            process::exit(1);
-                        }
-                        Err(err) => {
-                            log::error!(
-                                "未能正确连上服务端:{:?}, 发生错误:{:?}",
-                                option.server.unwrap(),
-                                err
-                            );
-                            process::exit(1);
-                        }
-                    }
-                    let _ = center_client.serve().await;
-                    self.center_client = Some(center_client);
-                }
-            }
-            center_listener = Some(Helper::bind(addr).await?);
-        }
-        async fn tcp_listen_work(listen: &Option<TcpListener>) -> Option<(TcpStream, SocketAddr)> {
-            if listen.is_some() {
-                match listen.as_ref().unwrap().accept().await {
-                    Ok((tcp, addr)) => Some((tcp, addr)),
-                    Err(_e) => None,
-                }
-            } else {
-                let pend = std::future::pending();
-                let () = pend.await;
-                None
-            }
-        }
 
-        async fn multi_tcp_listen_work(
-            listens: &mut Vec<TcpListener>,
-        ) -> (io::Result<(TcpStream, SocketAddr)>, usize) {
-            if !listens.is_empty() {
-                let (conn, index, _) =
-                    select_all(listens.iter_mut().map(|listener| listener.accept().boxed())).await;
-                (conn, index)
+        let (proxy_accept, client, center_listener, center_client) =
+            if let Some(option) = &mut self.option.proxy {
+                option.bind().await?
             } else {
-                let pend = std::future::pending();
-                let () = pend.await;
-                unreachable!()
-            }
-        }
-
-        async fn multi_udp_listen_work(
-            listens: &mut Vec<StreamUdp>,
-        ) -> (io::Result<(Vec<u8>, SocketAddr)>, usize) {
-            if !listens.is_empty() {
-                let (data, index, _) =
-                    select_all(listens.iter_mut().map(|listener| {
-                        listener.next().boxed()
-                    })).await;
-                if data.is_none() {
-                    return (Err(io::Error::new(io::ErrorKind::InvalidInput, "read none data")), index)
-                }
-                (data.unwrap(), index)
-            } else {
-                let pend = std::future::pending();
-                let () = pend.await;
-                unreachable!()
-            }
-        }
+                (None, None, None, None)
+            };
+        self.center_client = center_client;
 
         let (accept, tlss, mut listeners) = if let Some(http) = &mut self.option.http {
             http.bind().await?
@@ -221,15 +208,22 @@ impl Proxy {
             (None, vec![], vec![])
         };
 
-        
-        let (mut stream_listeners, mut stream_udp_listeners) = if let Some(stream) = &mut self.option.stream {
-            stream.bind().await?
-        } else {
-            (vec![], vec![])
-        };
+        let (mut stream_listeners, mut stream_udp_listeners) =
+            if let Some(stream) = &mut self.option.stream {
+                stream.bind().await?
+            } else {
+                (vec![], vec![])
+            };
 
-        let servers = self.option.http.clone().unwrap_or(HttpConfig::new()).convert_server_config();
-        let stream = Arc::new(Mutex::new(self.option.stream.clone().unwrap_or(StreamConfig::new())));
+        let servers = self
+            .option
+            .http
+            .clone()
+            .unwrap_or(HttpConfig::new())
+            .convert_server_config();
+        let stream = Arc::new(Mutex::new(
+            self.option.stream.clone().unwrap_or(StreamConfig::new()),
+        ));
         let mut http_listener = None;
         let mut https_listener = None;
         let mut tcp_listener = None;
@@ -263,7 +257,7 @@ impl Proxy {
 
         loop {
             tokio::select! {
-                Some((inbound, addr)) = tcp_listen_work(&center_listener) => {
+                Some((inbound, addr)) = Self::tcp_listen_work(&center_listener) => {
                     log::trace!("代理收到客户端连接: {}->{}", addr, center_listener.as_ref().unwrap().local_addr()?);
                     if let Some(a) = proxy_accept.clone() {
                         let inbound = a.accept(inbound).await;
@@ -280,19 +274,19 @@ impl Proxy {
                         let _ = self.deal_stream(inbound, addr, client.clone()).await;
                     };
                 }
-                Some((inbound, addr)) = tcp_listen_work(&http_listener) => {
+                Some((inbound, addr)) = Self::tcp_listen_work(&http_listener) => {
                     log::trace!("内网穿透:Http收到客户端连接: {}->{}", addr, http_listener.as_ref().unwrap().local_addr()?);
                     self.server_new_http(inbound, addr).await?;
                 }
-                Some((inbound, addr)) = tcp_listen_work(&https_listener) => {
+                Some((inbound, addr)) = Self::tcp_listen_work(&https_listener) => {
                     log::trace!("内网穿透:Https收到客户端连接: {}->{}", addr, https_listener.as_ref().unwrap().local_addr()?);
                     self.server_new_https(inbound, addr, map_accept.clone().unwrap()).await?;
                 }
-                Some((inbound, addr)) = tcp_listen_work(&tcp_listener) => {
+                Some((inbound, addr)) = Self::tcp_listen_work(&tcp_listener) => {
                     log::trace!("内网穿透:Tcp收到客户端连接: {}->{}", addr, tcp_listener.as_ref().unwrap().local_addr()?);
                     self.server_new_tcp(inbound, addr).await?;
                 }
-                (result, index) = multi_tcp_listen_work(&mut listeners) => {
+                (result, index) = Self::multi_tcp_listen_work(&mut listeners) => {
                     if let Ok((conn, addr)) = result {
                         let local_port = listeners[index].local_addr()?.port();
                         log::trace!("反向代理:{}收到客户端连接: {}->{}", if tlss[index] { "https" } else { "http" }, addr, listeners[index].local_addr()?);
@@ -323,7 +317,7 @@ impl Proxy {
                         }
                     }
                 }
-                (result, index) = multi_tcp_listen_work(&mut stream_listeners) => {
+                (result, index) = Self::multi_tcp_listen_work(&mut stream_listeners) => {
                     if let Ok((conn, addr)) = result {
                         log::trace!("反向代理:{}收到客户端连接: {}->{}", "stream", addr, stream_listeners[index].local_addr()?);
                         let data = stream.clone();
@@ -333,7 +327,7 @@ impl Proxy {
                         });
                     }
                 }
-                (result, index) = multi_udp_listen_work(&mut stream_udp_listeners) => {
+                (result, index) = Self::multi_udp_listen_work(&mut stream_udp_listeners) => {
                     if let Ok((data, addr)) = result {
                         log::trace!("反向代理:{}收到客户端连接: {}->{}", "stream", addr, stream_udp_listeners[index].local_addr()?);
 

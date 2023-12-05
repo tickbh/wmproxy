@@ -1,31 +1,37 @@
 // Copyright 2022 - 2023 Wenmeng See the COPYRIGHT
 // file at the top-level directory of this distribution.
-// 
+//
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
-// 
+//
 // Author: tickbh
 // -----
 // Created Date: 2023/09/25 10:42:02
 
 use std::{
+    collections::{HashMap, HashSet},
     fs::File,
     io::{self, BufReader, Read},
     net::{IpAddr, SocketAddr},
     path::PathBuf,
+    process,
     sync::Arc,
-    time::Duration, collections::{HashSet, HashMap},
+    time::Duration,
 };
 
 use commander::Commander;
-use rustls::{Certificate, PrivateKey};
+use rustls::{Certificate, ClientConfig, PrivateKey};
 
 use serde::{Deserialize, Serialize};
+use tokio::net::TcpListener;
 use tokio_rustls::{rustls, TlsAcceptor};
 
-use crate::{reverse::{HttpConfig, UpstreamConfig, StreamConfig}, Flag, MappingConfig, OneHealth, ProxyError, ProxyResult};
+use crate::{
+    reverse::{HttpConfig, StreamConfig, UpstreamConfig},
+    CenterClient, Flag, Helper, MappingConfig, OneHealth, ProxyError, ProxyResult,
+};
 
 use bitflags::bitflags;
 
@@ -284,7 +290,7 @@ pub struct ConfigOption {
     pub(crate) http: Option<HttpConfig>,
     #[serde(default)]
     pub(crate) stream: Option<StreamConfig>,
-    #[serde(default="default_control_port")]
+    #[serde(default = "default_control_port")]
     pub(crate) control: SocketAddr,
     #[serde(default)]
     pub(crate) disable_stdout: bool,
@@ -454,7 +460,7 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
     }
 
     /// 获取服务端https的证书信息
-    pub async fn get_map_tls_accept(&mut self) -> ProxyResult<TlsAcceptor> {
+    pub async fn get_map_tls_accept(&self) -> ProxyResult<TlsAcceptor> {
         if !self.tc {
             return Err(ProxyError::ProtNoSupport);
         }
@@ -472,7 +478,7 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
     }
 
     /// 获取服务端https的证书信息
-    pub async fn get_tls_accept(&mut self) -> ProxyResult<TlsAcceptor> {
+    pub async fn get_tls_accept(&self) -> ProxyResult<TlsAcceptor> {
         if !self.tc {
             return Err(ProxyError::ProtNoSupport);
         }
@@ -505,7 +511,7 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
     }
 
     /// 获取客户端https的Config配置
-    pub async fn get_tls_request(&mut self) -> ProxyResult<Arc<rustls::ClientConfig>> {
+    pub async fn get_tls_request(&self) -> ProxyResult<Arc<rustls::ClientConfig>> {
         if !self.ts {
             return Err(ProxyError::ProtNoSupport);
         }
@@ -542,6 +548,50 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
 
     pub fn is_server(&self) -> bool {
         self.mode.eq_ignore_ascii_case("server")
+    }
+
+    pub async fn bind(
+        &self,
+    ) -> ProxyResult<(
+        Option<TlsAcceptor>,
+        Option<Arc<ClientConfig>>,
+        Option<TcpListener>,
+        Option<CenterClient>,
+    )> {
+        let addr = self.bind_addr.clone();
+        let proxy_accept = self.get_tls_accept().await.ok();
+        let client = self.get_tls_request().await.ok();
+        let mut center_client = None;
+        if self.center {
+            if let Some(server) = self.server.clone() {
+                let mut center = CenterClient::new(
+                    self.clone(),
+                    server,
+                    client.clone(),
+                    self.domain.clone(),
+                    self.mappings.clone(),
+                );
+                match center.connect().await {
+                    Ok(true) => (),
+                    Ok(false) => {
+                        log::error!("未能正确连上服务端:{:?}", self.server.unwrap());
+                        process::exit(1);
+                    }
+                    Err(err) => {
+                        log::error!(
+                            "未能正确连上服务端:{:?}, 发生错误:{:?}",
+                            self.server.unwrap(),
+                            err
+                        );
+                        process::exit(1);
+                    }
+                }
+                let _ = center.serve().await;
+                center_client = Some(center);
+            }
+        }
+        let center_listener = Some(Helper::bind(addr).await?);
+        Ok((proxy_accept, client, center_listener, center_client))
     }
 }
 
@@ -655,7 +705,7 @@ impl ConfigOption {
         if let Some(http) = &mut self.http {
             http.after_load_option()?;
         }
-        
+
         if let Some(stream) = &mut self.stream {
             stream.copy_to_child();
         }
@@ -663,7 +713,11 @@ impl ConfigOption {
         Ok(())
     }
 
-    fn try_add_upstream(result: &mut Vec<OneHealth>, already: &mut HashSet<SocketAddr>, configs: &Vec<UpstreamConfig>) {
+    fn try_add_upstream(
+        result: &mut Vec<OneHealth>,
+        already: &mut HashSet<SocketAddr>,
+        configs: &Vec<UpstreamConfig>,
+    ) {
         for up in configs {
             if up.bind == "udp" {
                 continue;
@@ -673,7 +727,11 @@ impl ConfigOption {
                     continue;
                 }
                 already.insert(s.addr);
-                result.push(OneHealth::new(s.addr, "http".to_string(), Duration::from_secs(1)));
+                result.push(OneHealth::new(
+                    s.addr,
+                    "http".to_string(),
+                    Duration::from_secs(1),
+                ));
             }
         }
     }
@@ -697,7 +755,7 @@ impl ConfigOption {
                 Self::try_add_upstream(&mut result, &mut already, &s.upstream);
             }
         }
-        
+
         if let Some(stream) = &self.stream {
             Self::try_add_upstream(&mut result, &mut already, &stream.upstream);
             for s in &stream.server {
