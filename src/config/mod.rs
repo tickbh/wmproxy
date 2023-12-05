@@ -15,6 +15,7 @@ mod size;
 mod duration;
 mod log;
 mod header;
+mod rate;
 
 use std::{str::FromStr, fmt::{Display, self}, marker::PhantomData};
 
@@ -22,6 +23,7 @@ pub use self::size::ConfigSize;
 pub use self::duration::ConfigDuration;
 pub use self::log::ConfigLog;
 pub use self::header::{ConfigHeader, HeaderOper};
+pub use self::rate::ConfigRate;
 
 use serde::{Serializer, Deserializer, de::{Visitor, Error, self}};
 use serde_with::{SerializeAs, DeserializeAs};

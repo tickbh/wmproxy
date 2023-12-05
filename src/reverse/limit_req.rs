@@ -17,9 +17,9 @@ use wenmeng::{HeaderHelper, Middleware};
 
 use async_trait::async_trait;
 
-use wenmeng::{ProtError, ProtResult, RecvRequest, RecvResponse};
+use wenmeng::{ProtError, ProtResult, RecvRequest, RecvResponse, Rate};
 
-use crate::{data::LimitReqData, data::LimitResult, ConfigDuration, ConfigSize, ProxyError};
+use crate::{data::LimitReqData, data::LimitResult, ConfigDuration, ConfigSize, ProxyError, ConfigRate};
 
 #[derive(Debug, Clone)]
 pub struct LimitReqZone {
@@ -27,19 +27,16 @@ pub struct LimitReqZone {
     pub key: String,
     /// IP个数
     pub limit: u64,
-    /// 周期内可以通行的数据
-    pub nums: u64,
-    /// 每个周期的时间
-    pub per: Duration,
+
+    pub rate: Rate,
 }
 
 impl LimitReqZone {
-    pub fn new(key: String, limit: u64, nums: u64, per: Duration) -> Self {
+    pub fn new(key: String, limit: u64, rate: Rate) -> Self {
         Self {
             key,
             limit,
-            nums,
-            per,
+            rate,
         }
     }
 }
@@ -105,8 +102,8 @@ impl Display for LimitReqZone {
             "{} limit={} rate={}r/{}",
             self.key,
             ConfigSize::new(self.limit),
-            self.nums,
-            ConfigDuration::new(self.per)
+            self.rate.nums,
+            ConfigDuration::new(self.rate.per)
         ))
     }
 }
@@ -118,8 +115,7 @@ impl FromStr for LimitReqZone {
         let v = s.split(" ").collect::<Vec<&str>>();
         let key = v[0].to_string();
         let mut limit = 0;
-        let mut nums = 0;
-        let mut per = Duration::new(0, 0);
+        let mut rate = Rate::default();
         for idx in 1..v.len() {
             let key_value = v[idx].split("=").map(|k| k.trim()).collect::<Vec<&str>>();
             if key_value.len() <= 1 {
@@ -131,21 +127,8 @@ impl FromStr for LimitReqZone {
                     limit = s.0;
                 }
                 "rate" => {
-                    let rate_key = key_value[1]
-                        .split("/")
-                        .map(|k| k.trim())
-                        .collect::<Vec<&str>>();
-                    if rate_key.len() == 1 {
-                        return Err(ProxyError::Extension("未知的LimitReq"));
-                    }
-
-                    let rate = rate_key[0].trim_end_matches("r");
-                    nums = rate
-                        .parse::<u64>()
-                        .map_err(|_e| ProxyError::Extension("parse error"))?;
-                    
-                    let s = ConfigDuration::from_str(rate_key[1])?;
-                    per = s.0;
+                    let c = ConfigRate::from_str(key_value[1])?;
+                    rate = c.0;
                 }
                 _ => {
                     return Err(ProxyError::Extension("未知的LimitReq"));
@@ -153,7 +136,7 @@ impl FromStr for LimitReqZone {
             }
         }
 
-        Ok(LimitReqZone::new(key, limit, nums, per))
+        Ok(LimitReqZone::new(key, limit, rate))
     }
 }
 

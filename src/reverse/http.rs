@@ -108,7 +108,7 @@ impl HttpConfig {
     pub fn after_load_option(&mut self) -> ProtResult<()> {
         self.copy_to_child();
         for (k, zone) in &self.limit_req_zone {
-            LimitReqData::cache(k.to_string(), zone.limit, zone.nums, zone.per)?;
+            LimitReqData::cache(k.to_string(), zone.limit, zone.rate.nums, zone.rate.per)?;
         }
         Ok(())
     }

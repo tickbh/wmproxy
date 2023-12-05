@@ -67,7 +67,14 @@ impl FromStr for ConfigSize {
             let new = s.trim_end_matches(&SIZE_TRIM_STR[..]);
             new.parse::<u64>().map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "")).and_then(|s| Ok(ConfigSize(s * multi)))
         } else {
-            s.parse::<u64>().map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "")).and_then(|s| Ok(ConfigSize(s)))
+            let last = *s.as_bytes().last().unwrap();
+            if last.is_ascii_digit() {
+                s.parse::<u64>().map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "")).and_then(|s| Ok(ConfigSize(s)))
+            } else {
+                let new = s.trim_end_matches(&[last as char]);
+                new.parse::<u64>().map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "")).and_then(|s| Ok(ConfigSize(s)))
+            }
+            
         }
     }
 }

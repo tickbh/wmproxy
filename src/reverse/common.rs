@@ -12,7 +12,7 @@
 
 use std::collections::HashMap;
 
-use crate::{ConfigDuration, ConfigLog};
+use crate::{ConfigDuration, ConfigLog, ConfigRate};
 use crate::{ConfigSize, DisplayFromStrOrNumber};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
@@ -25,10 +25,8 @@ use super::LimitReq;
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CommonConfig {
     pub max_read_buf: Option<usize>,
-    #[serde_as(as = "Option<DisplayFromStrOrNumber>")]
-    pub rate_limit_nums: Option<ConfigSize>,
-    #[serde_as(as = "Option<DisplayFromStrOrNumber>")]
-    pub rate_limit_per: Option<ConfigDuration>,
+    #[serde_as(as = "Option<DisplayFromStr>")]
+    pub rate_limit: Option<ConfigRate>,
 
     #[serde_as(as = "Option<DisplayFromStrOrNumber>")]
     pub client_read_timeout: Option<ConfigDuration>,
@@ -64,8 +62,7 @@ impl CommonConfig {
     pub fn new() -> Self {
         Self {
             max_read_buf: None,
-            rate_limit_nums: None,
-            rate_limit_per: None,
+            rate_limit: None,
             
             client_read_timeout: None,
             client_write_timeout: None,
@@ -92,11 +89,8 @@ impl CommonConfig {
         if self.max_read_buf.is_none() && parent.max_read_buf.is_some() {
             self.max_read_buf = parent.max_read_buf.clone();
         }
-        if self.rate_limit_nums.is_none() && parent.rate_limit_nums.is_some() {
-            self.rate_limit_nums = parent.rate_limit_nums.clone();
-        }
-        if self.rate_limit_per.is_none() && parent.rate_limit_per.is_some() {
-            self.rate_limit_per = parent.rate_limit_per.clone();
+        if self.rate_limit.is_none() && parent.rate_limit.is_some() {
+            self.rate_limit = parent.rate_limit.clone();
         }
         if self.client_read_timeout.is_none() && parent.client_read_timeout.is_some() {
             self.client_read_timeout = parent.client_read_timeout.clone();
@@ -134,8 +128,8 @@ impl CommonConfig {
     }
 
     pub fn get_rate_limit(&self) -> Option<RateLimitLayer> {
-        if self.rate_limit_nums.is_some() && self.rate_limit_per.is_some() {
-            return Some(RateLimitLayer::new(self.rate_limit_nums.clone().unwrap().0, self.rate_limit_per.clone().unwrap().into()));
+        if self.rate_limit.is_some() {
+            return Some(RateLimitLayer::new(self.rate_limit.clone().unwrap().0));
         } else {
             None
         }
