@@ -593,6 +593,40 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
         let center_listener = Some(Helper::bind(addr).await?);
         Ok((proxy_accept, client, center_listener, center_client))
     }
+
+    pub async fn bind_map(
+        &self,
+    ) -> ProxyResult<(
+        Option<TcpListener>,
+        Option<TcpListener>,
+        Option<TcpListener>,
+        Option<TlsAcceptor>,
+    )> {
+        
+        let mut http_listener = None;
+        let mut https_listener = None;
+        let mut tcp_listener = None;
+        let mut map_accept = None;
+        if let Some(ls) = &self.map_http_bind {
+            http_listener = Some(Helper::bind(ls).await?);
+        };
+        if let Some(ls) = &self.map_https_bind {
+            https_listener = Some(Helper::bind(ls).await?);
+        };
+
+        if https_listener.is_some() {
+            let accept = self.get_map_tls_accept().await.ok();
+            if accept.is_none() {
+                let _ = https_listener.take();
+            }
+            map_accept = accept;
+        };
+
+        if let Some(ls) = &self.map_tcp_bind {
+            tcp_listener = Some(Helper::bind(ls).await?);
+        };
+        Ok((http_listener, https_listener, tcp_listener, map_accept))
+    }
 }
 
 impl ConfigOption {
