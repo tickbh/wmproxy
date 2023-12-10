@@ -3,7 +3,7 @@
 bind_addr = "127.0.0.1:8091"
 
 #代理支持的功能，1为http，2为https，4为socks5
-flag = "7"
+# flag = "7"
 username = "wmproxy"
 password = "wmproxy"
 

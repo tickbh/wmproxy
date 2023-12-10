@@ -18,12 +18,12 @@ local_addr = "127.0.0.1:8080"
 domain = "localhost"
 
 headers = [
-  ["proxy", "+", "x-forward-for", "{client_ip}"],
-  ["proxy", "+", "from", "$url"],
-  ["+", "key", "value"],
-  ["-", "etag"],
-  ["+", "last-modified", "aaaa"],
+  "proxy x-forward-for {client_ip}",
+  "proxy + from $url",
+  "+ last-modified 'from proxy'",
+  "- etag",
 ]
+
 #将tcp的流量无条件转到127.0.0.1:8080
 [[proxy.mappings]]
 name = "tcp"
