@@ -160,6 +160,11 @@ impl ControlServer {
     pub async fn start_control(control: Arc<Mutex<ControlServer>>) -> ProxyResult<()> {
         let listener = {
             let value = &control.lock().await.option;
+            if value.disable_control {
+                let pending = std::future::pending();
+                let () = pending.await;
+                return Ok(())
+            }
             TcpListener::bind(value.control).await?
         };
 

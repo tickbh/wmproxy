@@ -101,7 +101,6 @@ impl FromStr for ConfigHeader {
         
         let mut vals = vec![];
         for (_, [value]) in RE.captures_iter(s).map(|c| c.extract()) {
-            println!("values = {:?}", value);
             vals.push(value);
         }
 

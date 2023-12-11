@@ -55,6 +55,7 @@ rbtree = "0.1.7"
 
 regex = "1.10.2"
 
+async-std = "1.12.0"
 
 # webparse = { version = "0.2.0"}
 # wenmeng={version="0.2.0"}

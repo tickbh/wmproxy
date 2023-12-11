@@ -2,7 +2,7 @@
 control = "127.0.0.1:8837"
 [proxy]
 bind_addr = "0.0.0.0:8090"
-flag = 7
+# flag = 7
 
 # 反向代理相关，七层协议为http及https
 [http]
@@ -21,7 +21,7 @@ error = "logs/error.log"
 default = "logs/default.log"
 
 [http.limit_req_zone]
-limit = "{client_ip} limit=10m rate=10r/min"
+limit = "{client_ip} limit=10m rate=1000r/s"
 
 # 反向代理中的负载均衡地址列表，按名字匹配
 [[http.upstream]]
@@ -52,7 +52,7 @@ limit_req = "zone=limit brust=1"
 
 # 按请求路径进行rule匹配，可匹配method，看具体的处理的内容如文件服务或者负载均衡
 [[http.server.location]]
-rate_limit = "4k/s"
+rate_limit = "4m/s"
 rule = "/root"
 file_server = { browse = true }
 proxy_pass = ""

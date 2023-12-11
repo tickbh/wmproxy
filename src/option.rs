@@ -222,6 +222,10 @@ impl Builder {
             inner: self.inner.and_then(func),
         }
     }
+
+    pub fn into_value(self) -> ProxyResult<ProxyConfig> {
+        self.inner
+    }
 }
 
 fn default_bind_addr() -> SocketAddr {
@@ -297,6 +301,21 @@ pub struct ConfigOption {
     pub(crate) control: SocketAddr,
     #[serde(default)]
     pub(crate) disable_stdout: bool,
+    #[serde(default)]
+    pub(crate) disable_control: bool,
+}
+
+impl Default for ConfigOption {
+    fn default() -> Self {
+        Self {
+            proxy: Default::default(),
+            http: Default::default(),
+            stream: Default::default(),
+            control: default_control_port(),
+            disable_stdout: Default::default(),
+            disable_control: Default::default(),
+        }
+    }
 }
 
 impl Default for ProxyConfig {
@@ -605,7 +624,6 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
         Option<TcpListener>,
         Option<TlsAcceptor>,
     )> {
-        
         let mut http_listener = None;
         let mut https_listener = None;
         let mut tcp_listener = None;
@@ -633,6 +651,12 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
 }
 
 impl ConfigOption {
+    pub fn new_by_proxy(proxy: ProxyConfig) -> Self {
+        let mut config = ConfigOption::default();
+        config.proxy = Some(proxy);
+        config.disable_control = true;
+        config
+    }
     pub fn parse_env() -> ProxyResult<ConfigOption> {
         let command = Commander::new()
             .version(&env!("CARGO_PKG_VERSION").to_string())
@@ -735,6 +759,7 @@ impl ConfigOption {
             stream: None,
             control: default_control_port(),
             disable_stdout: false,
+            disable_control: false,
         })
     }
 
