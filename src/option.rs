@@ -25,6 +25,7 @@ use commander::Commander;
 use rustls::{Certificate, ClientConfig, PrivateKey};
 
 use serde::{Deserialize, Serialize};
+use serde_with::{serde_as, DisplayFromStr};
 use tokio::net::TcpListener;
 use tokio_rustls::{rustls, TlsAcceptor};
 
@@ -232,10 +233,12 @@ fn default_bool_true() -> bool {
 }
 
 /// 代理类, 一个代理类启动一种类型的代理
+#[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProxyConfig {
     #[serde(default = "default_bind_addr")]
     pub(crate) bind_addr: SocketAddr,
+    #[serde_as(as = "DisplayFromStr")]
     #[serde(default)]
     pub(crate) flag: Flag,
     #[serde(default)]

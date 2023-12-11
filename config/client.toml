@@ -2,6 +2,7 @@
 # 连接服务端地址
 #server = "127.0.0.1:8091"
 bind_addr = "0.0.0.0:8090"
+flag = "http https socks5"
 # 连接服务端是否加密
 ts = true
 two_way_tls = true

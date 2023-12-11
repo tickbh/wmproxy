@@ -93,7 +93,7 @@ proxy:
   bind_addr: 127.0.0.1:8091
 
   #代理支持的功能，1为http，2为https，4为socks5
-  flag: 7
+  flag: "http https socks5"
 
   #内网映射http绑定地址
   map_http_bind: 127.0.0.1:8001
