@@ -165,6 +165,7 @@ impl ControlServer {
                 let () = pending.await;
                 return Ok(())
             }
+            log::info!("控制端口绑定：{:?}，提供中控功能。", value.control);
             TcpListener::bind(value.control).await?
         };
 

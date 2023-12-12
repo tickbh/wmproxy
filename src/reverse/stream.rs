@@ -73,9 +73,12 @@ impl StreamConfig {
             }
             bind_port.insert(value.bind_addr.port());
             if value.bind_mode == "udp" {
+                log::info!("负载均衡,stream：{:?}，提供stream中的udp转发功能。", value.bind_addr);
                 let listener = Helper::bind_upd(value.bind_addr).await?;
                 udp_listeners.push(StreamUdp::new(listener, value.clone()));
             } else {
+                log::info!("负载均衡,stream：{:?}，提供stream中的tcp转发功能。", value.bind_addr);
+
                 let listener = Helper::bind(value.bind_addr).await?;
                 listeners.push(listener);
             }

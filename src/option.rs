@@ -612,6 +612,7 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
                 center_client = Some(center);
             }
         }
+        log::info!("绑定代理：{:?}，提供代理功能。", addr);
         let center_listener = Some(Helper::bind(addr).await?);
         Ok((proxy_accept, client, center_listener, center_client))
     }
@@ -629,9 +630,11 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
         let mut tcp_listener = None;
         let mut map_accept = None;
         if let Some(ls) = &self.map_http_bind {
+            log::info!("内网穿透，http绑定：{:?}，提供http内网功能。", ls);
             http_listener = Some(Helper::bind(ls).await?);
         };
         if let Some(ls) = &self.map_https_bind {
+            log::info!("内网穿透，https绑定：{:?}，提供https内网功能。", ls);
             https_listener = Some(Helper::bind(ls).await?);
         };
 
@@ -644,6 +647,7 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
         };
 
         if let Some(ls) = &self.map_tcp_bind {
+            log::info!("内网穿透，tcp绑定：{:?}，提供tcp内网功能。", ls);
             tcp_listener = Some(Helper::bind(ls).await?);
         };
         Ok((http_listener, https_listener, tcp_listener, map_accept))
