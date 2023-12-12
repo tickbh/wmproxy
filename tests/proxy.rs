@@ -110,8 +110,8 @@ mod tests {
         let (addr, _sender) = run_proxy(Some(username.clone()), Some(password.clone()))
             .await
             .unwrap();
-        test_proxy(addr, HTTP_URL, "http", None, false).await;
-        test_proxy(addr, HTTPS_URL, "http", None, false).await;
+        test_proxy(addr, HTTP_URL, "http", None, true).await;
+        test_proxy(addr, HTTPS_URL, "http", None, true).await;
         test_proxy(addr, HTTP_URL, "socks5", None, true).await;
 
         let auth = Some((username, password));

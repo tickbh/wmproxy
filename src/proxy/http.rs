@@ -14,7 +14,6 @@ use std::io::Cursor;
 
 use crate::{HealthCheck, ProxyError};
 use async_trait::async_trait;
-use base64::engine::general_purpose;
 use tokio::{io::{copy_bidirectional, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf}, net::TcpStream, sync::mpsc::{Receiver, Sender}};
 use webparse::{BinaryMut, Buf, BufMut, HttpError, Method, WebError, Response};
 use wenmeng::{OperateTrait, RecvRequest, ProtResult, RecvResponse, Server, Client, ClientOption, ProtError, MaybeHttpsStream, RecvStream};
@@ -31,13 +30,9 @@ struct Operate {
 
 impl Operate {
     
-    pub fn check_basic_auth<U, P>(value: &str) -> bool
-    where
-        U: std::fmt::Display,
-        P: std::fmt::Display,
+    pub fn check_basic_auth(&self, value: &str) -> bool
     {
-        use base64::prelude::BASE64_STANDARD;
-        use base64::read::DecoderReader;
+        use base64::engine::general_purpose;
         use std::io::Read;
 
         let vals: Vec<&str> = value.split_whitespace().collect();
@@ -52,10 +47,15 @@ impl Operate {
         // handle errors as you normally would
         let mut result: Vec<u8> = Vec::new();
         decoder.read_to_end(&mut result).unwrap();
+
         if let Ok(value) = String::from_utf8(result) {
             let up: Vec<&str> = value.split(":").collect();
             if up.len() != 2 {
                 return false;
+            }
+            if up[0] == self.username.as_ref().unwrap() ||
+                up[1] == self.password.as_ref().unwrap() {
+                return true;
             }
         }
 
@@ -78,13 +78,13 @@ impl OperateTrait for &mut Operate {
         };
 
         if self.username.is_some() && self.password.is_some() {
-            let mut auth = false;
-            if let Some(auth) = request.headers().get_option_value(&"Proxy-Authenticate") {
+            let mut is_auth = false;
+            if let Some(auth) = request.headers().get_option_value(&"Proxy-Authorization") {
                 if let Some(val) = auth.as_string() {
-
+                    is_auth = self.check_basic_auth(&val);
                 }
             }
-            if !auth {
+            if !is_auth {
                 return Ok(Response::builder().status(407).body("")?.into_type());
             }
             

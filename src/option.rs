@@ -753,6 +753,7 @@ impl ConfigOption {
             builder = builder.server(s.parse::<SocketAddr>().ok());
         };
 
+        log::debug!("启动默认信息，只开启代理信息");
         Ok(ConfigOption {
             proxy: Some(builder.inner?),
             http: None,
@@ -761,6 +762,13 @@ impl ConfigOption {
             disable_stdout: false,
             disable_control: false,
         })
+    }
+
+    pub fn is_empty_listen(&self) -> bool {
+        if self.http.is_some() || self.stream.is_some() || self.proxy.is_some()  {
+            return false;
+        }
+        true
     }
 
     pub fn after_load_option(&mut self) -> ProxyResult<()> {
