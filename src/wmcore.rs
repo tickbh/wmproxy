@@ -19,7 +19,7 @@ use std::{
 
 use futures::{future::select_all, FutureExt, StreamExt};
 
-use rustls::{ClientConfig};
+use rustls::ClientConfig;
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::{TcpListener, TcpStream},
@@ -34,12 +34,12 @@ use webparse::BinaryMut;
 use crate::{
     error::ProxyTypeResult,
     option::ConfigOption,
-    reverse::{HttpConfig, StreamConfig, StreamUdp, ServerConfig},
+    reverse::{HttpConfig, ServerConfig, StreamConfig, StreamUdp},
     ActiveHealth, CenterClient, CenterServer, Flag, HealthCheck, Helper, OneHealth, ProxyError,
     ProxyHttp, ProxyResult, ProxySocks5,
 };
 
-pub struct Proxy {
+pub struct WMCore {
     pub option: ConfigOption,
     pub center_client: Option<CenterClient>,
     pub center_servers: Vec<CenterServer>,
@@ -63,9 +63,8 @@ pub struct Proxy {
     pub stream_udp_listeners: Vec<StreamUdp>,
 }
 
-
-impl Proxy {
-    pub fn new(option: ConfigOption) -> Proxy {
+impl WMCore {
+    pub fn new(option: ConfigOption) -> WMCore {
         Self {
             option,
             center_client: None,
@@ -91,12 +90,17 @@ impl Proxy {
         }
     }
 
-    async fn process_http<T>(flag: Flag, inbound: T) -> ProxyTypeResult<(), T>
+    async fn process_http<T>(
+        username: &Option<String>,
+        password: &Option<String>,
+        flag: Flag,
+        inbound: T,
+    ) -> ProxyTypeResult<(), T>
     where
         T: AsyncRead + AsyncWrite + Unpin,
     {
         if flag.contains(Flag::HTTP) || flag.contains(Flag::HTTPS) {
-            ProxyHttp::process(inbound).await
+            ProxyHttp::process(username, password, inbound).await
         } else {
             Err(ProxyError::Continue((None, inbound)))
         }
@@ -222,16 +226,23 @@ impl Proxy {
         Ok(())
     }
 
-    
-    pub async fn ready_serve(
-        &mut self,
-    ) -> ProxyResult<()> {
+    pub async fn ready_serve(&mut self) -> ProxyResult<()> {
         if let Some(option) = &mut self.option.proxy {
-            (self.proxy_accept, self.proxy_client, self.center_listener, self.center_client) = option.bind().await?;
+            (
+                self.proxy_accept,
+                self.proxy_client,
+                self.center_listener,
+                self.center_client,
+            ) = option.bind().await?;
         }
 
         if let Some(option) = &mut self.option.proxy {
-            (self.map_http_listener, self.map_https_listener, self.map_tcp_listener, self.map_accept) = option.bind_map().await?;
+            (
+                self.map_http_listener,
+                self.map_https_listener,
+                self.map_tcp_listener,
+                self.map_accept,
+            ) = option.bind_map().await?;
         }
 
         self.http_servers = self
@@ -416,7 +427,7 @@ impl Proxy {
     where
         T: AsyncRead + AsyncWrite + Unpin,
     {
-        let (read_buf, inbound) = match Self::process_http(flag, inbound).await {
+        let (read_buf, inbound) = match Self::process_http(&username, &password, flag, inbound).await {
             Ok(()) => {
                 return Ok(());
             }

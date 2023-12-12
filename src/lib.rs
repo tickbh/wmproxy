@@ -13,11 +13,10 @@
 
 
 mod flag;
+mod wmcore;
 mod proxy;
 mod option;
 mod error;
-mod http;
-mod socks5;
 mod streams;
 mod prot;
 mod helper;
@@ -34,9 +33,9 @@ mod data;
 pub use error::{ProxyResult, ProxyError};
 pub use flag::Flag;
 pub use option::{ProxyConfig, Builder, ConfigOption};
-pub use proxy::Proxy;
-pub use http::ProxyHttp;
-pub use socks5::ProxySocks5;
+pub use wmcore::WMCore;
+pub use proxy::http::ProxyHttp;
+pub use proxy::socks5::ProxySocks5;
 pub use streams::*;
 pub use helper::Helper;
 pub use prot::{ProtFrame, ProtFrameHeader, ProtClose, ProtData, ProtCreate};

@@ -18,7 +18,7 @@ use async_trait::async_trait;
 use tokio::{sync::{mpsc::{Sender, channel, Receiver}, Mutex}, net::TcpListener};
 use webparse::{Request, Response, HeaderName};
 use wenmeng::{Server, RecvStream, ProtResult, OperateTrait, RecvRequest, RecvResponse};
-use crate::{ConfigOption, Proxy, ProxyResult, Helper};
+use crate::{ConfigOption, WMCore, ProxyResult, Helper};
 
 /// 控制端，可以对配置进行热更新
 pub struct ControlServer {
@@ -80,7 +80,7 @@ impl ControlServer {
         // 每次启动的时候将让控制计数+1
         self.count += 1;
         tokio::spawn(async move {
-            let mut proxy = Proxy::new(option);
+            let mut proxy = WMCore::new(option);
             // 将上一个进程的关闭权限交由下一个服务，只有等下一个服务准备完毕的时候才能关闭上一个服务
             if let Err(e) = proxy.start_serve(receiver_no_listen, sender_close).await {
                 log::info!("处理失败服务进程失败: {:?}", e);

@@ -258,7 +258,8 @@ impl HttpConfig {
                             }
                         } else {
                             log::trace!("do req data by new");
-                            let (res, sender, receiver) = l.deal_request(req).await?;
+                            let (res, sender, receiver) = 
+                                l.deal_request(req).await?;
                             if sender.is_some() && receiver.is_some() {
                                 cache.insert(clone, (sender.unwrap(), receiver.unwrap()));
                             }

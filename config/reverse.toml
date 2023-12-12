@@ -2,6 +2,8 @@
 control = "127.0.0.1:8837"
 [proxy]
 bind_addr = "0.0.0.0:8090"
+username = "wmproxy"
+password = "wmproxy"
 # flag = 7
 
 # 反向代理相关，七层协议为http及https

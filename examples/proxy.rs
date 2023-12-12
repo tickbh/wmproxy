@@ -17,7 +17,7 @@ use std::{net::SocketAddr};
 use tokio::sync::mpsc::{channel, Sender};
 use webparse::Request;
 use wenmeng::Client;
-use wmproxy::{ConfigOption, ProxyResult, ControlServer, Helper, ProxyConfig, Proxy};
+use wmproxy::{ConfigOption, ProxyResult, ControlServer, Helper, ProxyConfig, WMCore};
 
 
 async fn run_proxy() -> ProxyResult<(SocketAddr, Sender<()>)> {
@@ -25,7 +25,7 @@ async fn run_proxy() -> ProxyResult<(SocketAddr, Sender<()>)> {
     let proxy = ProxyConfig::builder().bind_addr(addr).into_value().unwrap();
     let option = ConfigOption::new_by_proxy(proxy);
     let (sender_close, receiver_close) = channel::<()>(1);
-    let mut proxy = Proxy::new(option);
+    let mut proxy = WMCore::new(option);
     proxy.ready_serve().await.unwrap();
     let addr = proxy.center_listener.as_ref().unwrap().local_addr()?;
     println!("addr = {:?}", addr);

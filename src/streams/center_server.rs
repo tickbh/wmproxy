@@ -31,7 +31,7 @@ use webparse::Buf;
 use crate::{
     prot::{ProtClose, ProtFrame},
     trans::{TransHttp, TransTcp},
-    Helper, MappingConfig, ProtCreate, Proxy, ProxyConfig, ProxyResult, VirtualStream,
+    Helper, MappingConfig, ProtCreate, WMCore, ProxyConfig, ProxyResult, VirtualStream,
 };
 
 /// 中心服务端
@@ -201,7 +201,7 @@ impl CenterServer {
                                 );
                                 tokio::spawn(async move {
                                     // 处理代理的能力
-                                    let _ = Proxy::deal_proxy(
+                                    let _ = WMCore::deal_proxy(
                                         stream, flag, username, password, udp_bind,
                                     )
                                     .await;
