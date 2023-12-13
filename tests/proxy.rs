@@ -14,16 +14,8 @@ mod tests {
     static HTTPS_URL: &str = "https://www.baidu.com";
 
     async fn run_proxy(
-        username: Option<String>,
-        password: Option<String>,
+        proxy: ProxyConfig,
     ) -> ProxyResult<(SocketAddr, Sender<()>)> {
-        let addr: SocketAddr = "127.0.0.1:0".parse().unwrap();
-        let proxy = ProxyConfig::builder()
-            .bind_addr(addr)
-            .username(username)
-            .password(password)
-            .into_value()
-            .unwrap();
         let option = ConfigOption::new_by_proxy(proxy);
         let (sender_close, receiver_close) = channel::<()>(1);
         let mut proxy = WMCore::new(option);
@@ -75,8 +67,8 @@ mod tests {
             Ok(res) => {
                 if is_failed {
                     println!("status {:?}", res.status());
-                    println!("body {:?}", res.body());
                     assert!(res.status() != 200);
+                    return ;
                 }
                 res
             }
@@ -97,7 +89,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_no_auth() {
-        let (addr, _sender) = run_proxy(None, None).await.unwrap();
+        let addr = "127.0.0.1:0".parse().unwrap();
+        let proxy = ProxyConfig::builder()
+            .bind_addr(addr)
+            .into_value()
+            .unwrap();
+
+        let (addr, _sender) = run_proxy(proxy).await.unwrap();
         test_proxy(addr, HTTP_URL, "http", None, false).await;
         test_proxy(addr, HTTPS_URL, "http", None, false).await;
         test_proxy(addr, HTTP_URL, "socks5", None, false).await;
@@ -105,11 +103,20 @@ mod tests {
 
     #[tokio::test]
     async fn test_auth() {
+        let addr = "127.0.0.1:0".parse().unwrap();
         let username = "wmproxy".to_string();
         let password = "wmproxy".to_string();
-        let (addr, _sender) = run_proxy(Some(username.clone()), Some(password.clone()))
+        let proxy = ProxyConfig::builder()
+            .bind_addr(addr)
+            .username(Some(username.clone()))
+            .password(Some(password.clone()))
+            .into_value()
+            .unwrap();
+
+        let (addr, _sender) = run_proxy(proxy)
             .await
             .unwrap();
+
         test_proxy(addr, HTTP_URL, "http", None, true).await;
         test_proxy(addr, HTTPS_URL, "http", None, true).await;
         test_proxy(addr, HTTP_URL, "socks5", None, true).await;

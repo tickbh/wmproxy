@@ -6,8 +6,8 @@ flag = "http https socks5"
 # 连接服务端是否加密
 ts = true
 two_way_tls = true
-username = "wmproxy"
-password = "wmproxy"
+# username = "wmproxy"
+# password = "wmproxy"
 
 # 内网映射配置的数组
 

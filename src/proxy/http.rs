@@ -79,7 +79,7 @@ impl OperateTrait for &mut Operate {
 
         if self.username.is_some() && self.password.is_some() {
             let mut is_auth = false;
-            if let Some(auth) = request.headers().get_option_value(&"Proxy-Authorization") {
+            if let Some(auth) = request.headers_mut().remove(&"Proxy-Authorization") {
                 if let Some(val) = auth.as_string() {
                     is_auth = self.check_basic_auth(&val);
                 }

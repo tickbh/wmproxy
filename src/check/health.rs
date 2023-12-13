@@ -215,13 +215,16 @@ impl HealthCheck {
             if Self::is_fall_down(&addr) {
                 last_err = Some(io::Error::new(io::ErrorKind::Other, "health check falldown"));
             } else {
+                println!("connect addr = {:?}", addr);
                 match TcpStream::connect(&addr).await {
                     Ok(stream) => 
                     {
+                        println!("success connect addr = {:?}", addr);
                         Self::add_rise_up(addr);
                         return Ok(stream)
                     },
                     Err(e) => {
+                        println!("connect failed addr = {:?}", e);
                         Self::add_fall_down(addr);
                         last_err = Some(e)
                     },
