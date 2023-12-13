@@ -101,6 +101,7 @@ mod tests {
         test_proxy(addr, HTTP_URL, "socks5", None, false).await;
     }
 
+    
     #[tokio::test]
     async fn test_auth() {
         let addr = "127.0.0.1:0".parse().unwrap();
@@ -117,6 +118,54 @@ mod tests {
             .await
             .unwrap();
 
+        println!("aaaaaaaaaaa");
+        test_proxy(addr, HTTP_URL, "http", None, true).await;
+        test_proxy(addr, HTTPS_URL, "http", None, true).await;
+        test_proxy(addr, HTTP_URL, "socks5", None, true).await;
+
+        let auth = Some((username, password));
+        println!("bbbbbbbbbbbbbbb");
+        test_proxy(addr, HTTP_URL, "http", auth.clone(), false).await;
+        println!("ccccccccc");
+        test_proxy(addr, HTTPS_URL, "http", auth.clone(), false).await;
+        println!("dddddddddd");
+        test_proxy(addr, HTTP_URL, "socks5", auth.clone(), false).await;
+        println!("eeeeeeeeeeeeeee");
+    }
+
+    
+    #[tokio::test]
+    async fn test_client_server_auth() {
+        let addr = "127.0.0.1:0".parse().unwrap();
+        let username = "wmproxy".to_string();
+        let password = "wmproxy".to_string();
+
+        let proxy = ProxyConfig::builder()
+            .bind_addr(addr)
+            .username(Some(username.clone()))
+            .password(Some(password.clone()))
+            .center(true)
+            .mode("server".to_string())
+            .into_value()
+            .unwrap();
+
+        let (server_addr, _sender) = run_proxy(proxy)
+            .await
+            .unwrap();
+        
+        let proxy = ProxyConfig::builder()
+            .bind_addr(addr)
+            .username(Some(username.clone()))
+            .password(Some(password.clone()))
+            .center(true)
+            .server(Some(server_addr))
+            .into_value()
+            .unwrap();
+
+        let (addr, _sender) = run_proxy(proxy)
+            .await
+            .unwrap();
+
         test_proxy(addr, HTTP_URL, "http", None, true).await;
         test_proxy(addr, HTTPS_URL, "http", None, true).await;
         test_proxy(addr, HTTP_URL, "socks5", None, true).await;
@@ -126,4 +175,5 @@ mod tests {
         test_proxy(addr, HTTPS_URL, "http", auth.clone(), false).await;
         test_proxy(addr, HTTP_URL, "socks5", auth.clone(), false).await;
     }
+
 }
