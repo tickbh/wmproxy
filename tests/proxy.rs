@@ -118,19 +118,14 @@ mod tests {
             .await
             .unwrap();
 
-        println!("aaaaaaaaaaa");
         test_proxy(addr, HTTP_URL, "http", None, true).await;
         test_proxy(addr, HTTPS_URL, "http", None, true).await;
         test_proxy(addr, HTTP_URL, "socks5", None, true).await;
 
         let auth = Some((username, password));
-        println!("bbbbbbbbbbbbbbb");
         test_proxy(addr, HTTP_URL, "http", auth.clone(), false).await;
-        println!("ccccccccc");
         test_proxy(addr, HTTPS_URL, "http", auth.clone(), false).await;
-        println!("dddddddddd");
         test_proxy(addr, HTTP_URL, "socks5", auth.clone(), false).await;
-        println!("eeeeeeeeeeeeeee");
     }
 
     
