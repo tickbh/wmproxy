@@ -16,7 +16,7 @@ use std::{
 };
 use tokio::sync::mpsc::{Receiver, error::TryRecvError};
 use webparse::{Request, Response};
-use wenmeng::{Client, RecvStream};
+use wenmeng::{Client, Body};
 
 use crate::{ProxyResult, HealthCheck};
 
@@ -40,7 +40,7 @@ impl OneHealth {
         OneHealth { addr, method, interval, last_record: Instant::now() - interval }
     }
     
-    pub async fn connect_http(&self) -> ProxyResult<Response<RecvStream>> {
+    pub async fn connect_http(&self) -> ProxyResult<Response<Body>> {
         let url = format!("{}://{}/", self.method, self.addr);
         let req = Request::builder().method("GET").url(url.clone()).body("").unwrap();
 

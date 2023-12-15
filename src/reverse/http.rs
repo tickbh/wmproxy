@@ -34,7 +34,7 @@ use tokio::{
 };
 use tokio_rustls::TlsAcceptor;
 use webparse::{Request, Response};
-use wenmeng::{ProtError, ProtResult, RecvStream, Server, OperateTrait, RecvRequest, RecvResponse, Middleware};
+use wenmeng::{ProtError, ProtResult, Body, Server, OperateTrait, RecvRequest, RecvResponse, Middleware};
 
 use super::{common::CommonConfig, LocationConfig, ServerConfig, UpstreamConfig, limit_req::LimitReqZone, LimitReqMiddleware};
 
@@ -62,8 +62,8 @@ struct InnerHttpOper {
     pub cache_sender: HashMap<
         LocationConfig,
         (
-            Sender<Request<RecvStream>>,
-            Receiver<ProtResult<Response<RecvStream>>>,
+            Sender<Request<Body>>,
+            Receiver<ProtResult<Response<Body>>>,
         ),
     >,
 }
@@ -212,16 +212,16 @@ impl HttpConfig {
     }
 
     async fn inner_operate_by_http(
-        req: &mut Request<RecvStream>,
+        req: &mut Request<Body>,
         cache: &mut HashMap<
             LocationConfig,
             (
-                Sender<Request<RecvStream>>,
-                Receiver<ProtResult<Response<RecvStream>>>,
+                Sender<Request<Body>>,
+                Receiver<ProtResult<Response<Body>>>,
             ),
         >,
         servers: Vec<Arc<ServerConfig>>,
-    ) -> ProtResult<Response<RecvStream>> {
+    ) -> ProtResult<Response<Body>> {
         let server_len = servers.len();
         let host = req.get_host().unwrap_or(String::new());
         // 不管有没有匹配, 都执行最后一个
@@ -240,7 +240,7 @@ impl HttpConfig {
                             let mut cache_client = cache.remove(&clone).unwrap();
                             if !cache_client.0.is_closed() {
                                 println!("do req data by cache");
-                                let _send = cache_client.0.send(req.replace_clone(RecvStream::empty())).await;
+                                let _send = cache_client.0.send(req.replace_clone(Body::empty())).await;
                                 match cache_client.1.recv().await {
                                     Some(res) => {
                                         if res.is_ok() {
@@ -281,12 +281,12 @@ impl HttpConfig {
             .into_type());
     }
 
-    async fn inner_operate(req: &mut Request<RecvStream>, data: &mut InnerHttpOper) -> ProtResult<Response<RecvStream>> {
+    async fn inner_operate(req: &mut Request<Body>, data: &mut InnerHttpOper) -> ProtResult<Response<Body>> {
         let servers = data.servers.clone();
         return Self::inner_operate_by_http(req, &mut data.cache_sender, servers).await;
     }
 
-    async fn operate(req: &mut Request<RecvStream>, data: &mut InnerHttpOper) -> ProtResult<Response<RecvStream>> {
+    async fn operate(req: &mut Request<Body>, data: &mut InnerHttpOper) -> ProtResult<Response<Body>> {
         // body的内容可能重新解密又再重新再加过密, 后续可考虑直接做数据
         match Self::inner_operate(req, data).await {
             Ok(mut value) => {

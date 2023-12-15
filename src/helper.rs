@@ -33,7 +33,7 @@ use log4rs::{
 use socket2::{Domain, Socket, Type};
 use tokio::net::{TcpListener, UdpSocket};
 use webparse::{http2::frame::read_u24, BinaryMut, Buf, Request, Serialize, Response};
-use wenmeng::{RecvStream, HeaderHelper};
+use wenmeng::{Body, HeaderHelper};
 
 thread_local! {
     static FORMAT_PATTERN_CACHE: RefCell<HashMap<&'static str, Arc<PatternEncoder>>> = RefCell::new(HashMap::new());
@@ -199,7 +199,7 @@ impl Helper {
     pub fn log_acess(
         log_formats: &HashMap<String, String>,
         access: &Option<ConfigLog>,
-        req: &Request<RecvStream>,
+        req: &Request<Body>,
     ) {
         if let Some(access) = access {
             if let Some(formats) = log_formats.get(&access.format) {

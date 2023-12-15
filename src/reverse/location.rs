@@ -19,7 +19,7 @@ use tokio::{
     sync::mpsc::{Receiver, Sender},
 };
 use webparse::{HeaderName, Method, Request, Response, Scheme, Url};
-use wenmeng::{Client, HeaderHelper, ProtError, ProtResult, RecvStream};
+use wenmeng::{Client, HeaderHelper, ProtError, ProtResult, Body};
 
 use crate::{HealthCheck, FileServer, Helper, ConfigHeader};
 
@@ -105,16 +105,16 @@ impl LocationConfig {
     }
 
     async fn deal_client(
-        req: &mut Request<RecvStream>,
+        req: &mut Request<Body>,
         client: Client,
     ) -> ProtResult<(
-        Response<RecvStream>,
-        Option<Sender<Request<RecvStream>>>,
-        Option<Receiver<ProtResult<Response<RecvStream>>>>,
+        Response<Body>,
+        Option<Sender<Request<Body>>>,
+        Option<Receiver<ProtResult<Response<Body>>>>,
     )>
     {
         println!("处理客户端!!!!");
-        let (mut recv, sender) = client.send2(req.replace_clone(RecvStream::empty())).await?;
+        let (mut recv, sender) = client.send2(req.replace_clone(Body::empty())).await?;
         match recv.recv().await {
             Some(res) => Ok((res?, Some(sender), Some(recv))),
             None => Err(ProtError::Extension("already close by other")),
@@ -123,12 +123,12 @@ impl LocationConfig {
 
     pub async fn deal_reverse_proxy(
         &self,
-        req: &mut Request<RecvStream>,
+        req: &mut Request<Body>,
         reverse: String,
     ) -> ProtResult<(
-        Response<RecvStream>,
-        Option<Sender<Request<RecvStream>>>,
-        Option<Receiver<ProtResult<Response<RecvStream>>>>,
+        Response<Body>,
+        Option<Sender<Request<Body>>>,
+        Option<Receiver<ProtResult<Response<Body>>>>,
     )> {
         let url = TryInto::<Url>::try_into(reverse.clone()).ok();
         if url.is_none() || url.as_ref().unwrap().domain.is_none() {
@@ -171,11 +171,11 @@ impl LocationConfig {
 
     pub async fn deal_request(
         &self,
-        req: &mut Request<RecvStream>,
+        req: &mut Request<Body>,
     ) -> ProtResult<(
-        Response<RecvStream>,
-        Option<Sender<Request<RecvStream>>>,
-        Option<Receiver<ProtResult<Response<RecvStream>>>>,
+        Response<Body>,
+        Option<Sender<Request<Body>>>,
+        Option<Receiver<ProtResult<Response<Body>>>>,
     )> {
         Helper::log_acess(&self.comm.log_format, &self.comm.access_log, &req);
         if let Some(file_server) = &self.file_server {

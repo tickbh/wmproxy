@@ -17,7 +17,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use tokio::{sync::{mpsc::{Sender, channel, Receiver}, Mutex}, net::TcpListener};
 use webparse::{Request, Response, HeaderName};
-use wenmeng::{Server, RecvStream, ProtResult, OperateTrait, RecvRequest, RecvResponse};
+use wenmeng::{Server, Body, ProtResult, OperateTrait, RecvRequest, RecvResponse};
 use crate::{ConfigOption, WMCore, ProxyResult, Helper};
 
 /// 控制端，可以对配置进行热更新
@@ -92,7 +92,7 @@ impl ControlServer {
         Ok(())
     }
 
-    async fn inner_operate(req: &mut Request<RecvStream>, data: &mut Arc<Mutex<ControlServer>>) -> ProtResult<Response<RecvStream>> {
+    async fn inner_operate(req: &mut Request<Body>, data: &mut Arc<Mutex<ControlServer>>) -> ProtResult<Response<Body>> {
         let mut value = data.lock().await;
         match &**req.path() {
             "/reload" => {

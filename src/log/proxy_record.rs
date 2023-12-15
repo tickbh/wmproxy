@@ -14,13 +14,13 @@ use std::fmt;
 
 use log::{Record, Level, Metadata};
 use webparse::{Request, Response};
-use wenmeng::RecvStream;
+use wenmeng::Body;
 
 #[derive(Debug, Clone)]
 pub struct ProxyRecord<'a> {
     pub record: Record<'a>,
-    pub req: Option<&'a Request<RecvStream>>,
-    pub res: Option<&'a Response<RecvStream>>,
+    pub req: Option<&'a Request<Body>>,
+    pub res: Option<&'a Response<Body>>,
 }
 
 impl<'a> ProxyRecord<'a> {
@@ -32,7 +32,7 @@ impl<'a> ProxyRecord<'a> {
         }
     }
 
-    pub fn new_req(record: Record<'a>, req: &'a Request<RecvStream>) -> Self {
+    pub fn new_req(record: Record<'a>, req: &'a Request<Body>) -> Self {
         Self {
             record,
             req: Some(req),
@@ -40,7 +40,7 @@ impl<'a> ProxyRecord<'a> {
         }
     }
     
-    pub fn new_res(record: Record<'a>, res: &'a Response<RecvStream>) -> Self {
+    pub fn new_res(record: Record<'a>, res: &'a Response<Body>) -> Self {
         Self {
             record,
             req: None,

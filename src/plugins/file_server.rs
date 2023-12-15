@@ -10,7 +10,7 @@
 // -----
 // Created Date: 2023/11/10 02:21:22
 
-use wenmeng::{RecvStream, ProtResult};
+use wenmeng::{Body, ProtResult};
 // use crate::{plugins::calc_file_size};
 use lazy_static::lazy_static;
 use serde::{Serialize, Deserialize};
@@ -214,7 +214,7 @@ impl FileServer {
         false
     }
 
-    fn ret_error_msg(&self, msg: &'static str) -> Response<RecvStream> {
+    fn ret_error_msg(&self, msg: &'static str) -> Response<Body> {
         Response::builder()
                 .status(self.status)
                 .body(msg)
@@ -224,8 +224,8 @@ impl FileServer {
 
     pub async fn deal_request(
         &self,
-        req: &mut Request<RecvStream>,
-    ) -> ProtResult<Response<RecvStream>> {
+        req: &mut Request<Body>,
+    ) -> ProtResult<Response<Body>> {
         let path = req.url().path.clone();
         // 无效前缀，无法处理
         if !path.starts_with(&self.prefix) {
@@ -320,7 +320,7 @@ impl FileServer {
             binary.put_slice("<br><address>wengmeng <a href=\"https://github.com/tickbh/wenmeng\">wenmeng</a></address>".as_bytes());
             binary.put_slice("</body></html>".as_bytes());
 
-            let mut recv = RecvStream::only(binary.freeze());
+            let mut recv = Body::only(binary.freeze());
             if let Some(max_read_buf) = &self.comm.max_read_buf {
                 recv.set_max_read_buf(*max_read_buf);
             }
@@ -371,7 +371,7 @@ impl FileServer {
                     if new.exists() {
                         let file = File::open(new).await?;
                         let data_size = file.metadata().await?.len();
-                        let mut recv = RecvStream::new_file(file, data_size);
+                        let mut recv = Body::new_file(file, data_size);
                         // recv.set_rate_limit(RateLimitLayer::new(10240, Duration::from_millis(100)));
                         match &**pre {
                             "gzip" => recv.set_compress_origin_gzip(),
@@ -402,7 +402,7 @@ impl FileServer {
 
             let file = File::open(real_path).await?;
             let data_size = file.metadata().await?.len();
-            let recv = RecvStream::new_file(file, data_size);
+            let recv = Body::new_file(file, data_size);
             let builder = Response::builder().version(req.version().clone());
             let mut response = builder
                 .header(

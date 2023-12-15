@@ -16,7 +16,7 @@ use crate::{HealthCheck, ProxyError};
 use async_trait::async_trait;
 use tokio::{io::{copy_bidirectional, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf}, net::TcpStream, sync::mpsc::{Receiver, Sender}};
 use webparse::{BinaryMut, Buf, BufMut, HttpError, Method, WebError, Response};
-use wenmeng::{OperateTrait, RecvRequest, ProtResult, RecvResponse, Server, Client, ClientOption, ProtError, MaybeHttpsStream, RecvStream};
+use wenmeng::{OperateTrait, RecvRequest, ProtResult, RecvResponse, Server, Client, ClientOption, ProtError, MaybeHttpsStream, Body};
 
 pub struct ProxyHttp {}
 
@@ -98,7 +98,7 @@ impl OperateTrait for &mut Operate {
             }
             _ => {
                 let client = Client::new(ClientOption::default(), MaybeHttpsStream::Http(stream));
-                let (mut recv, sender) = client.send2(request.replace_clone(RecvStream::empty())).await?;
+                let (mut recv, sender) = client.send2(request.replace_clone(Body::empty())).await?;
                 self.sender = Some(sender);
                 match recv.recv().await {
                     Some(res) => {

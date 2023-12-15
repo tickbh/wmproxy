@@ -22,7 +22,7 @@ use tokio::{
 };
 use webparse::{Request, Response};
 use wenmeng::{
-    Client, HeaderHelper, OperateTrait, ProtResult, RecvRequest, RecvResponse, RecvStream, Server,
+    Client, HeaderHelper, OperateTrait, ProtResult, RecvRequest, RecvResponse, Body, Server,
 };
 
 use crate::{MappingConfig, ProtCreate, ProtFrame, ProxyError, VirtualStream, Helper};
@@ -48,8 +48,8 @@ pub struct TransHttp {
 }
 
 struct HttpOper {
-    pub receiver: Receiver<ProtResult<Response<RecvStream>>>,
-    pub sender: Sender<Request<RecvStream>>,
+    pub receiver: Receiver<ProtResult<Response<Body>>>,
+    pub sender: Sender<Request<Body>>,
     pub virtual_sender: Option<Sender<ProtFrame>>,
     pub sender_work: Sender<(ProtCreate, Sender<ProtFrame>)>,
     pub sock_map: u32,
@@ -73,9 +73,9 @@ impl TransHttp {
     }
 
     async fn inner_operate(
-        req: &mut Request<RecvStream>,
+        req: &mut Request<Body>,
         oper: &mut HttpOper,
-    ) -> ProtResult<Response<RecvStream>> {
+    ) -> ProtResult<Response<Body>> {
         let sender = oper.virtual_sender.take();
         // 传在该参数则为第一次, 第一次的时候发送Create创建绑定连接
         if sender.is_some() {
@@ -116,7 +116,7 @@ impl TransHttp {
 
         // 将请求发送出去
         oper.sender
-            .send(req.replace_clone(RecvStream::empty()))
+            .send(req.replace_clone(Body::empty()))
             .await?;
         // 等待返回数据的到来
         let res = oper.receiver.recv().await;

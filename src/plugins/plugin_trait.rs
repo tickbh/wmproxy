@@ -14,9 +14,9 @@
 
 // use webparse::{Request, Response};
 
-// use crate::{ProtResult, RecvStream};
+// use crate::{ProtResult, Body};
 
 // pub trait PluginTrait {
 
-//     fn deal_request(req: Request<RecvStream>) -> ProtResult<Option<Response<RecvStream>>>;
+//     fn deal_request(req: Request<Body>) -> ProtResult<Option<Response<Body>>>;
 // }
