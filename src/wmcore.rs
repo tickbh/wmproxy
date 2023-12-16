@@ -50,6 +50,7 @@ pub struct WMCore {
     pub map_http_listener: Option<TcpListener>,
     pub map_https_listener: Option<TcpListener>,
     pub map_tcp_listener: Option<TcpListener>,
+    pub map_proxy_listener: Option<TcpListener>,
     pub map_accept: Option<TlsAcceptor>,
 
     pub http_servers: Vec<Arc<ServerConfig>>,
@@ -76,6 +77,7 @@ impl WMCore {
             map_http_listener: None,
             map_https_listener: None,
             map_tcp_listener: None,
+            map_proxy_listener: None,
             map_accept: None,
 
             http_servers: vec![],
@@ -240,6 +242,7 @@ impl WMCore {
                 self.map_http_listener,
                 self.map_https_listener,
                 self.map_tcp_listener,
+                self.map_proxy_listener,
                 self.map_accept,
             ) = option.bind_map().await?;
         }
@@ -305,6 +308,10 @@ impl WMCore {
                 Some((inbound, addr)) = Self::tcp_listen_work(&self.map_tcp_listener) => {
                     log::trace!("内网穿透:Tcp收到客户端连接: {}->{}", addr, self.map_tcp_listener.as_ref().unwrap().local_addr()?);
                     self.server_new_tcp(inbound, addr).await?;
+                }
+                Some((inbound, addr)) = Self::tcp_listen_work(&self.map_proxy_listener) => {
+                    log::trace!("内网穿透:Tcp收到客户端连接: {}->{}", addr, self.map_proxy_listener.as_ref().unwrap().local_addr()?);
+                    self.server_new_proxy(inbound, addr).await?;
                 }
                 (result, index) = Self::multi_tcp_listen_work(&mut self.http_listeners) => {
                     if let Ok((conn, addr)) = result {
@@ -489,4 +496,19 @@ impl WMCore {
         log::warn!("未发现任何tcp服务器，但收到tcp的内网穿透，请检查配置");
         Ok(())
     }
+
+    pub async fn server_new_proxy(
+        &mut self,
+        stream: TcpStream,
+        _addr: SocketAddr,
+    ) -> ProxyResult<()> {
+        for server in &mut self.center_servers {
+            if !server.is_close() {
+                return server.server_new_prxoy(stream).await;
+            }
+        }
+        log::warn!("未发现任何tcp服务器，但收到tcp的内网穿透，请检查配置");
+        Ok(())
+    }
+    
 }

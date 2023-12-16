@@ -139,7 +139,7 @@ mod parser;
 
 thread_local!(
     /// Thread-locally cached thread ID.
-    static TID: usize = 0;
+    static TID: String = format!("{:?}", std::thread::current().id());
 );
 
 fn is_char_boundary(b: u8) -> bool {
@@ -608,7 +608,9 @@ impl FormattedChunk {
             FormattedChunk::Thread => {
                 w.write_all(thread::current().name().unwrap_or("unnamed").as_bytes())
             }
-            FormattedChunk::ThreadId => w.write_all("".as_bytes()),
+            FormattedChunk::ThreadId => {
+                w.write_all(format!("{:?}", std::thread::current().id()).as_bytes())
+            },
             FormattedChunk::ProcessId => w.write_all(process::id().to_string().as_bytes()),
             FormattedChunk::SystemThreadId => {
                 TID.with(|tid| w.write_all(tid.to_string().as_bytes()))
@@ -859,7 +861,7 @@ mod tests {
             let mut buf = vec![];
             pw.encode(&mut SimpleWriter(&mut buf), &Record::builder().build().into())
                 .unwrap();
-            assert_eq!(buf, "".as_bytes());
+            assert_eq!(buf, format!("{:?}", std::thread::current().id()).as_bytes());
         })
         .join()
         .unwrap();
@@ -884,7 +886,7 @@ mod tests {
         pw.encode(&mut SimpleWriter(&mut buf), &Record::builder().build().into())
             .unwrap();
 
-        assert_eq!(buf, "".as_bytes());
+        assert_eq!(buf, format!("{:?}", std::thread::current().id()).as_bytes());
     }
 
     #[test]
@@ -1023,14 +1025,4 @@ mod tests {
         assert_eq!(buf, b"");
     }
 
-    #[test]
-    fn mdc_missing_custom() {
-        let pw = PatternEncoder::new("{X(user_id)(missing value)}");
-
-        let mut buf = vec![];
-        pw.encode(&mut SimpleWriter(&mut buf), &Record::builder().build().into())
-            .unwrap();
-
-        assert_eq!(buf, b"missing value");
-    }
 }

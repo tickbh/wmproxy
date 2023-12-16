@@ -310,7 +310,22 @@ impl CenterServer {
             self.mappings.clone(),
         );
         tokio::spawn(async move {
-            if let Err(e) = trans.process(stream).await {
+            if let Err(e) = trans.process(stream, "tcp").await {
+                log::warn!("内网穿透:修理Tcp转发时发生错误:{:?}", e);
+            }
+        });
+        return Ok(());
+    }
+    
+    pub async fn server_new_prxoy(&mut self, stream: TcpStream) -> ProxyResult<()> {
+        let trans = TransTcp::new(
+            self.sender(),
+            self.sender_work(),
+            self.calc_next_id(),
+            self.mappings.clone(),
+        );
+        tokio::spawn(async move {
+            if let Err(e) = trans.process(stream, "prxoy").await {
                 log::warn!("内网穿透:修理Tcp转发时发生错误:{:?}", e);
             }
         });

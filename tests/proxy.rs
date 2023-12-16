@@ -1,6 +1,6 @@
-// #![deny(warnings)]
 #![deny(rust_2018_idioms)]
 
+/// 关于代理相关
 #[cfg(test)]
 mod tests {
     use std::net::SocketAddr;

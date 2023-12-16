@@ -57,4 +57,8 @@ impl MappingConfig {
     pub fn is_tcp(&self) -> bool {
         self.mode.eq_ignore_ascii_case("tcp")
     }
+    
+    pub fn is_proxy(&self) -> bool {
+        self.mode.eq_ignore_ascii_case("proxy")
+    }
 }

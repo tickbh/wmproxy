@@ -41,28 +41,31 @@ impl TransTcp {
         }
     }
 
-    pub async fn process<T>(self, inbound: T) -> Result<(), ProxyError<T>>
+    pub async fn process<T>(self, inbound: T, mode: &str) -> Result<(), ProxyError<T>>
     where
         T: AsyncRead + AsyncWrite + Unpin,
     {
         // 寻找是否有匹配的tcp转发协议，如果有，则进行转发，如果没有则丢弃数据
-        {
+        let domain = {
             let mut is_find = false;
             let read = self.mappings.read().await;
 
+            let mut doamin = String::new();
             for v in &*read {
-                if v.mode == "tcp" {
+                if v.mode == mode {
                     is_find = true;
+                    doamin = v.domain.clone();
                 }
             }
             if !is_find {
                 log::warn!("未找到正确的tcp商户端映射");
                 return Ok(());
             }
-        }
+            doamin
+        };
 
         // 通知客户端数据进行连接的建立，客户端的tcp配置只能存在有且只有一个，要不然无法确定转发源
-        let create = ProtCreate::new(self.sock_map, None);
+        let create = ProtCreate::new(self.sock_map, Some(domain));
         let (stream_sender, stream_receiver) = channel::<ProtFrame>(10);
         let _ = self.sender_work.send((create, stream_sender)).await;
         

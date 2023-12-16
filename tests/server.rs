@@ -13,13 +13,3 @@
 
 
 
-
-
-#[cfg(test)]
-mod tests {
-    macro_rules! create_server {
-        () => {
-            
-        };
-    }
-}

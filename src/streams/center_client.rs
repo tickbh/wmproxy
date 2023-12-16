@@ -26,7 +26,7 @@ use webparse::{BinaryMut, Buf};
 
 use crate::{
     HealthCheck, Helper, MappingConfig, ProtClose, ProtCreate, ProtFrame, ProxyConfig, ProxyResult,
-    TransStream,
+    TransStream, VirtualStream, WMCore,
 };
 
 /// 中心客户端
@@ -205,15 +205,13 @@ impl CenterClient {
                         match p {
                             ProtFrame::Create(p) => {
                                 let domain = p.domain().clone().unwrap_or(String::new());
-                                let mut local_addr = None;
+                                let mut maping = None;
                                 for m in &*mappings {
                                     if m.domain == domain {
-                                        local_addr = m.local_addr.clone();
-                                    } else if domain.len() == 0 && m.is_tcp() {
-                                        local_addr = m.local_addr.clone();
+                                        maping = Some(m);
                                     }
                                 }
-                                if local_addr.is_none() {
+                                if maping.is_none() {
                                     log::info!("本地地址为空，无法做内网映射");
                                     log::warn!("local addr is none, can't mapping");
                                     continue;
@@ -221,27 +219,56 @@ impl CenterClient {
                                 let (virtual_sender, virtual_receiver) = channel::<ProtFrame>(10);
                                 map.insert(p.sock_map(), virtual_sender);
 
-                                let domain = local_addr.unwrap();
-                                let sock_map = p.sock_map();
-                                let sender = sender.clone();
-                                // let (flag, username, password, udp_bind) = (option.flag, option.username.clone(), option.password.clone(), option.udp_bind.clone());
-                                tokio::spawn(async move {
-                                    match HealthCheck::connect(&domain).await {
-                                        Ok(tcp) => {
-                                            let trans = TransStream::new(
-                                                tcp,
-                                                sock_map,
-                                                sender,
-                                                virtual_receiver,
-                                            );
-                                            let _ = trans.copy_wait().await;
-                                        }
-                                        Err(e) => {
-                                            log::trace!("连接地址:{}，发生错误：{:?}", domain, e);
-                                            let _ = sender.send(ProtFrame::new_close(sock_map)).await;
-                                        }
+                                if maping.as_ref().unwrap().is_proxy() {
+
+                                    let stream = VirtualStream::new(
+                                        p.sock_map(),
+                                        sender.clone(),
+                                        virtual_receiver,
+                                    );
+    
+                                    let (flag, username, password, udp_bind) = (
+                                        option.flag,
+                                        option.username.clone(),
+                                        option.password.clone(),
+                                        option.udp_bind.clone(),
+                                    );
+                                    tokio::spawn(async move {
+                                        // 处理代理的能力
+                                        let _ = WMCore::deal_proxy(
+                                            stream, flag, username, password, udp_bind,
+                                        )
+                                        .await;
+                                    });
+                                } else {
+                                    if maping.as_ref().unwrap().local_addr.is_none() {
+                                        log::info!("本地地址为空，无法做内网映射");
+                                        log::warn!("local addr is none, can't mapping");
+                                        continue;
                                     }
-                                });
+                                    
+                                    let domain = maping.as_ref().unwrap().local_addr.unwrap();
+                                    let sock_map = p.sock_map();
+                                    let sender = sender.clone();
+                                    tokio::spawn(async move {
+                                        match HealthCheck::connect(&domain).await {
+                                            Ok(tcp) => {
+                                                let trans = TransStream::new(
+                                                    tcp,
+                                                    sock_map,
+                                                    sender,
+                                                    virtual_receiver,
+                                                );
+                                                let _ = trans.copy_wait().await;
+                                            }
+                                            Err(e) => {
+                                                log::trace!("连接地址:{}，发生错误：{:?}", domain, e);
+                                                let _ = sender.send(ProtFrame::new_close(sock_map)).await;
+                                            }
+                                        }
+                                    });
+                                }
+
                             }
                             ProtFrame::Data(_) => {
                                 if let Some(sender) = map.get(&p.sock_map()) {

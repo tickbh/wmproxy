@@ -214,6 +214,20 @@ impl Builder {
         })
     }
 
+    pub fn map_proxy_bind(self, map_proxy_bind: Option<SocketAddr>) -> Builder {
+        self.and_then(|mut proxy| {
+            proxy.map_proxy_bind = map_proxy_bind;
+            Ok(proxy)
+        })
+    }
+
+    pub fn mapping(self, mapping: MappingConfig) -> Builder {
+        self.and_then(|mut proxy| {
+            proxy.mappings.push(mapping);
+            Ok(proxy)
+        })
+    }
+
     fn and_then<F>(self, func: F) -> Self
     where
         F: FnOnce(ProxyConfig) -> ProxyResult<ProxyConfig>,
@@ -257,6 +271,7 @@ pub struct ProxyConfig {
     pub(crate) map_http_bind: Option<SocketAddr>,
     pub(crate) map_https_bind: Option<SocketAddr>,
     pub(crate) map_tcp_bind: Option<SocketAddr>,
+    pub(crate) map_proxy_bind: Option<SocketAddr>,
     pub(crate) map_cert: Option<String>,
     pub(crate) map_key: Option<String>,
 
@@ -331,6 +346,7 @@ impl Default for ProxyConfig {
             map_http_bind: None,
             map_https_bind: None,
             map_tcp_bind: None,
+            map_proxy_bind: None,
             map_cert: None,
             map_key: None,
 
@@ -483,9 +499,9 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
 
     /// 获取服务端https的证书信息
     pub async fn get_map_tls_accept(&self) -> ProxyResult<TlsAcceptor> {
-        if !self.tc {
-            return Err(ProxyError::ProtNoSupport);
-        }
+        // if !self.tc {
+        //     return Err(ProxyError::ProtNoSupport);
+        // }
         let certs = Self::load_certs(&self.map_cert)?;
         let key = Self::load_keys(&self.map_key)?;
 
@@ -494,6 +510,9 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
             .with_no_client_auth()
             .with_single_cert(certs, key)
             .map_err(|err| io::Error::new(io::ErrorKind::InvalidInput, err))?;
+
+        // config.alpn_protocols.push("http/1.1".as_bytes().to_vec());
+        // config.alpn_protocols.push("h2".as_bytes().to_vec());
 
         let acceptor = TlsAcceptor::from(Arc::new(config));
         Ok(acceptor)
@@ -623,11 +642,13 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
         Option<TcpListener>,
         Option<TcpListener>,
         Option<TcpListener>,
+        Option<TcpListener>,
         Option<TlsAcceptor>,
     )> {
         let mut http_listener = None;
         let mut https_listener = None;
         let mut tcp_listener = None;
+        let mut proxy_listener = None;
         let mut map_accept = None;
         if let Some(ls) = &self.map_http_bind {
             log::info!("内网穿透，http绑定：{:?}，提供http内网功能。", ls);
@@ -650,7 +671,13 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
             log::info!("内网穿透，tcp绑定：{:?}，提供tcp内网功能。", ls);
             tcp_listener = Some(Helper::bind(ls).await?);
         };
-        Ok((http_listener, https_listener, tcp_listener, map_accept))
+
+        if let Some(ls) = &self.map_proxy_bind {
+            log::info!("内网穿透，tcp绑定：{:?}，提供tcp内网功能。", ls);
+            proxy_listener = Some(Helper::bind(ls).await?);
+        };
+        
+        Ok((http_listener, https_listener, tcp_listener, proxy_listener, map_accept))
     }
 }
 
@@ -752,6 +779,9 @@ impl ConfigOption {
         };
         if let Some(tcp) = command.get_str("tcp") {
             builder = builder.map_tcp_bind(tcp.parse::<SocketAddr>().ok());
+        };
+        if let Some(proxy) = command.get_str("proxy") {
+            builder = builder.map_proxy_bind(proxy.parse::<SocketAddr>().ok());
         };
         if let Some(s) = command.get_str("S") {
             builder = builder.server(s.parse::<SocketAddr>().ok());
