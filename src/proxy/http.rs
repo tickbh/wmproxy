@@ -14,17 +14,23 @@ use std::io::Cursor;
 
 use crate::{HealthCheck, ProxyError};
 use async_trait::async_trait;
-use tokio::{io::{copy_bidirectional, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf}, net::TcpStream, sync::mpsc::{Receiver, Sender}};
-use webparse::{BinaryMut, Buf, BufMut, HttpError, Method, WebError, Response};
+use tokio::{io::{copy_bidirectional, AsyncRead, AsyncReadExt, AsyncWrite, ReadBuf}, net::TcpStream, sync::mpsc::{Receiver, Sender}};
+use webparse::{BinaryMut, BufMut, Method, Response};
 use wenmeng::{OperateTrait, RecvRequest, ProtResult, RecvResponse, Server, Client, ClientOption, ProtError, MaybeHttpsStream, Body};
 
 pub struct ProxyHttp {}
 
+/// http代理类处理类
 struct Operate {
+    /// 用户名
     username: Option<String>,
+    /// 密码
     password: Option<String>,
+    /// Stream类, https连接后给后续https使用
     stream: Option<TcpStream>,
+    /// http代理keep-alive的复用
     sender: Option<Sender<RecvRequest>>,
+    /// http代理keep-alive的复用
     receiver: Option<Receiver<ProtResult<RecvResponse>>>,
 }
 
@@ -66,6 +72,15 @@ impl Operate {
 #[async_trait]
 impl OperateTrait for &mut Operate {
     async fn operate(&mut self, request: &mut RecvRequest) -> ProtResult<RecvResponse> {
+        // 已连接直接进行后续处理
+        if let Some(sender) = &self.sender {
+            sender.send(request.replace_clone(Body::empty())).await?;
+            if let Some(res) = self.receiver.as_mut().unwrap().recv().await {
+                return Ok(res?)
+            }
+            return Err(ProtError::Extension("already close by other"))
+        }
+        // 获取要连接的对象
         let stream = if let Some(host) = request.get_connect_url() {
             match HealthCheck::connect(&host).await {
                 Ok(v) => v,
@@ -77,6 +92,7 @@ impl OperateTrait for &mut Operate {
             return Err(ProtError::Extension("unknow tcp stream"));
         };
 
+        // 账号密码存在，将获取`Proxy-Authorization`进行校验，如果检验错误返回407协议
         if self.username.is_some() && self.password.is_some() {
             let mut is_auth = false;
             if let Some(auth) = request.headers_mut().remove(&"Proxy-Authorization") {
@@ -87,21 +103,22 @@ impl OperateTrait for &mut Operate {
             if !is_auth {
                 return Ok(Response::builder().status(407).body("")?.into_type());
             }
-            
-            
         }
-        
+
+        // 判断用户协议
         match request.method() {
             &Method::Connect => {
+                // https返回200内容直接进行远端和客户端的双向绑定
                 self.stream = Some(stream);
                 return Ok(Response::builder().status(200).body("")?.into_type());
             }
             _ => {
+                // http协议，需要将客户端的内容转发到服务端，并将服务端数据转回客户端
                 let client = Client::new(ClientOption::default(), MaybeHttpsStream::Http(stream));
                 let (mut recv, sender) = client.send2(request.replace_clone(Body::empty())).await?;
-                self.sender = Some(sender);
                 match recv.recv().await {
                     Some(res) => {
+                        self.sender = Some(sender);
                         self.receiver = Some(recv);
                         return Ok(res?)
                     },
@@ -114,88 +131,6 @@ impl OperateTrait for &mut Operate {
 }
 
 impl ProxyHttp {
-    async fn err_server_status<T>(mut inbound: T, status: u16) -> Result<(), ProxyError<T>>
-    where
-        T: AsyncRead + AsyncWrite + Unpin,
-    {
-        let mut res = webparse::Response::builder().status(status).body(())?;
-        inbound.write_all(&res.httpdata()?).await?;
-        Ok(())
-    }
-
-    // pub async fn process<T>(
-    //     username: &Option<String>,
-    //     password: &Option<String>,
-    //     mut inbound: T,
-    // ) -> Result<(), ProxyError<T>>
-    // where
-    //     T: AsyncRead + AsyncWrite + Unpin,
-    // {
-    //     let mut outbound;
-    //     let mut request;
-    //     let mut buffer = BinaryMut::new();
-    //     loop {
-    //         let size = {
-    //             let mut buf = ReadBuf::uninit(buffer.chunk_mut());
-    //             inbound.read_buf(&mut buf).await?;
-    //             buf.filled().len()
-    //         };
-
-    //         if size == 0 {
-    //             return Err(ProxyError::Extension("empty"));
-    //         }
-    //         unsafe {
-    //             buffer.advance_mut(size);
-    //         }
-    //         request = webparse::Request::new();
-    //         // 通过该方法解析标头是否合法, 若是partial(部分)则继续读数据
-    //         // 若解析失败, 则表示非http协议能处理, 则抛出错误
-    //         // 此处clone为浅拷贝，不确定是否一定能解析成功，不能影响偏移
-    //         match request.parse_buffer(&mut buffer.clone()) {
-    //             Ok(_) => match request.get_connect_url() {
-    //                 Some(host) => {
-    //                     match HealthCheck::connect(&host).await {
-    //                         Ok(v) => outbound = v,
-    //                         Err(e) => {
-    //                             Self::err_server_status(inbound, 503).await?;
-    //                             return Err(ProxyError::from(e));
-    //                         }
-    //                     }
-    //                     break;
-    //                 }
-    //                 None => {
-    //                     if !request.is_partial() {
-    //                         Self::err_server_status(inbound, 503).await?;
-    //                         return Err(ProxyError::UnknownHost);
-    //                     }
-    //                 }
-    //             },
-    //             Err(WebError::Http(HttpError::Partial)) => {
-    //                 continue;
-    //             }
-    //             Err(_) => {
-    //                 return Err(ProxyError::Continue((Some(buffer), inbound)));
-    //             }
-    //         }
-    //     }
-
-    //     match request.method() {
-    //         &Method::Connect => {
-    //             log::trace!(
-    //                 "https connect {:?}",
-    //                 String::from_utf8_lossy(buffer.chunk())
-    //             );
-    //             inbound.write_all(b"HTTP/1.1 200 OK\r\n\r\n").await?;
-    //         }
-    //         _ => {
-    //             outbound.write_all(buffer.chunk()).await?;
-    //         }
-    //     }
-    //     let _ = copy_bidirectional(&mut inbound, &mut outbound).await?;
-    //     Ok(())
-    // }
-
-    
     pub async fn process<T>(
         username: &Option<String>,
         password: &Option<String>,
@@ -204,8 +139,7 @@ impl ProxyHttp {
     where
         T: AsyncRead + AsyncWrite + Unpin,
     {
-        // let mut outbound;
-        // let mut request;
+        // 预读数据找出对应的协议 
         let mut buffer = BinaryMut::with_capacity(24);
         let size = {
             let mut buf = ReadBuf::uninit(buffer.chunk_mut());
@@ -219,13 +153,13 @@ impl ProxyHttp {
         unsafe {
             buffer.advance_mut(size);
         }
-        // socks5 协议
+        // socks5 协议, 直接返回, 交给socks5层处理
         if buffer.as_slice()[0] == 5 {
             return Err(ProxyError::Continue((Some(buffer), inbound)));
         }
 
         let mut max_req_num = usize::MAX;
-        // https 协议, 以connect开头
+        // https 协议, 以connect开头, 仅处理一条HTTP请求
         if buffer.as_slice()[0] == b'C' || buffer.as_slice()[0] == b'c' {
             max_req_num = 1;
         }
@@ -239,55 +173,11 @@ impl ProxyHttp {
             receiver: None,
         };
         server.set_max_req(max_req_num);
-        let e = server.incoming(&mut operate).await;
+        let _e = server.incoming(&mut operate).await?;
         if let Some(outbound) = &mut operate.stream {
             let mut inbound = server.into_io();
             let _ = copy_bidirectional(&mut inbound, outbound).await?;
         }
-        // request = webparse::Request::new();
-        // // 通过该方法解析标头是否合法, 若是partial(部分)则继续读数据
-        // // 若解析失败, 则表示非http协议能处理, 则抛出错误
-        // // 此处clone为浅拷贝，不确定是否一定能解析成功，不能影响偏移
-        // match request.parse_buffer(&mut buffer.clone()) {
-        //     Ok(_) => match request.get_connect_url() {
-        //         Some(host) => {
-        //             match HealthCheck::connect(&host).await {
-        //                 Ok(v) => outbound = v,
-        //                 Err(e) => {
-        //                     Self::err_server_status(inbound, 503).await?;
-        //                     return Err(ProxyError::from(e));
-        //                 }
-        //             }
-        //             break;
-        //         }
-        //         None => {
-        //             if !request.is_partial() {
-        //                 Self::err_server_status(inbound, 503).await?;
-        //                 return Err(ProxyError::UnknownHost);
-        //             }
-        //         }
-        //     },
-        //     Err(WebError::Http(HttpError::Partial)) => {
-        //         continue;
-        //     }
-        //     Err(_) => {
-        //         return Err(ProxyError::Continue((Some(buffer), inbound)));
-        //     }
-        // }
-
-        // match request.method() {
-        //     &Method::Connect => {
-        //         log::trace!(
-        //             "https connect {:?}",
-        //             String::from_utf8_lossy(buffer.chunk())
-        //         );
-        //         inbound.write_all(b"HTTP/1.1 200 OK\r\n\r\n").await?;
-        //     }
-        //     _ => {
-        //         outbound.write_all(buffer.chunk()).await?;
-        //     }
-        // }
-        // let _ = copy_bidirectional(&mut inbound, &mut outbound).await?;
         Ok(())
     }
 }

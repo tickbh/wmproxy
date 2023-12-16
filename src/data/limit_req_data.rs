@@ -14,7 +14,7 @@ use lazy_static::lazy_static;
 use std::collections::HashMap;
 use std::ops::Sub;
 use std::time::{Duration, Instant};
-use std::{borrow::Borrow, sync::RwLock};
+use std::{sync::RwLock};
 use wenmeng::{ProtError, ProtResult};
 
 lazy_static! {

@@ -17,7 +17,7 @@ use std::{net::SocketAddr};
 use tokio::sync::mpsc::{channel, Sender};
 use webparse::Request;
 use wenmeng::Client;
-use wmproxy::{ConfigOption, ProxyResult, ControlServer, Helper, ProxyConfig, WMCore};
+use wmproxy::{ConfigOption, ProxyResult, ProxyConfig, WMCore};
 
 
 static HTTP_URL: &str = "http://www.baidu.com";

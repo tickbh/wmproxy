@@ -13,7 +13,6 @@
 use std::{
     io::{self},
     net::{IpAddr, SocketAddr},
-    process,
     sync::Arc,
 };
 
@@ -35,7 +34,7 @@ use crate::{
     error::ProxyTypeResult,
     option::ConfigOption,
     reverse::{HttpConfig, ServerConfig, StreamConfig, StreamUdp},
-    ActiveHealth, CenterClient, CenterServer, Flag, HealthCheck, Helper, OneHealth, ProxyError,
+    ActiveHealth, CenterClient, CenterServer, Flag, HealthCheck, OneHealth, ProxyError,
     ProxyHttp, ProxyResult, ProxySocks5,
 };
 

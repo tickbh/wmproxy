@@ -12,7 +12,7 @@
 
 use std::{str::FromStr, io, fmt::Display};
 
-use lazy_static::{lazy::Lazy, lazy_static};
+use lazy_static::{lazy_static};
 use regex::Regex;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -162,7 +162,7 @@ impl Display for ConfigHeader {
 mod tests {
     use std::str::FromStr;
 
-    use crate::{HeaderOper, ConfigHeader};
+    use crate::{HeaderOper};
 
 
     macro_rules! header_compare {

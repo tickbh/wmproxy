@@ -22,7 +22,7 @@ use tokio::{
 };
 use webparse::{Request, Response};
 use wenmeng::{
-    Client, HeaderHelper, OperateTrait, ProtResult, RecvRequest, RecvResponse, Body, Server,
+    Client, OperateTrait, ProtResult, RecvRequest, RecvResponse, Body, Server,
 };
 
 use crate::{MappingConfig, ProtCreate, ProtFrame, ProxyError, VirtualStream, Helper};

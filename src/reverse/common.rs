@@ -13,7 +13,7 @@
 use std::collections::HashMap;
 
 use crate::{ConfigDuration, ConfigLog, ConfigRate};
-use crate::{ConfigSize, DisplayFromStrOrNumber};
+use crate::{DisplayFromStrOrNumber};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
 use wenmeng::RateLimitLayer;

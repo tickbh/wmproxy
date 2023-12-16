@@ -15,11 +15,10 @@ use std::{hash::Hash, collections::HashMap};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
 use tokio::{
-    io::{AsyncRead, AsyncWrite},
     sync::mpsc::{Receiver, Sender},
 };
 use webparse::{HeaderName, Method, Request, Response, Scheme, Url};
-use wenmeng::{Client, HeaderHelper, ProtError, ProtResult, Body};
+use wenmeng::{Client, ProtError, ProtResult, Body};
 
 use crate::{HealthCheck, FileServer, Helper, ConfigHeader};
 
