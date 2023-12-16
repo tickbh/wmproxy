@@ -145,6 +145,14 @@ mod tests {
         );
         mapping_tcp.local_addr = Some(local_server_addr);
 
+        let mut mapping_proxy = MappingConfig::new(
+            "proxy".to_string(),
+            "proxy".to_string(),
+            "soft.wm-proxy.com1".to_string(),
+            vec![],
+        );
+        mapping_proxy.local_addr = Some(local_server_addr);
+
         let proxy = ProxyConfig::builder()
             .bind_addr(addr)
             .server(Some(server_addr))
@@ -152,6 +160,7 @@ mod tests {
             .mode("client".to_string())
             .mapping(mapping)
             .mapping(mapping_tcp)
+            .mapping(mapping_proxy)
             .into_value()
             .unwrap();
         let _client_sender = run_mapping_client(proxy).await.unwrap();
