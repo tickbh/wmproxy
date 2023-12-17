@@ -310,7 +310,7 @@ impl WMCore {
                     self.server_new_tcp(inbound, addr).await?;
                 }
                 Some((inbound, addr)) = Self::tcp_listen_work(&self.map_proxy_listener) => {
-                    log::trace!("内网穿透:Tcp收到客户端连接: {}->{}", addr, self.map_proxy_listener.as_ref().unwrap().local_addr()?);
+                    log::trace!("内网穿透:Proxy收到客户端连接: {}->{}", addr, self.map_proxy_listener.as_ref().unwrap().local_addr()?);
                     self.server_new_proxy(inbound, addr).await?;
                 }
                 (result, index) = Self::multi_tcp_listen_work(&mut self.http_listeners) => {

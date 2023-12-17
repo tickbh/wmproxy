@@ -122,6 +122,7 @@ mod tests {
             .map_http_bind(Some(addr))
             .map_https_bind(Some(addr))
             .map_tcp_bind(Some(addr))
+            .map_proxy_bind(Some(addr))
             .center(true)
             .mode("server".to_string())
             .into_value()
@@ -222,6 +223,28 @@ mod tests {
 
             let client = Client::builder()
                 .http2_only(true)
+                .connect(&*url)
+                .await
+                .unwrap();
+
+            let mut res = client
+                .send_now(do_build_req(url, "GET", &vec![]))
+                .await
+                .unwrap();
+            let mut result = BinaryMut::new();
+            res.body_mut().read_all(&mut result).await;
+
+            assert_eq!(result.remaining(), HELLO_WORLD.as_bytes().len());
+            assert_eq!(result.as_slice(), HELLO_WORLD.as_bytes());
+            assert_eq!(res.version(), Version::Http2);
+        }
+
+        {
+            let url = &*format!("http://{}/", local_server_addr);
+            let client = Client::builder()
+                // .http2(false)
+                .http2_only(true)
+                .add_proxy(&*format!("http://{}", proxy_addr.unwrap())).unwrap()
                 .connect(&*url)
                 .await
                 .unwrap();

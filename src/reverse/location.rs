@@ -1,28 +1,26 @@
 // Copyright 2022 - 2023 Wenmeng See the COPYRIGHT
 // file at the top-level directory of this distribution.
-// 
+//
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
-// 
+//
 // Author: tickbh
 // -----
 // Created Date: 2023/10/18 02:31:52
 
-use std::{hash::Hash, collections::HashMap};
+use std::{collections::HashMap, hash::Hash};
 
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
-use tokio::{
-    sync::mpsc::{Receiver, Sender},
-};
+use tokio::sync::mpsc::{Receiver, Sender};
 use webparse::{HeaderName, Method, Request, Response, Scheme, Url};
-use wenmeng::{Client, ProtError, ProtResult, Body};
+use wenmeng::{Body, Client, ProtError, ProtResult};
 
-use crate::{HealthCheck, FileServer, Helper, ConfigHeader};
+use crate::{ConfigHeader, FileServer, HealthCheck, Helper};
 
-use super::{ReverseHelper, UpstreamConfig, common::CommonConfig};
+use super::{common::CommonConfig, ReverseHelper, UpstreamConfig};
 
 #[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -41,7 +39,7 @@ pub struct LocationConfig {
     pub root: Option<String>,
     #[serde(default = "Vec::new")]
     pub upstream: Vec<UpstreamConfig>,
-    
+
     #[serde(flatten)]
     #[serde(default = "CommonConfig::new")]
     pub comm: CommonConfig,
@@ -62,13 +60,13 @@ impl Hash for LocationConfig {
 
 impl PartialEq for LocationConfig {
     fn eq(&self, other: &LocationConfig) -> bool {
-        self.rule == other.rule && self.server_name == other.server_name && self.method == other.method
+        self.rule == other.rule
+            && self.server_name == other.server_name
+            && self.method == other.method
     }
 }
 
-impl Eq for LocationConfig {
-    
-}
+impl Eq for LocationConfig {}
 
 impl LocationConfig {
     pub fn clone_only_hash(&self) -> LocationConfig {
@@ -110,8 +108,7 @@ impl LocationConfig {
         Response<Body>,
         Option<Sender<Request<Body>>>,
         Option<Receiver<ProtResult<Response<Body>>>>,
-    )>
-    {
+    )> {
         println!("处理客户端!!!!");
         let (mut recv, sender) = client.send2(req.replace_clone(Body::empty())).await?;
         match recv.recv().await {
@@ -143,8 +140,9 @@ impl LocationConfig {
         if url.scheme == Scheme::None {
             url.scheme = req.scheme().clone();
         }
-        req.headers_mut()
-            .insert(HeaderName::HOST, url.domain.clone().unwrap());
+        if let Some(connect) = url.get_connect_url() {
+            req.headers_mut().insert(HeaderName::HOST, connect.clone());
+        }
         let proxy_timeout = self.comm.build_proxy_timeout();
 
         let mut connect_timeout = None;
@@ -158,10 +156,16 @@ impl LocationConfig {
             }
         };
         let mut res = if url.scheme.is_http() {
-            let client = Client::builder().timeout_layer(proxy_timeout).connect_by_stream(stream).await?;
+            let client = Client::builder()
+                .timeout_layer(proxy_timeout)
+                .connect_by_stream(stream)
+                .await?;
             Self::deal_client(req, client).await?
         } else {
-            let client = Client::builder().timeout_layer(proxy_timeout).connect_tls_by_stream(stream, url).await?;
+            let client = Client::builder()
+                .timeout_layer(proxy_timeout)
+                .connect_tls_by_stream(stream, url)
+                .await?;
             Self::deal_client(req, client).await?
         };
         Helper::rewrite_response(&mut res.0, &self.headers);
@@ -187,7 +191,7 @@ impl LocationConfig {
         return Err(ProtError::Extension("unknow data"));
     }
 
-    pub fn get_log_names(&self, names: &mut HashMap<String, String>)  {
+    pub fn get_log_names(&self, names: &mut HashMap<String, String>) {
         self.comm.get_log_names(names);
     }
 }

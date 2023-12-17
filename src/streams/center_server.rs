@@ -325,7 +325,7 @@ impl CenterServer {
             self.mappings.clone(),
         );
         tokio::spawn(async move {
-            if let Err(e) = trans.process(stream, "prxoy").await {
+            if let Err(e) = trans.process(stream, "proxy").await {
                 log::warn!("内网穿透:修理Tcp转发时发生错误:{:?}", e);
             }
         });

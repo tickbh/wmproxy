@@ -205,13 +205,13 @@ impl CenterClient {
                         match p {
                             ProtFrame::Create(p) => {
                                 let domain = p.domain().clone().unwrap_or(String::new());
-                                let mut maping = None;
+                                let mut mapping = None;
                                 for m in &*mappings {
                                     if m.domain == domain {
-                                        maping = Some(m);
+                                        mapping = Some(m);
                                     }
                                 }
-                                if maping.is_none() {
+                                if mapping.is_none() {
                                     log::info!("本地地址为空，无法做内网映射");
                                     log::warn!("local addr is none, can't mapping");
                                     continue;
@@ -219,7 +219,7 @@ impl CenterClient {
                                 let (virtual_sender, virtual_receiver) = channel::<ProtFrame>(10);
                                 map.insert(p.sock_map(), virtual_sender);
 
-                                if maping.as_ref().unwrap().is_proxy() {
+                                if mapping.as_ref().unwrap().is_proxy() {
 
                                     let stream = VirtualStream::new(
                                         p.sock_map(),
@@ -241,13 +241,13 @@ impl CenterClient {
                                         .await;
                                     });
                                 } else {
-                                    if maping.as_ref().unwrap().local_addr.is_none() {
+                                    if mapping.as_ref().unwrap().local_addr.is_none() {
                                         log::info!("本地地址为空，无法做内网映射");
                                         log::warn!("local addr is none, can't mapping");
                                         continue;
                                     }
                                     
-                                    let domain = maping.as_ref().unwrap().local_addr.unwrap();
+                                    let domain = mapping.as_ref().unwrap().local_addr.unwrap();
                                     let sock_map = p.sock_map();
                                     let sender = sender.clone();
                                     tokio::spawn(async move {
