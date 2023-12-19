@@ -207,13 +207,14 @@ impl CenterClient {
                                 let domain = p.domain().clone().unwrap_or(String::new());
                                 let mut mapping = None;
                                 for m in &*mappings {
-                                    if m.domain == domain {
+                                    if m.domain == domain || m.name == domain {
                                         mapping = Some(m);
                                     }
                                 }
                                 if mapping.is_none() {
                                     log::info!("本地地址为空，无法做内网映射");
                                     log::warn!("local addr is none, can't mapping");
+                                    let _ = sender.send(ProtFrame::new_close(p.sock_map())).await;
                                     continue;
                                 }
                                 let (virtual_sender, virtual_receiver) = channel::<ProtFrame>(10);

@@ -54,7 +54,7 @@ impl TransTcp {
             for v in &*read {
                 if v.mode == mode {
                     is_find = true;
-                    doamin = v.domain.clone();
+                    doamin = v.name.clone();
                 }
             }
             if !is_find {

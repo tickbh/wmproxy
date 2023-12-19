@@ -20,7 +20,7 @@ use wenmeng::{Body, Client, ProtError, ProtResult};
 
 use crate::{ConfigHeader, FileServer, HealthCheck, Helper};
 
-use super::{common::CommonConfig, ReverseHelper, UpstreamConfig};
+use super::{common::CommonConfig, ReverseHelper, UpstreamConfig, TryFilesConfig};
 
 #[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -40,9 +40,13 @@ pub struct LocationConfig {
     #[serde(default = "Vec::new")]
     pub upstream: Vec<UpstreamConfig>,
 
+    #[serde_as(as = "Option<DisplayFromStr>")]
+    pub try_files: Option<TryFilesConfig>,
+
     #[serde(flatten)]
     #[serde(default = "CommonConfig::new")]
     pub comm: CommonConfig,
+    
 }
 
 impl Hash for LocationConfig {
@@ -77,6 +81,7 @@ impl LocationConfig {
             file_server: None,
             headers: vec![],
             reverse_proxy: None,
+            try_files: None,
             root: None,
             upstream: vec![],
             comm: CommonConfig::new(),

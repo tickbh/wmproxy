@@ -164,7 +164,9 @@ impl ProxyHttp {
             max_req_num = 1;
         }
         
+        // 需要将已读的数据buffer重新加到server的已读cache中, 否则解析会出错
         let mut server = Server::new_by_cache(inbound, None, buffer);
+        // 构建HTTP服务回调
         let mut operate = Operate {
             username: username.clone(),
             password: password.clone(),
