@@ -311,13 +311,15 @@ impl CenterServer {
         );
         tokio::spawn(async move {
             if let Err(e) = trans.process(stream, "tcp").await {
-                log::warn!("内网穿透:修理Tcp转发时发生错误:{:?}", e);
+                log::warn!("内网穿透:转发Tcp转发时发生错误:{:?}", e);
             }
         });
         return Ok(());
     }
     
     pub async fn server_new_prxoy(&mut self, stream: TcpStream) -> ProxyResult<()> {
+        // 创建一个tcp的转发数据流，服务端不处理数据，仅做数据映射
+        // 服务端也无法连上内网的数据，此处处理数据也没有任何意义
         let trans = TransTcp::new(
             self.sender(),
             self.sender_work(),
@@ -326,7 +328,7 @@ impl CenterServer {
         );
         tokio::spawn(async move {
             if let Err(e) = trans.process(stream, "proxy").await {
-                log::warn!("内网穿透:修理Tcp转发时发生错误:{:?}", e);
+                log::warn!("内网穿透:转发Proxy转发时发生错误:{:?}", e);
             }
         });
         return Ok(());
