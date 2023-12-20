@@ -1,11 +1,11 @@
 // Copyright 2022 - 2023 Wenmeng See the COPYRIGHT
 // file at the top-level directory of this distribution.
-// 
+//
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
-// 
+//
 // Author: tickbh
 // -----
 // Created Date: 2023/10/18 02:32:23
@@ -18,7 +18,7 @@ use std::{
     sync::Arc,
 };
 
-use crate::{Helper, ProxyResult, data::LimitReqData};
+use crate::{data::LimitReqData, Helper, ProxyResult};
 use async_trait::async_trait;
 use rustls::{
     server::ResolvesServerCertUsingSni,
@@ -34,10 +34,15 @@ use tokio::{
 };
 use tokio_rustls::TlsAcceptor;
 use webparse::{Request, Response};
-use wenmeng::{ProtError, ProtResult, Body, Server, OperateTrait, RecvRequest, RecvResponse, Middleware};
+use wenmeng::{
+    Body, Middleware, OperateTrait, ProtError, ProtResult, RecvRequest, RecvResponse, Server,
+};
 
-use super::{common::CommonConfig, LocationConfig, ServerConfig, UpstreamConfig, limit_req::LimitReqZone, LimitReqMiddleware};
-
+use super::{
+    common::CommonConfig, limit_req::LimitReqZone, LimitReqMiddleware, LocationConfig,
+    ServerConfig, UpstreamConfig,
+};
+use async_recursion::async_recursion;
 
 struct Operate {
     inner: InnerHttpOper,
@@ -48,24 +53,22 @@ impl OperateTrait for Operate {
     async fn operate(&mut self, req: &mut RecvRequest) -> ProtResult<RecvResponse> {
         HttpConfig::operate(req, &mut self.inner).await
     }
-    
-    async fn middle_operate(&mut self, req: &mut RecvRequest, middles: &mut Vec<Box<dyn Middleware>>) -> ProtResult<()> {
+
+    async fn middle_operate(
+        &mut self,
+        req: &mut RecvRequest,
+        middles: &mut Vec<Box<dyn Middleware>>,
+    ) -> ProtResult<()> {
         let _req = req;
         let _middle = middles;
         Ok(())
     }
 }
 
-
 struct InnerHttpOper {
     pub servers: Vec<Arc<ServerConfig>>,
-    pub cache_sender: HashMap<
-        LocationConfig,
-        (
-            Sender<Request<Body>>,
-            Receiver<ProtResult<Response<Body>>>,
-        ),
-    >,
+    pub cache_sender:
+        HashMap<LocationConfig, (Sender<Request<Body>>, Receiver<ProtResult<Response<Body>>>)>,
 }
 
 impl InnerHttpOper {
@@ -84,7 +87,7 @@ pub struct HttpConfig {
     pub server: Vec<ServerConfig>,
     #[serde(default = "Vec::new")]
     pub upstream: Vec<UpstreamConfig>,
-    
+
     #[serde_as(as = "HashMap<_, DisplayFromStr>")]
     #[serde(default = "HashMap::new")]
     pub limit_req_zone: HashMap<String, LimitReqZone>,
@@ -103,7 +106,6 @@ impl HttpConfig {
             comm: CommonConfig::new(),
         }
     }
-
 
     pub fn after_load_option(&mut self) -> ProtResult<()> {
         self.copy_to_child();
@@ -211,14 +213,122 @@ impl HttpConfig {
         Ok((Some(TlsAcceptor::from(Arc::new(config))), tlss, listeners))
     }
 
+    #[async_recursion]
+    async fn deal_match_location(
+        req: &mut Request<Body>,
+        cache: &mut HashMap<
+            LocationConfig,
+            (Sender<Request<Body>>, Receiver<ProtResult<Response<Body>>>),
+        >,
+        server: Arc<ServerConfig>,
+        mut now: usize,
+        deals: &mut HashSet<usize>,
+    ) -> ProtResult<Response<Body>> {
+        let path = req.path().clone();
+        let mut l = None;
+        if now == usize::MAX {
+            for idx in 0..server.location.len() {
+                if deals.contains(&idx) {
+                    continue;
+                }
+                if server.location[idx].is_match_rule(&path, req.method()) {
+                    l = Some(&server.location[idx]);
+                    now = idx;
+                    break;
+                }
+            }
+        } else {
+            if !deals.contains(&now) && now < server.location.len() {
+                l = Some(&server.location[now]);
+            }
+        };
+        if l.is_none() {
+            return Ok(Response::status503()
+                .body("unknow location to deal")
+                .unwrap()
+                .into_type());
+        }
+
+        deals.insert(now);
+
+        let l = l.unwrap();
+        if let Some(limit_req) = &l.comm.limit_req {
+            if let Some(res) = LimitReqMiddleware::new(limit_req.clone())
+                .process_request(req)
+                .await?
+            {
+                return Ok(res);
+            }
+        }
+        if let Some(try_files) = &l.try_files {
+            let ori_path = req.path().clone();
+            for val in try_files.list.iter() {
+                req.set_path(ori_path.clone());
+                let new_path = Helper::format_req(req, &**val);
+                req.set_path(new_path);
+                if let Ok(res) = Self::deal_match_location(
+                    req,
+                    cache,
+                    server.clone(),
+                    usize::MAX,
+                    deals,
+                )
+                .await
+                {
+                    if !res.status().is_client_error() && !res.status().is_server_error() {
+                        return Ok(res);
+                    }
+                }
+            }
+            return Ok(Response::builder().status(try_files.fail_status)
+                .body("not valid to try")
+                .unwrap()
+                .into_type());
+        } else {
+            let clone = l.clone_only_hash();
+            if cache.contains_key(&clone) {
+                let mut cache_client = cache.remove(&clone).unwrap();
+                if !cache_client.0.is_closed() {
+                    println!("do req data by cache");
+                    let _send = cache_client.0.send(req.replace_clone(Body::empty())).await;
+                    match cache_client.1.recv().await {
+                        Some(res) => {
+                            if res.is_ok() {
+                                log::trace!("cache client receive response");
+                                cache.insert(clone, cache_client);
+                            }
+                            return res;
+                        }
+                        None => {
+                            log::trace!("cache client close response");
+                            return Ok(Response::status503()
+                                .body("already lose connection")
+                                .unwrap()
+                                .into_type());
+                        }
+                    }
+                }
+            } else {
+                log::trace!("do req data by new");
+                let (res, sender, receiver) = l.deal_request(req).await?;
+                if sender.is_some() && receiver.is_some() {
+                    cache.insert(clone, (sender.unwrap(), receiver.unwrap()));
+                }
+                return Ok(res);
+            }
+        }
+
+        return Ok(Response::status503()
+            .body("unknow location to deal")
+            .unwrap()
+            .into_type());
+    }
+
     async fn inner_operate_by_http(
         req: &mut Request<Body>,
         cache: &mut HashMap<
             LocationConfig,
-            (
-                Sender<Request<Body>>,
-                Receiver<ProtResult<Response<Body>>>,
-            ),
+            (Sender<Request<Body>>, Receiver<ProtResult<Response<Body>>>),
         >,
         servers: Vec<Arc<ServerConfig>>,
     ) -> ProtResult<Response<Body>> {
@@ -227,52 +337,55 @@ impl HttpConfig {
         // 不管有没有匹配, 都执行最后一个
         for (index, s) in servers.iter().enumerate() {
             if s.server_name == host || host.is_empty() || index == server_len - 1 {
-                let path = req.path().clone();
-                for l in s.location.iter() {
-                    if l.is_match_rule(&path, req.method()) {
-                        if let Some(limit_req) = &l.comm.limit_req {
-                            if let Some(res) = LimitReqMiddleware::new(limit_req.clone()).process_request(req).await? {
-                                return Ok(res);
-                            }
-                        }
-                        let clone = l.clone_only_hash();
-                        if cache.contains_key(&clone) {
-                            let mut cache_client = cache.remove(&clone).unwrap();
-                            if !cache_client.0.is_closed() {
-                                println!("do req data by cache");
-                                let _send = cache_client.0.send(req.replace_clone(Body::empty())).await;
-                                match cache_client.1.recv().await {
-                                    Some(res) => {
-                                        if res.is_ok() {
-                                            log::trace!("cache client receive  response");
-                                            cache.insert(clone, cache_client);
-                                        }
-                                        return res;
-                                    }
-                                    None => {
-                                        log::trace!("cache client close response");
-                                        return Ok(Response::status503()
-                                            .body("already lose connection")
-                                            .unwrap()
-                                            .into_type());
-                                    }
-                                }
-                            }
-                        } else {
-                            log::trace!("do req data by new");
-                            let (res, sender, receiver) = 
-                                l.deal_request(req).await?;
-                            if sender.is_some() && receiver.is_some() {
-                                cache.insert(clone, (sender.unwrap(), receiver.unwrap()));
-                            }
-                            return Ok(res);
-                        }
-                    }
-                }
-                return Ok(Response::status503()
-                    .body("unknow location to deal")
-                    .unwrap()
-                    .into_type());
+                return Self::deal_match_location(req, cache, s.clone(), usize::MAX, &mut HashSet::new()).await;
+                // for l in s.location.iter() {
+                //     if l.is_match_rule(&path, req.method()) {
+                //         if let Some(limit_req) = &l.comm.limit_req {
+                //             if let Some(res) = LimitReqMiddleware::new(limit_req.clone())
+                //                 .process_request(req)
+                //                 .await?
+                //             {
+                //                 return Ok(res);
+                //             }
+                //         }
+                //         let clone = l.clone_only_hash();
+                //         if cache.contains_key(&clone) {
+                //             let mut cache_client = cache.remove(&clone).unwrap();
+                //             if !cache_client.0.is_closed() {
+                //                 println!("do req data by cache");
+                //                 let _send =
+                //                     cache_client.0.send(req.replace_clone(Body::empty())).await;
+                //                 match cache_client.1.recv().await {
+                //                     Some(res) => {
+                //                         if res.is_ok() {
+                //                             log::trace!("cache client receive response");
+                //                             cache.insert(clone, cache_client);
+                //                         }
+                //                         return res;
+                //                     }
+                //                     None => {
+                //                         log::trace!("cache client close response");
+                //                         return Ok(Response::status503()
+                //                             .body("already lose connection")
+                //                             .unwrap()
+                //                             .into_type());
+                //                     }
+                //                 }
+                //             }
+                //         } else {
+                //             log::trace!("do req data by new");
+                //             let (res, sender, receiver) = l.deal_request(req).await?;
+                //             if sender.is_some() && receiver.is_some() {
+                //                 cache.insert(clone, (sender.unwrap(), receiver.unwrap()));
+                //             }
+                //             return Ok(res);
+                //         }
+                //     }
+                // }
+                // return Ok(Response::status503()
+                //     .body("unknow location to deal")
+                //     .unwrap()
+                //     .into_type());
             }
         }
         return Ok(Response::status503()
@@ -281,12 +394,18 @@ impl HttpConfig {
             .into_type());
     }
 
-    async fn inner_operate(req: &mut Request<Body>, data: &mut InnerHttpOper) -> ProtResult<Response<Body>> {
+    async fn inner_operate(
+        req: &mut Request<Body>,
+        data: &mut InnerHttpOper,
+    ) -> ProtResult<Response<Body>> {
         let servers = data.servers.clone();
         return Self::inner_operate_by_http(req, &mut data.cache_sender, servers).await;
     }
 
-    async fn operate(req: &mut Request<Body>, data: &mut InnerHttpOper) -> ProtResult<Response<Body>> {
+    async fn operate(
+        req: &mut Request<Body>,
+        data: &mut InnerHttpOper,
+    ) -> ProtResult<Response<Body>> {
         // body的内容可能重新解密又再重新再加过密, 后续可考虑直接做数据
         match Self::inner_operate(req, data).await {
             Ok(mut value) => {
@@ -336,10 +455,8 @@ impl HttpConfig {
                 .addr(addr)
                 .timeout_layer(timeout)
                 .stream(inbound);
-            
-            if let Err(e) = server.incoming(Operate {
-                inner: oper,
-            }).await {
+
+            if let Err(e) = server.incoming(Operate { inner: oper }).await {
                 if server.get_req_num() == 0 {
                     log::info!("反向代理：未处理任何请求时发生错误：{:?}", e);
                 } else {

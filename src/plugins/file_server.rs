@@ -226,7 +226,7 @@ impl FileServer {
         &self,
         req: &mut Request<Body>,
     ) -> ProtResult<Response<Body>> {
-        let path = req.url().path.clone();
+        let path = req.path().clone();
         // 无效前缀，无法处理
         if !path.starts_with(&self.prefix) {
             return Ok(self.ret_error_msg("unknow path"));
@@ -327,7 +327,7 @@ impl FileServer {
             if let Some(rate) = self.comm.get_rate_limit() {
                 recv.set_rate_limit(rate);
             }
-            let builder = Response::builder().version(req.version().clone());
+            let builder = Response::builder().version(req.version().clone()).status(200);
             let mut response = builder
                 .header(HeaderName::CONTENT_TYPE, "text/html; charset=utf-8")
                 .body(recv)
@@ -378,7 +378,7 @@ impl FileServer {
                             "br" => recv.set_compress_brotli(),
                             _ => unreachable!(),
                         }
-                        let builder = Response::builder().version(req.version().clone());
+                        let builder = Response::builder().version(req.version().clone()).status(200);
                         let mut response = builder
                             .header(HeaderName::CONTENT_ENCODING, pre.to_string())
                             .header(

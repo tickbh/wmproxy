@@ -60,10 +60,15 @@ file_server = { browse = true }
 proxy_pass = ""
 
 [[http.server.location]]
+rule = "/try"
+try_files = "{path}/ /root/README.md"
+
+[[http.server.location]]
 rule = "/"
 # method = "get"
 reverse_proxy = "http://server"
 headers = ["+ aaa bbb"]
+
 
 # IP的四层协议处理
 [stream]

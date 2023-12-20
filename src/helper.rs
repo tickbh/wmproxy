@@ -1,11 +1,11 @@
 // Copyright 2022 - 2023 Wenmeng See the COPYRIGHT
 // file at the top-level directory of this distribution.
-// 
+//
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
-// 
+//
 // Author: tickbh
 // -----
 // Created Date: 2023/09/26 10:43:25
@@ -22,7 +22,7 @@ use std::{
 use crate::{
     log::{writer::simple::SimpleWriter, Encode, PatternEncoder, ProxyRecord},
     prot::{ProtFrame, ProtFrameHeader},
-    ConfigLog, ConfigOption, ProxyResult, ConfigHeader, HeaderOper,
+    ConfigHeader, ConfigLog, ConfigOption, HeaderOper, ProxyResult,
 };
 use lazy_static::lazy_static;
 use log::{log_enabled, Level, LevelFilter, Record};
@@ -32,7 +32,7 @@ use log4rs::{
 };
 use socket2::{Domain, Socket, Type};
 use tokio::net::{TcpListener, UdpSocket};
-use webparse::{http2::frame::read_u24, BinaryMut, Buf, Request, Serialize, Response};
+use webparse::{http2::frame::read_u24, BinaryMut, Buf, Request, Response, Serialize};
 use wenmeng::{Body, HeaderHelper};
 
 thread_local! {
@@ -195,6 +195,24 @@ impl Helper {
         }
     }
 
+    pub fn format_req(req: &Request<Body>, formats: &str) -> String {
+        let pw = FORMAT_PATTERN_CACHE.with(|m| {
+            if !m.borrow().contains_key(&formats) {
+                let p = PatternEncoder::new(formats);
+                m.borrow_mut()
+                    .insert(Box::leak(formats.to_string().clone().into_boxed_str()), Arc::new(p));
+            }
+            m.borrow()[&formats].clone()
+        });
+
+        // 将其转化成Record然后进行encode
+        let record =
+            ProxyRecord::new_req(Record::builder().level(Level::Info).build(), req);
+        let mut buf = vec![];
+        pw.encode(&mut SimpleWriter(&mut buf), &record).unwrap();
+        String::from_utf8_lossy(&buf[..]).to_string()
+    }
+
     /// 记录HTTP的访问数据并将其格式化
     pub fn log_acess(
         log_formats: &HashMap<String, String>,
@@ -211,42 +229,28 @@ impl Helper {
                 // 需要先判断是否该日志已开启, 如果未开启直接写入将浪费性能
                 if log_enabled!(target: &access.name, access.level) {
                     // 将format转化成pattern会有相当的性能损失, 此处缓存pattern结果
-                    let pw = FORMAT_PATTERN_CACHE.with(|m| {
-                        if !m.borrow().contains_key(&**formats) {
-                            let p = PatternEncoder::new(formats);
-                            m.borrow_mut()
-                                .insert(Box::leak(formats.clone().into_boxed_str()), Arc::new(p));
-                        }
-                        m.borrow()[&**formats].clone()
-                    });
-
-                    // 将其转化成Record然后进行encode
-                    let record =
-                        ProxyRecord::new_req(Record::builder().level(Level::Info).build(), req);
-                    let mut buf = vec![];
-                    pw.encode(&mut SimpleWriter(&mut buf), &record).unwrap();
+                    let value = Self::format_req(req, &*formats);
                     match access.level {
                         Level::Error => {
-                            log::error!(target: &access.name, "{}", String::from_utf8_lossy(&buf[..]))
+                            log::error!(target: &access.name, "{}", value)
                         }
                         Level::Warn => {
-                            log::warn!(target: &access.name, "{}", String::from_utf8_lossy(&buf[..]))
+                            log::warn!(target: &access.name, "{}", value)
                         }
                         Level::Info => {
-                            log::info!(target: &access.name, "{}", String::from_utf8_lossy(&buf[..]))
+                            log::info!(target: &access.name, "{}", value)
                         }
                         Level::Debug => {
-                            log::debug!(target: &access.name, "{}", String::from_utf8_lossy(&buf[..]))
+                            log::debug!(target: &access.name, "{}", value)
                         }
                         Level::Trace => {
-                            log::trace!(target: &access.name, "{}", String::from_utf8_lossy(&buf[..]))
+                            log::trace!(target: &access.name, "{}", value)
                         }
                     };
                 }
             }
         }
     }
-
 
     pub fn rewrite_request<T>(request: &mut Request<T>, headers: &Vec<ConfigHeader>)
     where
@@ -270,19 +274,27 @@ impl Helper {
             }
 
             Self::rewrite_header(None, Some(response), &h);
-            
         }
     }
 
-    pub fn rewrite_header<T: Serialize>(mut request: Option<&mut Request<T>>, mut response: Option<&mut Response<T>>, value: &ConfigHeader) {
-
+    pub fn rewrite_header<T: Serialize>(
+        mut request: Option<&mut Request<T>>,
+        mut response: Option<&mut Response<T>>,
+        value: &ConfigHeader,
+    ) {
         match &value.oper {
             HeaderOper::Add => {
                 let v = HeaderHelper::convert_value(&mut request, &mut response, value.key.clone());
                 if request.is_some() {
-                    request.unwrap().headers_mut().push(value.key.to_string(), v);
+                    request
+                        .unwrap()
+                        .headers_mut()
+                        .push(value.key.to_string(), v);
                 } else {
-                    response.unwrap().headers_mut().push(value.key.to_string(), v);
+                    response
+                        .unwrap()
+                        .headers_mut()
+                        .push(value.key.to_string(), v);
                 }
             }
             HeaderOper::Del => {
@@ -304,22 +316,33 @@ impl Helper {
                 }
                 let v = HeaderHelper::convert_value(&mut request, &mut response, value.val.clone());
                 if request.is_some() {
-                    request.unwrap().headers_mut().push(value.key.to_string(), v);
+                    request
+                        .unwrap()
+                        .headers_mut()
+                        .push(value.key.to_string(), v);
                 } else {
-                    response.unwrap().headers_mut().push(value.key.to_string(), v);
+                    response
+                        .unwrap()
+                        .headers_mut()
+                        .push(value.key.to_string(), v);
                 }
             }
             _ => {
                 let v = HeaderHelper::convert_value(&mut request, &mut response, value.key.clone());
                 if request.is_some() {
-                    request.unwrap().headers_mut().push(value.key.to_string(), v);
+                    request
+                        .unwrap()
+                        .headers_mut()
+                        .push(value.key.to_string(), v);
                 } else {
-                    response.unwrap().headers_mut().push(value.key.to_string(), v);
+                    response
+                        .unwrap()
+                        .headers_mut()
+                        .push(value.key.to_string(), v);
                 }
             }
         }
     }
-    
 
     // pub async fn udp_recv_from(socket: &UdpSocket, buf: &mut [u8]) -> io::Result<usize> {
     //     let (s, addr) = socket.recv_from(&mut buf).await?;
