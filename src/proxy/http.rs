@@ -12,7 +12,7 @@
 
 use std::io::Cursor;
 
-use crate::{HealthCheck, ProxyError};
+use crate::{HealthCheck, ProxyError, ConfigHeader, Helper};
 use async_trait::async_trait;
 use tokio::{io::{copy_bidirectional, AsyncRead, AsyncReadExt, AsyncWrite, ReadBuf}, net::TcpStream, sync::mpsc::{Receiver, Sender}};
 use webparse::{BinaryMut, BufMut, Method, Response};
@@ -32,6 +32,8 @@ struct Operate {
     sender: Option<Sender<RecvRequest>>,
     /// http代理keep-alive的复用
     receiver: Option<Receiver<ProtResult<RecvResponse>>>,
+    /// 代理http头处理改造
+    headers: Option<Vec<ConfigHeader>>,
 }
 
 impl Operate {
@@ -67,16 +69,35 @@ impl Operate {
 
         return false;
     }
+
+    fn deal_request(&self, req: &mut RecvRequest) -> ProtResult<()> {
+        if let Some(headers) = &self.headers {
+            // 复写Request的头文件信息
+            Helper::rewrite_request(req, headers);
+        }
+        Ok(())
+    }
+    
+    fn deal_response(&self, res: &mut RecvResponse) -> ProtResult<()> {
+        if let Some(headers) = &self.headers {
+            // 复写Request的头文件信息
+            Helper::rewrite_response(res, headers);
+        }
+        Ok(())
+    }
 }
 
 #[async_trait]
 impl OperateTrait for &mut Operate {
     async fn operate(&mut self, request: &mut RecvRequest) -> ProtResult<RecvResponse> {
+        self.deal_request(request)?;
         // 已连接直接进行后续处理
         if let Some(sender) = &self.sender {
             sender.send(request.replace_clone(Body::empty())).await?;
             if let Some(res) = self.receiver.as_mut().unwrap().recv().await {
-                return Ok(res?)
+                let mut res = res?;
+                self.deal_response(&mut res)?;
+                return Ok(res)
             }
             return Err(ProtError::Extension("already close by other"))
         }
@@ -120,7 +141,9 @@ impl OperateTrait for &mut Operate {
                     Some(res) => {
                         self.sender = Some(sender);
                         self.receiver = Some(recv);
-                        return Ok(res?)
+                        let mut res = res?;
+                        self.deal_response(&mut res)?;
+                        return Ok(res)
                     },
                     None => return Err(ProtError::Extension("already close by other")),
                 }
@@ -134,6 +157,7 @@ impl ProxyHttp {
     pub async fn process<T>(
         username: &Option<String>,
         password: &Option<String>,
+        headers: Option<Vec<ConfigHeader>>,
         mut inbound: T,
     ) -> Result<(), ProxyError<T>>
     where
@@ -173,6 +197,7 @@ impl ProxyHttp {
             stream: None,
             sender: None,
             receiver: None,
+            headers,
         };
         server.set_max_req(max_req_num);
         let _e = server.incoming(&mut operate).await?;

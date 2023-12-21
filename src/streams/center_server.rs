@@ -1,11 +1,11 @@
 // Copyright 2022 - 2023 Wenmeng See the COPYRIGHT
 // file at the top-level directory of this distribution.
-// 
+//
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
-// 
+//
 // Author: tickbh
 // -----
 // Created Date: 2023/09/25 10:08:56
@@ -30,8 +30,9 @@ use webparse::Buf;
 
 use crate::{
     prot::{ProtClose, ProtFrame},
+    proxy::ProxyServer,
     trans::{TransHttp, TransTcp},
-    Helper, MappingConfig, ProtCreate, WMCore, ProxyConfig, ProxyResult, VirtualStream,
+    Helper, MappingConfig, ProtCreate, ProxyConfig, ProxyResult, VirtualStream, WMCore,
 };
 
 /// 中心服务端
@@ -193,18 +194,16 @@ impl CenterServer {
                                     virtual_receiver,
                                 );
 
-                                let (flag, username, password, udp_bind) = (
+                                let proxy_server = ProxyServer::new(
                                     option.flag,
                                     option.username.clone(),
                                     option.password.clone(),
                                     option.udp_bind.clone(),
+                                    None,
                                 );
                                 tokio::spawn(async move {
                                     // 处理代理的能力
-                                    let _ = WMCore::deal_proxy(
-                                        stream, flag, username, password, udp_bind,
-                                    )
-                                    .await;
+                                    let _ = proxy_server.deal_proxy(stream).await;
                                 });
                             }
                             ProtFrame::Close(_) | ProtFrame::Data(_) => {
@@ -316,7 +315,7 @@ impl CenterServer {
         });
         return Ok(());
     }
-    
+
     pub async fn server_new_prxoy(&mut self, stream: TcpStream) -> ProxyResult<()> {
         let trans = TransTcp::new(
             self.sender(),

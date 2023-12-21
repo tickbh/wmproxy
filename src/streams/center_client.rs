@@ -1,11 +1,11 @@
 // Copyright 2022 - 2023 Wenmeng See the COPYRIGHT
 // file at the top-level directory of this distribution.
-// 
+//
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
-// 
+//
 // Author: tickbh
 // -----
 // Created Date: 2023/09/25 10:08:56
@@ -24,6 +24,7 @@ use tokio_rustls::{client::TlsStream, TlsConnector};
 
 use webparse::{BinaryMut, Buf};
 
+use crate::proxy::ProxyServer;
 use crate::{
     HealthCheck, Helper, MappingConfig, ProtClose, ProtCreate, ProtFrame, ProxyConfig, ProxyResult,
     TransStream, VirtualStream, WMCore,
@@ -221,25 +222,22 @@ impl CenterClient {
                                 map.insert(p.sock_map(), virtual_sender);
 
                                 if mapping.as_ref().unwrap().is_proxy() {
-
                                     let stream = VirtualStream::new(
                                         p.sock_map(),
                                         sender.clone(),
                                         virtual_receiver,
                                     );
-    
-                                    let (flag, username, password, udp_bind) = (
+
+                                    let proxy_server = ProxyServer::new(
                                         option.flag,
                                         option.username.clone(),
                                         option.password.clone(),
                                         option.udp_bind.clone(),
+                                        Some(mapping.as_ref().unwrap().headers.clone()),
                                     );
                                     tokio::spawn(async move {
                                         // 处理代理的能力
-                                        let _ = WMCore::deal_proxy(
-                                            stream, flag, username, password, udp_bind,
-                                        )
-                                        .await;
+                                        let _ = proxy_server.deal_proxy(stream).await;
                                     });
                                 } else {
                                     if mapping.as_ref().unwrap().local_addr.is_none() {
@@ -247,7 +245,7 @@ impl CenterClient {
                                         log::warn!("local addr is none, can't mapping");
                                         continue;
                                     }
-                                    
+
                                     let domain = mapping.as_ref().unwrap().local_addr.unwrap();
                                     let sock_map = p.sock_map();
                                     let sender = sender.clone();
@@ -263,13 +261,18 @@ impl CenterClient {
                                                 let _ = trans.copy_wait().await;
                                             }
                                             Err(e) => {
-                                                log::trace!("连接地址:{}，发生错误：{:?}", domain, e);
-                                                let _ = sender.send(ProtFrame::new_close(sock_map)).await;
+                                                log::trace!(
+                                                    "连接地址:{}，发生错误：{:?}",
+                                                    domain,
+                                                    e
+                                                );
+                                                let _ = sender
+                                                    .send(ProtFrame::new_close(sock_map))
+                                                    .await;
                                             }
                                         }
                                     });
                                 }
-
                             }
                             ProtFrame::Data(_) => {
                                 if let Some(sender) = map.get(&p.sock_map()) {

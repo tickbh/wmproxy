@@ -33,9 +33,10 @@ use webparse::BinaryMut;
 use crate::{
     error::ProxyTypeResult,
     option::ConfigOption,
+    proxy::ProxyServer,
     reverse::{HttpConfig, ServerConfig, StreamConfig, StreamUdp},
-    ActiveHealth, CenterClient, CenterServer, Flag, HealthCheck, OneHealth, ProxyError,
-    ProxyHttp, ProxyResult, ProxySocks5,
+    ActiveHealth, CenterClient, CenterServer, Flag, HealthCheck, OneHealth, ProxyError, ProxyHttp,
+    ProxyResult, ProxySocks5,
 };
 
 pub struct WMCore {
@@ -91,41 +92,6 @@ impl WMCore {
         }
     }
 
-    async fn process_http<T>(
-        username: &Option<String>,
-        password: &Option<String>,
-        flag: Flag,
-        inbound: T,
-    ) -> ProxyTypeResult<(), T>
-    where
-        T: AsyncRead + AsyncWrite + Unpin,
-    {
-        if flag.contains(Flag::HTTP) || flag.contains(Flag::HTTPS) {
-            ProxyHttp::process(username, password, inbound).await
-        } else {
-            Err(ProxyError::Continue((None, inbound)))
-        }
-    }
-
-    async fn process_socks5<T>(
-        username: Option<String>,
-        password: Option<String>,
-        udp_bind: Option<IpAddr>,
-        flag: Flag,
-        inbound: T,
-        buffer: Option<BinaryMut>,
-    ) -> ProxyTypeResult<(), T>
-    where
-        T: AsyncRead + AsyncWrite + Unpin,
-    {
-        if flag.contains(Flag::SOCKS5) {
-            let mut sock = ProxySocks5::new(username, password, udp_bind);
-            sock.process(inbound, buffer).await
-        } else {
-            Err(ProxyError::Continue((buffer, inbound)))
-        }
-    }
-
     async fn deal_stream<T>(
         &mut self,
         inbound: T,
@@ -155,12 +121,16 @@ impl WMCore {
                     let _e = Self::transfer_server(domain, tls_client, inbound, server).await;
                 });
             } else {
-                let username = option.username.clone();
-                let password = option.password.clone();
-                let udp_bind = option.udp_bind.clone();
+                let proxy_server = ProxyServer::new(
+                    flag,
+                    option.username.clone(),
+                    option.password.clone(),
+                    option.udp_bind.clone(),
+                    None,
+                );
                 tokio::spawn(async move {
                     // tcp的连接被移动到该协程中，我们只要专注的处理该stream即可
-                    let _ = Self::deal_proxy(inbound, flag, username, password, udp_bind).await;
+                    let _ = proxy_server.deal_proxy(inbound).await;
                 });
             }
         }
@@ -423,37 +393,6 @@ impl WMCore {
         Ok(())
     }
 
-    pub async fn deal_proxy<T>(
-        inbound: T,
-        flag: Flag,
-        username: Option<String>,
-        password: Option<String>,
-        udp_bind: Option<IpAddr>,
-    ) -> ProxyTypeResult<(), T>
-    where
-        T: AsyncRead + AsyncWrite + Unpin,
-    {
-        let (read_buf, inbound) = match Self::process_http(&username, &password, flag, inbound).await {
-            Ok(()) => {
-                return Ok(());
-            }
-            Err(ProxyError::Continue(buf)) => buf,
-            Err(err) => return Err(err),
-        };
-
-        let _read_buf =
-            match Self::process_socks5(username, password, udp_bind, flag, inbound, read_buf).await
-            {
-                Ok(()) => return Ok(()),
-                Err(ProxyError::Continue(buf)) => buf,
-                Err(err) => {
-                    log::info!("socks5代理发生错误：{:?}", err);
-                    return Err(err);
-                }
-            };
-        Ok(())
-    }
-
     pub async fn server_new_http(
         &mut self,
         stream: TcpStream,
@@ -510,5 +449,4 @@ impl WMCore {
         log::warn!("未发现任何tcp服务器，但收到tcp的内网穿透，请检查配置");
         Ok(())
     }
-    
 }

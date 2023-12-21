@@ -178,3 +178,4 @@ proxy:
 - [x] 修改 HTTP 请求 Header
 - [x] 支持 HTTP2 的内网穿透
 - [x] 控制微端
+- [x] try_files

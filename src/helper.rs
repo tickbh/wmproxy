@@ -284,7 +284,7 @@ impl Helper {
     ) {
         match &value.oper {
             HeaderOper::Add => {
-                let v = HeaderHelper::convert_value(&mut request, &mut response, value.key.clone());
+                let v = HeaderHelper::convert_value(&mut request, &mut response, value.val.clone());
                 if request.is_some() {
                     request
                         .unwrap()
@@ -328,7 +328,7 @@ impl Helper {
                 }
             }
             _ => {
-                let v = HeaderHelper::convert_value(&mut request, &mut response, value.key.clone());
+                let v = HeaderHelper::convert_value(&mut request, &mut response, value.val.clone());
                 if request.is_some() {
                     request
                         .unwrap()
