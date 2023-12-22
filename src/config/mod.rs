@@ -16,6 +16,7 @@ mod duration;
 mod log;
 mod header;
 mod rate;
+mod ip_sets;
 
 use std::{str::FromStr, fmt::{Display, self}, marker::PhantomData};
 
@@ -24,6 +25,7 @@ pub use self::duration::ConfigDuration;
 pub use self::log::ConfigLog;
 pub use self::header::{ConfigHeader, HeaderOper};
 pub use self::rate::ConfigRate;
+pub use self::ip_sets::*;
 
 use serde::{Serializer, Deserializer, de::{Visitor, Error, self}};
 use serde_with::{SerializeAs, DeserializeAs};

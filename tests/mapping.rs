@@ -257,7 +257,7 @@ mod tests {
                 .unwrap();
             let mut result = BinaryMut::new();
             res.body_mut().read_all(&mut result).await;
-
+            // 测试头信息来确认是否来源于代理
             assert_eq!(res.headers().get_value(&"from_proxy"), &"mapping");
             assert_eq!(result.remaining(), HELLO_WORLD.as_bytes().len());
             assert_eq!(result.as_slice(), HELLO_WORLD.as_bytes());
