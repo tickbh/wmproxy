@@ -650,7 +650,7 @@ impl FormattedChunk {
             }
             FormattedChunk::ClientIp => {
                 if let Some(req) = record.req {
-                    if let Some(client_ip) = req.headers().system_get(&"{client_ip}".to_string()) {
+                    if let Some(client_ip) = req.headers().system_get("{client_ip}") {
                         w.write(client_ip.as_bytes())?;
                     } else {
                         w.write("???".as_bytes())?;

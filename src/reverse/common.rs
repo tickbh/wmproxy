@@ -12,7 +12,7 @@
 
 use std::collections::HashMap;
 
-use crate::{ConfigDuration, ConfigLog, ConfigRate};
+use crate::{ConfigDuration, ConfigLog, ConfigRate, IpSets};
 use crate::{DisplayFromStrOrNumber};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
@@ -56,6 +56,10 @@ pub struct CommonConfig {
     pub error_log: Option<ConfigLog>,
     #[serde_as(as = "Option<DisplayFromStr>")]
     pub limit_req: Option<LimitReq>,
+    #[serde_as(as = "Option<DisplayFromStr>")]
+    pub allow_ip: Option<IpSets>,
+    #[serde_as(as = "Option<DisplayFromStr>")]
+    pub deny_ip: Option<IpSets>,
 }
 
 impl CommonConfig {
@@ -81,6 +85,8 @@ impl CommonConfig {
             error_log: None,
 
             limit_req: None,
+            allow_ip: None,
+            deny_ip: None,
         }
     }
 
@@ -118,6 +124,14 @@ impl CommonConfig {
         }
         if self.limit_req.is_none() {
             self.limit_req = parent.limit_req.clone();
+        }
+        
+        if self.allow_ip.is_none() {
+            self.allow_ip = parent.allow_ip.clone();
+        }
+        
+        if self.deny_ip.is_none() {
+            self.deny_ip = parent.deny_ip.clone();
         }
     }
 

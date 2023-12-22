@@ -69,7 +69,7 @@ impl Middleware for LimitReqMiddleware {
         &mut self,
         request: &mut RecvRequest,
     ) -> ProtResult<Option<RecvResponse>> {
-        if let Some(client_ip) = request.headers().system_get(&"{client_ip}".to_string()) {
+        if let Some(client_ip) = request.headers().system_get("{client_ip}") {
             // let a = LimitReqData::recv_new_req(&self.req.zone, client_ip, self.req.burst)?;
             // println!("a === {:?}", a);
             match LimitReqData::recv_new_req(&self.req.zone, client_ip, self.req.burst)? {

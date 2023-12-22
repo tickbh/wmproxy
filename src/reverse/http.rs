@@ -14,7 +14,7 @@ use std::{
     collections::{HashMap, HashSet},
     fs::File,
     io::{self, BufReader},
-    net::SocketAddr,
+    net::{SocketAddr, IpAddr},
     sync::Arc,
 };
 
@@ -260,6 +260,28 @@ impl HttpConfig {
                 return Ok(res);
             }
         }
+        if l.comm.deny_ip.is_some() || l.comm.allow_ip.is_some() {
+            if let Some(ip) = req.headers().system_get("{client_ip}") {
+                let ip = ip.parse::<IpAddr>().map_err(|_| ProtError::Extension("client ip error"))?;
+                if let Some(allow) = &l.comm.allow_ip {
+                    if !allow.contains(&ip) {
+                        return Ok(Response::status503()
+                        .body("now allow ip")
+                        .unwrap()
+                        .into_type());
+                    }
+                }
+                if let Some(deny) = &l.comm.deny_ip {
+                    if deny.contains(&ip) {
+                        return Ok(Response::status503()
+                        .body("deny ip")
+                        .unwrap()
+                        .into_type());
+                    }
+                }
+            }
+        }
+        
         if let Some(try_files) = &l.try_files {
             let ori_path = req.path().clone();
             for val in try_files.list.iter() {

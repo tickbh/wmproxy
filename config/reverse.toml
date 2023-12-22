@@ -56,11 +56,13 @@ limit_req = "zone=limit brust=1"
 [[http.server.location]]
 rate_limit = "4m/s"
 rule = "/root"
+deny_ip = "127.0.0.1"
 file_server = { browse = true }
 proxy_pass = ""
 
 [[http.server.location]]
 rule = "/try"
+allow_ip = "127.0.0.1"
 try_files = "{path}/ /root/README.md"
 
 [[http.server.location]]
