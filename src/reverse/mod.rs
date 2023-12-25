@@ -19,7 +19,7 @@ mod upstream;
 mod reverse_helper;
 mod common;
 mod limit_req;
-mod try_files;
+mod try_paths;
 
 pub use http::HttpConfig;
 pub use stream::{StreamConfig, StreamUdp};
@@ -29,4 +29,4 @@ pub use upstream::{SingleStreamConfig, UpstreamConfig};
 pub use reverse_helper::ReverseHelper;
 pub use common::CommonConfig;
 pub use limit_req::{LimitReqMiddleware, LimitReqZone, LimitReq};
-pub use try_files::TryFilesConfig;
+pub use try_paths::TryPathsConfig;

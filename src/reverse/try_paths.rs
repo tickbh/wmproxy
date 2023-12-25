@@ -24,18 +24,18 @@ use crate::{
 };
 
 #[derive(Debug, Clone)]
-pub struct TryFilesConfig {
+pub struct TryPathsConfig {
     pub list: Vec<String>,
     pub fail_status: StatusCode,
 }
 
-impl TryFilesConfig {
+impl TryPathsConfig {
     pub fn new(list: Vec<String>, fail_status: StatusCode) -> Self {
         Self { list, fail_status }
     }
 }
 
-impl FromStr for TryFilesConfig {
+impl FromStr for TryPathsConfig {
     type Err = ProxyError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -55,11 +55,11 @@ impl FromStr for TryFilesConfig {
             }
         }
 
-        Ok(TryFilesConfig::new(list, status))
+        Ok(TryPathsConfig::new(list, status))
     }
 }
 
-impl Display for TryFilesConfig {
+impl Display for TryPathsConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_fmt(format_args!("{} {}", self.list.join(" "), self.fail_status))
     }

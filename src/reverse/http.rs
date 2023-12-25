@@ -14,7 +14,7 @@ use std::{
     collections::{HashMap, HashSet},
     fs::File,
     io::{self, BufReader},
-    net::{SocketAddr, IpAddr},
+    net::{IpAddr, SocketAddr},
     sync::Arc,
 };
 
@@ -223,6 +223,7 @@ impl HttpConfig {
         server: Arc<ServerConfig>,
         mut now: usize,
         deals: &mut HashSet<usize>,
+        try_deals: &mut HashSet<usize>,
     ) -> ProtResult<Response<Body>> {
         let path = req.path().clone();
         let mut l = None;
@@ -249,7 +250,6 @@ impl HttpConfig {
                 .into_type());
         }
 
-        deals.insert(now);
 
         let l = l.unwrap();
         if let Some(limit_req) = &l.comm.limit_req {
@@ -262,29 +262,31 @@ impl HttpConfig {
         }
         if l.comm.deny_ip.is_some() || l.comm.allow_ip.is_some() {
             if let Some(ip) = req.headers().system_get("{client_ip}") {
-                let ip = ip.parse::<IpAddr>().map_err(|_| ProtError::Extension("client ip error"))?;
+                let ip = ip
+                    .parse::<IpAddr>()
+                    .map_err(|_| ProtError::Extension("client ip error"))?;
                 if let Some(allow) = &l.comm.allow_ip {
                     if !allow.contains(&ip) {
                         return Ok(Response::status503()
-                        .body("now allow ip")
-                        .unwrap()
-                        .into_type());
+                            .body("now allow ip")
+                            .unwrap()
+                            .into_type());
                     }
                 }
                 if let Some(deny) = &l.comm.deny_ip {
                     if deny.contains(&ip) {
-                        return Ok(Response::status503()
-                        .body("deny ip")
-                        .unwrap()
-                        .into_type());
+                        return Ok(Response::status503().body("deny ip").unwrap().into_type());
                     }
                 }
             }
         }
-        
-        if let Some(try_files) = &l.try_files {
+
+        if !try_deals.contains(&now) && l.try_paths.is_some() {
+            let try_paths = l.try_paths.as_ref().unwrap();
+            try_deals.insert(now);
             let ori_path = req.path().clone();
-            for val in try_files.list.iter() {
+            for val in try_paths.list.iter() {
+                deals.clear();
                 req.set_path(ori_path.clone());
                 let new_path = Helper::format_req(req, &**val);
                 req.set_path(new_path);
@@ -294,6 +296,7 @@ impl HttpConfig {
                     server.clone(),
                     usize::MAX,
                     deals,
+                    try_deals,
                 )
                 .await
                 {
@@ -302,11 +305,13 @@ impl HttpConfig {
                     }
                 }
             }
-            return Ok(Response::builder().status(try_files.fail_status)
+            return Ok(Response::builder()
+                .status(try_paths.fail_status)
                 .body("not valid to try")
                 .unwrap()
                 .into_type());
         } else {
+            deals.insert(now);
             let clone = l.clone_only_hash();
             if cache.contains_key(&clone) {
                 let mut cache_client = cache.remove(&clone).unwrap();
@@ -359,7 +364,15 @@ impl HttpConfig {
         // 不管有没有匹配, 都执行最后一个
         for (index, s) in servers.iter().enumerate() {
             if s.server_name == host || host.is_empty() || index == server_len - 1 {
-                return Self::deal_match_location(req, cache, s.clone(), usize::MAX, &mut HashSet::new()).await;
+                return Self::deal_match_location(
+                    req,
+                    cache,
+                    s.clone(),
+                    usize::MAX,
+                    &mut HashSet::new(),
+                    &mut HashSet::new(),
+                )
+                .await;
                 // for l in s.location.iter() {
                 //     if l.is_match_rule(&path, req.method()) {
                 //         if let Some(limit_req) = &l.comm.limit_req {
