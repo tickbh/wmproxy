@@ -216,33 +216,31 @@ impl HttpConfig {
     #[async_recursion]
     async fn deal_match_location(
         req: &mut Request<Body>,
+        // 缓存客户端请求
         cache: &mut HashMap<
             LocationConfig,
             (Sender<Request<Body>>, Receiver<ProtResult<Response<Body>>>),
         >,
+        // 该Server的配置选项
         server: Arc<ServerConfig>,
-        mut now: usize,
+        // 已处理的匹配路由
         deals: &mut HashSet<usize>,
+        // 已处理的TryPath匹配路由
         try_deals: &mut HashSet<usize>,
     ) -> ProtResult<Response<Body>> {
         let path = req.path().clone();
         let mut l = None;
-        if now == usize::MAX {
-            for idx in 0..server.location.len() {
-                if deals.contains(&idx) {
-                    continue;
-                }
-                if server.location[idx].is_match_rule(&path, req.method()) {
-                    l = Some(&server.location[idx]);
-                    now = idx;
-                    break;
-                }
+        let mut now = usize::MAX;
+        for idx in 0..server.location.len() {
+            if deals.contains(&idx) {
+                continue;
             }
-        } else {
-            if !deals.contains(&now) && now < server.location.len() {
-                l = Some(&server.location[now]);
+            if server.location[idx].is_match_rule(&path, req.method()) {
+                l = Some(&server.location[idx]);
+                now = idx;
+                break;
             }
-        };
+        }
         if l.is_none() {
             return Ok(Response::status503()
                 .body("unknow location to deal")
@@ -281,20 +279,22 @@ impl HttpConfig {
             }
         }
 
+        // 判定该try是否处理过, 防止死循环
         if !try_deals.contains(&now) && l.try_paths.is_some() {
             let try_paths = l.try_paths.as_ref().unwrap();
             try_deals.insert(now);
             let ori_path = req.path().clone();
             for val in try_paths.list.iter() {
                 deals.clear();
+                // 重写path好方便做数据格式化
                 req.set_path(ori_path.clone());
                 let new_path = Helper::format_req(req, &**val);
+                // 重写path好方便后续处理无感
                 req.set_path(new_path);
                 if let Ok(res) = Self::deal_match_location(
                     req,
                     cache,
                     server.clone(),
-                    usize::MAX,
                     deals,
                     try_deals,
                 )
@@ -368,59 +368,10 @@ impl HttpConfig {
                     req,
                     cache,
                     s.clone(),
-                    usize::MAX,
                     &mut HashSet::new(),
                     &mut HashSet::new(),
                 )
                 .await;
-                // for l in s.location.iter() {
-                //     if l.is_match_rule(&path, req.method()) {
-                //         if let Some(limit_req) = &l.comm.limit_req {
-                //             if let Some(res) = LimitReqMiddleware::new(limit_req.clone())
-                //                 .process_request(req)
-                //                 .await?
-                //             {
-                //                 return Ok(res);
-                //             }
-                //         }
-                //         let clone = l.clone_only_hash();
-                //         if cache.contains_key(&clone) {
-                //             let mut cache_client = cache.remove(&clone).unwrap();
-                //             if !cache_client.0.is_closed() {
-                //                 println!("do req data by cache");
-                //                 let _send =
-                //                     cache_client.0.send(req.replace_clone(Body::empty())).await;
-                //                 match cache_client.1.recv().await {
-                //                     Some(res) => {
-                //                         if res.is_ok() {
-                //                             log::trace!("cache client receive response");
-                //                             cache.insert(clone, cache_client);
-                //                         }
-                //                         return res;
-                //                     }
-                //                     None => {
-                //                         log::trace!("cache client close response");
-                //                         return Ok(Response::status503()
-                //                             .body("already lose connection")
-                //                             .unwrap()
-                //                             .into_type());
-                //                     }
-                //                 }
-                //             }
-                //         } else {
-                //             log::trace!("do req data by new");
-                //             let (res, sender, receiver) = l.deal_request(req).await?;
-                //             if sender.is_some() && receiver.is_some() {
-                //                 cache.insert(clone, (sender.unwrap(), receiver.unwrap()));
-                //             }
-                //             return Ok(res);
-                //         }
-                //     }
-                // }
-                // return Ok(Response::status503()
-                //     .body("unknow location to deal")
-                //     .unwrap()
-                //     .into_type());
             }
         }
         return Ok(Response::status503()
