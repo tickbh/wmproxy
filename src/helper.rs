@@ -11,8 +11,10 @@
 // Created Date: 2023/09/26 10:43:25
 
 use std::{
+    borrow::Cow,
     cell::RefCell,
     collections::HashMap,
+    hash::Hash,
     io,
     net::ToSocketAddrs,
     str::FromStr,
@@ -30,6 +32,7 @@ use log4rs::{
     append::{console::ConsoleAppender, file::FileAppender},
     config::{Appender, Logger, Root},
 };
+use regex::Regex;
 use socket2::{Domain, Socket, Type};
 use tokio::net::{TcpListener, UdpSocket};
 use webparse::{http2::frame::read_u24, BinaryMut, Buf, Request, Response, Serialize};
@@ -199,18 +202,68 @@ impl Helper {
         let pw = FORMAT_PATTERN_CACHE.with(|m| {
             if !m.borrow().contains_key(&formats) {
                 let p = PatternEncoder::new(formats);
-                m.borrow_mut()
-                    .insert(Box::leak(formats.to_string().clone().into_boxed_str()), Arc::new(p));
+                m.borrow_mut().insert(
+                    Box::leak(formats.to_string().clone().into_boxed_str()),
+                    Arc::new(p),
+                );
             }
             m.borrow()[&formats].clone()
         });
 
         // 将其转化成Record然后进行encode
-        let record =
-            ProxyRecord::new_req(Record::builder().level(Level::Info).build(), req);
+        let record = ProxyRecord::new_req(Record::builder().level(Level::Info).build(), req);
         let mut buf = vec![];
         pw.encode(&mut SimpleWriter(&mut buf), &record).unwrap();
         String::from_utf8_lossy(&buf[..]).to_string()
+    }
+
+    fn inner_oper_regex(req: &Request<Body>, re: &Regex, vals: &[&str]) -> String {
+        let mut ret = String::new();
+        let key = Self::format_req(req, vals[0]);
+        for idx in 1..vals.len() {
+            if idx != 1 {
+                ret += " ";
+            }
+            let val = re.replace_all(&key, vals[idx]);
+            ret += &val;
+        }
+        ret
+    }
+
+    pub fn format_req_may_regex(req: &Request<Body>, formats: &str) -> String {
+        if formats.starts_with("regex ") {
+            lazy_static! {
+                static ref RE: Regex = Regex::new(r#"([\w\$\+\-\?\/\{\}]+)|"([^"]*)"|'([^']*)'"#).unwrap();
+                static ref RE_CACHES: Mutex<HashMap<&'static str, Regex>> =
+                    Mutex::new(HashMap::new());
+            };
+
+            if formats.len() == 0 {
+                return String::new();
+            }
+
+            let mut vals = vec![];
+            for (_, [value]) in RE.captures_iter(formats).map(|c| c.extract()) {
+                vals.push(value);
+            }
+
+            if vals.len() < 3 {
+                return String::new();
+            }
+
+            if let Ok(mut guard) = RE_CACHES.lock() {
+                if let Some(re) = guard.get(&vals[1]) {
+                    return Self::inner_oper_regex(req, re, &vals[2..]);
+                } else {
+                    if let Ok(re) = Regex::new(vals[1]) {
+                        let ret = Self::inner_oper_regex(req, &re, &vals[2..]);
+                        guard.insert(Box::leak(vals[1].to_string().into_boxed_str()), re);
+                        return ret;
+                    }
+                }
+            }
+        }
+        Self::format_req(req, formats)
     }
 
     /// 记录HTTP的访问数据并将其格式化
@@ -350,4 +403,29 @@ impl Helper {
     //         buf.advance_mut(size);
     //     }
     // }
+}
+
+mod tests {
+    use webparse::Request;
+    use wenmeng::Body;
+
+    use crate::Helper;
+
+    fn build_request() -> Request<Body> {
+        Request::builder()
+            .url("http://127.0.0.1/test/root?query=1&a=b")
+            .header("Accept", "text/html")
+            .body("ok")
+            .unwrap()
+            .into_type()
+    }
+
+
+    #[test]
+    fn do_test_reg() {
+        let req = &build_request();
+        let format = "regex /test/(.*) {path} /test11/$1";
+        let val = Helper::format_req_may_regex(req, format);
+        println!("val = {}", val);
+    }
 }
