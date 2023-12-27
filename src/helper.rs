@@ -217,6 +217,18 @@ impl Helper {
         String::from_utf8_lossy(&buf[..]).to_string()
     }
 
+    pub fn split_by_whitespace<'a>(key: &'a str) -> Vec<&'a str> {
+        lazy_static! {
+            static ref RE: Regex = Regex::new(r#"([^\s'"]+)|"([^"]*)"|'([^']*)'"#).unwrap();
+        };
+        
+        let mut vals = vec![];
+        for (_, [value]) in RE.captures_iter(key).map(|c| c.extract()) {
+            vals.push(value);
+        }
+        vals
+    }
+
     fn inner_oper_regex(req: &Request<Body>, re: &Regex, vals: &[&str]) -> String {
         let mut ret = String::new();
         let key = Self::format_req(req, vals[0]);
@@ -227,13 +239,14 @@ impl Helper {
             let val = re.replace_all(&key, vals[idx]);
             ret += &val;
         }
+        println!("origin vals = {:?}, ret = {}", vals, ret);
         ret
     }
 
     pub fn format_req_may_regex(req: &Request<Body>, formats: &str) -> String {
-        if formats.starts_with("regex ") {
+        let formats = formats.trim();
+        if formats.contains(char::is_whitespace) {
             lazy_static! {
-                static ref RE: Regex = Regex::new(r#"([\w\$\+\-\?\/\{\}]+)|"([^"]*)"|'([^']*)'"#).unwrap();
                 static ref RE_CACHES: Mutex<HashMap<&'static str, Regex>> =
                     Mutex::new(HashMap::new());
             };
@@ -242,22 +255,19 @@ impl Helper {
                 return String::new();
             }
 
-            let mut vals = vec![];
-            for (_, [value]) in RE.captures_iter(formats).map(|c| c.extract()) {
-                vals.push(value);
-            }
-
-            if vals.len() < 3 {
+            let vals = Self::split_by_whitespace(formats);
+            if vals.len() < 2 {
                 return String::new();
             }
 
             if let Ok(mut guard) = RE_CACHES.lock() {
                 if let Some(re) = guard.get(&vals[1]) {
-                    return Self::inner_oper_regex(req, re, &vals[2..]);
+                    return Self::inner_oper_regex(req, re, &vals[1..]);
                 } else {
-                    if let Ok(re) = Regex::new(vals[1]) {
-                        let ret = Self::inner_oper_regex(req, &re, &vals[2..]);
-                        guard.insert(Box::leak(vals[1].to_string().into_boxed_str()), re);
+                    println!("==== {} xxx = {:?}", vals[0], Regex::new(vals[0]));
+                    if let Ok(re) = Regex::new(vals[0]) {
+                        let ret = Self::inner_oper_regex(req, &re, &vals[1..]);
+                        guard.insert(Box::leak(vals[0].to_string().into_boxed_str()), re);
                         return ret;
                     }
                 }
@@ -424,8 +434,18 @@ mod tests {
     #[test]
     fn do_test_reg() {
         let req = &build_request();
-        let format = "regex /test/(.*) {path} /test11/$1";
+        let format = r" /test/(.*) {path} /formal/$1 ";
         let val = Helper::format_req_may_regex(req, format);
-        println!("val = {}", val);
+        assert_eq!(val, "/formal/root");
+        
+        let format = r" /te(\w+)/(.*) {path} /formal/$1/$2 ";
+        let val = Helper::format_req_may_regex(req, format);
+        assert_eq!(val, "/formal/st/root");
+
+        let format = r" /te(\w+)/(.*) {url} /formal/$1/$2 ";
+        let val = Helper::format_req_may_regex(req, format);
+        assert_eq!(val, "http://127.0.0.1/formal/st/root?query=1&a=b");
     }
+
+
 }

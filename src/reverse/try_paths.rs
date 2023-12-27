@@ -20,7 +20,7 @@ use async_trait::async_trait;
 use wenmeng::{ProtResult, Rate, RecvRequest, RecvResponse};
 
 use crate::{
-    data::LimitReqData, data::LimitResult, ConfigDuration, ConfigRate, ConfigSize, ProxyError,
+    data::LimitReqData, data::LimitResult, ConfigDuration, ConfigRate, ConfigSize, ProxyError, Helper,
 };
 
 #[derive(Debug, Clone)]
@@ -39,7 +39,7 @@ impl FromStr for TryPathsConfig {
     type Err = ProxyError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let v = s.split(" ").collect::<Vec<&str>>();
+        let v = Helper::split_by_whitespace(s);
         let mut list = vec![];
         let mut status = StatusCode::from_u16(404).unwrap();
         for idx in 0..v.len() {

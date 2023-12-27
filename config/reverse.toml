@@ -58,7 +58,7 @@ rate_limit = "4m/s"
 rule = "/root"
 file_server = { browse = true }
 proxy_pass = ""
-try_paths = "{path}/ /root/README.md"
+try_paths = "{path}/ '/ro(\\w+)/(.*) {path} /ro$1/Cargo.toml' /root/README.md"
 
 # [[http.server.location]]
 # rule = "/try"

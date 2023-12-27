@@ -288,7 +288,7 @@ impl HttpConfig {
                 deals.clear();
                 // 重写path好方便做数据格式化
                 req.set_path(ori_path.clone());
-                let new_path = Helper::format_req(req, &**val);
+                let new_path = Helper::format_req_may_regex(req, &**val);
                 // 重写path好方便后续处理无感
                 req.set_path(new_path);
                 if let Ok(res) = Self::deal_match_location(

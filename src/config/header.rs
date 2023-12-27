@@ -15,6 +15,8 @@ use std::{str::FromStr, io, fmt::Display};
 use lazy_static::{lazy_static};
 use regex::Regex;
 
+use crate::Helper;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HeaderOper {
     Add,
@@ -91,19 +93,13 @@ impl FromStr for ConfigHeader {
     type Err = io::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        lazy_static!(
-            static ref RE: Regex = Regex::new(r#"([\w\+\-\?]+)|"([^"]*)"|'([^']*)'"#).unwrap();
-        );
+
 
         if s.len() == 0 {
             return Err(io::Error::new(io::ErrorKind::InvalidInput, ""));
         }
         
-        let mut vals = vec![];
-        for (_, [value]) in RE.captures_iter(s).map(|c| c.extract()) {
-            vals.push(value);
-        }
-
+        let vals = Helper::split_by_whitespace(s);
         let mut oper = HeaderOper::Replace;
         let mut is_proxy = false;
         let (key, val) = {
