@@ -63,6 +63,10 @@ impl OperateTrait for Operate {
         let _middle = middles;
         Ok(())
     }
+
+    fn is_continue_next(&self) -> bool {
+        true
+    }
 }
 
 struct InnerHttpOper {

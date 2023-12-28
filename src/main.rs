@@ -27,8 +27,6 @@ async fn run_main() -> ProxyResult<()> {
 // #[forever_rs::main]
 #[tokio::main]
 async fn main() {
-    let id = std::thread::current().id();
-    println!("thread_id = {:?}", id);
     if let Err(e) = run_main().await {
         println!("运行wmproxy发生错误:{:?}", e);
     }

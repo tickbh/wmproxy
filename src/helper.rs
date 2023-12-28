@@ -239,7 +239,6 @@ impl Helper {
             let val = re.replace_all(&key, vals[idx]);
             ret += &val;
         }
-        println!("origin vals = {:?}, ret = {}", vals, ret);
         ret
     }
 
@@ -264,7 +263,6 @@ impl Helper {
                 if let Some(re) = guard.get(&vals[1]) {
                     return Self::inner_oper_regex(req, re, &vals[1..]);
                 } else {
-                    println!("==== {} xxx = {:?}", vals[0], Regex::new(vals[0]));
                     if let Ok(re) = Regex::new(vals[0]) {
                         let ret = Self::inner_oper_regex(req, &re, &vals[1..]);
                         guard.insert(Box::leak(vals[0].to_string().into_boxed_str()), re);
