@@ -15,7 +15,7 @@ mod tests {
         sync::mpsc::{channel, Sender},
     };
     use webparse::{BinaryMut, Buf, Request, Response, Version};
-    use wmproxy::{ConfigOption, MappingConfig, ProxyConfig, ProxyResult, WMCore, ConfigHeader};
+    use wmproxy::{ConfigHeader, ConfigOption, MappingConfig, ProxyConfig, ProxyResult, WMCore};
 
     use wenmeng::{
         self, Body, Client, OperateTrait, ProtResult, RecvRequest, RecvResponse, Server,
@@ -150,9 +150,12 @@ mod tests {
             "proxy".to_string(),
             "proxy".to_string(),
             "soft.wm-proxy.com1".to_string(),
-            vec![
-                ConfigHeader::new(wmproxy::HeaderOper::Add, false, "from_proxy".to_string(), "mapping".to_string())
-            ],
+            vec![ConfigHeader::new(
+                wmproxy::HeaderOper::Add,
+                false,
+                "from_proxy".to_string(),
+                "mapping".to_string(),
+            )],
         );
         mapping_proxy.local_addr = Some(local_server_addr);
 
@@ -246,7 +249,8 @@ mod tests {
             let client = Client::builder()
                 // .http2(false)
                 .http2_only(true)
-                .add_proxy(&*format!("http://{}", proxy_addr.unwrap())).unwrap()
+                .add_proxy(&*format!("http://{}", proxy_addr.unwrap()))
+                .unwrap()
                 .connect(&*url)
                 .await
                 .unwrap();
