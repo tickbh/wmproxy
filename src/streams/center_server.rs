@@ -215,7 +215,7 @@ impl CenterServer {
                                 let mut guard = mappings.write().await;
                                 *guard = p.into_mappings();
                             }
-                            ProtFrame::Token(_) => unreachable!(),
+                            ProtFrame::Token(t) => {}
                         }
                     }
                     None => {
