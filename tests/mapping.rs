@@ -18,14 +18,14 @@ mod tests {
     use wmproxy::{ConfigHeader, ConfigOption, MappingConfig, ProxyConfig, ProxyResult, WMCore};
 
     use wenmeng::{
-        self, Body, Client, OperateTrait, ProtResult, RecvRequest, RecvResponse, Server,
+        self, Body, Client, HttpTrait, ProtResult, RecvRequest, RecvResponse, Server,
     };
 
     static HELLO_WORLD: &str = "Hello, World!";
     struct Operate;
 
     #[async_trait]
-    impl OperateTrait for Operate {
+    impl HttpTrait for Operate {
         async fn operate(&mut self, req: &mut RecvRequest) -> ProtResult<RecvResponse> {
             let builder = Response::builder().version(req.version().clone());
             let response = builder
@@ -37,7 +37,8 @@ mod tests {
 
     async fn process(stream: TcpStream, addr: SocketAddr) -> Result<(), Box<dyn Error>> {
         let mut server = Server::new(stream, Some(addr));
-        let _ret = server.incoming(Operate).await;
+        server.set_callback_http(Box::new(Operate));
+        let _ret = server.incoming().await;
         Ok(())
     }
 

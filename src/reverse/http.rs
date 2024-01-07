@@ -35,7 +35,7 @@ use tokio::{
 use tokio_rustls::TlsAcceptor;
 use webparse::{Request, Response};
 use wenmeng::{
-    Body, Middleware, OperateTrait, ProtError, ProtResult, RecvRequest, RecvResponse, Server,
+    Body, Middleware, HttpTrait, ProtError, ProtResult, RecvRequest, RecvResponse, Server,
 };
 
 use super::{
@@ -49,7 +49,7 @@ struct Operate {
 }
 
 #[async_trait]
-impl OperateTrait for Operate {
+impl HttpTrait for Operate {
     async fn operate(&mut self, req: &mut RecvRequest) -> ProtResult<RecvResponse> {
         HttpConfig::operate(req, &mut self.inner).await
     }
@@ -446,7 +446,8 @@ impl HttpConfig {
                 .timeout_layer(timeout)
                 .stream(inbound);
 
-            if let Err(e) = server.incoming(Operate { inner: oper }).await {
+            server.set_callback_http(Box::new(Operate { inner: oper }));
+            if let Err(e) = server.incoming().await {
                 if server.get_req_num() == 0 {
                     log::info!("反向代理：未处理任何请求时发生错误：{:?}", e);
                 } else {

@@ -22,7 +22,7 @@ use tokio::{
 };
 use webparse::{Request, Response};
 use wenmeng::{
-    Client, OperateTrait, ProtResult, RecvRequest, RecvResponse, Body, Server,
+    Client, HttpTrait, ProtResult, RecvRequest, RecvResponse, Body, Server,
 };
 
 use crate::{MappingConfig, ProtCreate, ProtFrame, ProxyError, VirtualStream, Helper};
@@ -32,7 +32,7 @@ struct Operate {
 }
 
 #[async_trait]
-impl OperateTrait for Operate {
+impl HttpTrait for Operate {
     async fn operate(&mut self, req: &mut RecvRequest) -> ProtResult<RecvResponse> {
         let mut value = TransHttp::inner_operate(req, &mut self.oper).await?;
         value.headers_mut().insert("server", "wmproxy");
@@ -160,7 +160,9 @@ impl TransHttp {
         tokio::spawn(async move {
             let _ = client.wait_operate().await;
         });
-        if let Err(e) = server.incoming(Operate { oper }).await {
+
+        server.set_callback_http(Box::new(Operate { oper }));
+        if let Err(e) = server.incoming().await {
             log::info!("处理内网穿透时发生错误：{:?}", e);
         };
         Ok(())

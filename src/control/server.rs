@@ -17,7 +17,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use tokio::{sync::{mpsc::{Sender, channel, Receiver}, Mutex}, net::TcpListener};
 use webparse::{Request, Response, HeaderName};
-use wenmeng::{Server, Body, ProtResult, OperateTrait, RecvRequest, RecvResponse};
+use wenmeng::{Server, Body, ProtResult, HttpTrait, RecvRequest, RecvResponse};
 use crate::{ConfigOption, WMCore, ProxyResult, Helper};
 
 /// 控制端，可以对配置进行热更新
@@ -38,7 +38,7 @@ struct Operate {
     control: Arc<Mutex<ControlServer>>,
 }
 #[async_trait]
-impl OperateTrait for Operate {
+impl HttpTrait for Operate {
     async fn operate(&mut self, req: &mut RecvRequest) -> ProtResult<RecvResponse> {
         // body的内容可能重新解密又再重新再加过密, 后续可考虑直接做数据
         let mut value = ControlServer::inner_operate(req, &mut self.control).await?;
@@ -180,9 +180,10 @@ impl ControlServer {
                     let cc = control.clone();
                     tokio::spawn(async move {
                         let mut server = Server::new(conn, Some(addr));
-                        if let Err(e) = server.incoming(Operate {
+                        server.set_callback_http(Box::new(Operate {
                             control: cc
-                        }).await {
+                        }));
+                        if let Err(e) = server.incoming().await {
                             log::info!("控制中心：处理信息时发生错误：{:?}", e);
                         }
                     });

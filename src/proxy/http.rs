@@ -10,13 +10,13 @@
 // -----
 // Created Date: 2023/09/15 03:12:20
 
-use std::io::Cursor;
+use std::{io::Cursor, ops::Deref, any::Any};
 
 use crate::{HealthCheck, ProxyError, ConfigHeader, Helper};
 use async_trait::async_trait;
-use tokio::{io::{copy_bidirectional, AsyncRead, AsyncReadExt, AsyncWrite, ReadBuf}, net::TcpStream, sync::mpsc::{Receiver, Sender}};
+use tokio::{io::{copy_bidirectional, AsyncRead, AsyncReadExt, AsyncWrite, ReadBuf}, net::{TcpStream, tcp}, sync::mpsc::{Receiver, Sender}};
 use webparse::{BinaryMut, BufMut, Method, Response};
-use wenmeng::{OperateTrait, RecvRequest, ProtResult, RecvResponse, Server, Client, ClientOption, ProtError, MaybeHttpsStream, Body};
+use wenmeng::{HttpTrait, RecvRequest, ProtResult, RecvResponse, Server, Client, ClientOption, ProtError, MaybeHttpsStream, Body};
 
 pub struct ProxyHttp {}
 
@@ -88,7 +88,7 @@ impl Operate {
 }
 
 #[async_trait]
-impl OperateTrait for &mut Operate {
+impl HttpTrait for Operate {
     async fn operate(&mut self, request: &mut RecvRequest) -> ProtResult<RecvResponse> {
         self.deal_request(request)?;
         // 已连接直接进行后续处理
@@ -149,7 +149,14 @@ impl OperateTrait for &mut Operate {
                 }
             }
         }
+    }
 
+    fn as_any(&self) -> Option<&dyn Any> {
+        Some(self)
+    }
+
+    fn as_any_mut(&mut self) -> Option<&mut dyn Any> {
+        Some(self)
     }
 }
 
@@ -200,11 +207,24 @@ impl ProxyHttp {
             headers,
         };
         server.set_max_req(max_req_num);
-        let _e = server.incoming(&mut operate).await?;
-        if let Some(outbound) = &mut operate.stream {
-            let mut inbound = server.into_io();
-            let _ = copy_bidirectional(&mut inbound, outbound).await?;
+        server.set_callback_http(Box::new(operate));
+        let _e = server.incoming().await?;
+        let mut tcp_out = None;
+        {
+            let mut operate = server.take_callback_http().unwrap();
+            if let Some(v) = operate.as_any_mut() {
+                if let Some(v) = v.downcast_mut::<Operate>() {
+                    if let Some(outbound) = v.stream.take() {
+                        tcp_out = Some(outbound);
+                    }
+                }
+            }
         }
+        if tcp_out.is_some() {
+            let mut inbound = server.into_io();
+            let _ = copy_bidirectional(&mut inbound, tcp_out.as_mut().unwrap()).await?;
+        }
+
         Ok(())
     }
 }
