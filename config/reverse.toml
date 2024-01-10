@@ -33,6 +33,13 @@ server = [
   # {addr="127.0.0.1:8081"}
 ]
 
+[[http.upstream]]
+name = "ws"
+server = [
+  { addr = "127.0.0.1:8081", fail_timeout = 30 },
+  # {addr="127.0.0.1:8081"}
+]
+
 # 反向代理中的具体服务，可配置多个多组
 [[http.server]]
 bind_addr = "0.0.0.0:82"
@@ -65,10 +72,14 @@ try_paths = "{path}/ '/ro(\\w+)/(.*) {path} /ro$1/Cargo.toml' /root/README.md"
 # allow_ip = "127.0.0.1"
 
 [[http.server.location]]
+rule = "/ws"
+reverse_proxy = "http://ws"
+headers = ["+ aaa bbb"]
+
+[[http.server.location]]
 rule = "/"
 reverse_proxy = "http://server"
 headers = ["+ aaa bbb"]
-
 
 # IP的四层协议处理
 [stream]

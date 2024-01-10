@@ -65,7 +65,7 @@ impl WsTrait for ServerWsOperate {
             ReverseHelper::get_location_by_req(&self.inner.servers, shake.request.as_ref().unwrap())
         {
             if let Ok((url, domain)) = location.get_reverse_url() {
-                
+                println!("connect url = {}, domain = {:?}", url, domain);
                 let mut client = Client::builder()
                     .url(url)?
                     .connect_with_domain(&domain)
@@ -88,10 +88,12 @@ impl WsTrait for ServerWsOperate {
                     {
                         println!("error = {:?}", e);
                     };
+                    println!("client close!!!!!!!!!!");
                 });
             }
+            return Ok(Some(option));
         }
-        Ok(None)
+        return Err(ProtError::Extension("miss match"));
     }
 
     /// 接受到远端的关闭消息

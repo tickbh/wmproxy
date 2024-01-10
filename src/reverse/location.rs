@@ -220,6 +220,7 @@ impl LocationConfig {
             let mut url = r.clone();
             let domain = url.domain.clone().unwrap_or(String::new());
             url.domain = Some(format!("{}", addr.ip()));
+            url.port = Some(addr.port());
             Ok((url, domain))
         } else {
             let url = Url::parse(format!("http://{}/", addr).into_bytes())?;
