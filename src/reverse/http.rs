@@ -40,7 +40,7 @@ use wenmeng::{
 
 use super::{
     common::CommonConfig, limit_req::LimitReqZone, LimitReqMiddleware, LocationConfig,
-    ServerConfig, UpstreamConfig,
+    ServerConfig, UpstreamConfig, ws::ServerWsOperate,
 };
 use async_recursion::async_recursion;
 
@@ -438,7 +438,7 @@ impl HttpConfig {
         if servers.is_empty() {
             return Err(crate::ProxyError::Extension("unknown server"));
         }
-        let oper = InnerHttpOper::new(servers);
+        let oper = InnerHttpOper::new(servers.clone());
         tokio::spawn(async move {
             let timeout = oper.servers[0].comm.build_client_timeout();
             let mut server = Server::builder()
@@ -447,6 +447,7 @@ impl HttpConfig {
                 .stream(inbound);
 
             server.set_callback_http(Box::new(Operate { inner: oper }));
+            server.set_callback_ws(Box::new(ServerWsOperate::new(servers)));
             if let Err(e) = server.incoming().await {
                 if server.get_req_num() == 0 {
                     log::info!("反向代理：未处理任何请求时发生错误：{:?}", e);

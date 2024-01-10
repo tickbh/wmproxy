@@ -20,13 +20,16 @@ mod reverse_helper;
 mod common;
 mod limit_req;
 mod try_paths;
+mod ws;
 
 pub use http::HttpConfig;
 pub use stream::{StreamConfig, StreamUdp};
 pub use location::LocationConfig;
 pub use server::ServerConfig;
-pub use upstream::{SingleStreamConfig, UpstreamConfig};
+pub use upstream::{UpstreamConfig};
 pub use reverse_helper::ReverseHelper;
 pub use common::CommonConfig;
-pub use limit_req::{LimitReqMiddleware, LimitReqZone, LimitReq};
+pub use limit_req::{LimitReqMiddleware, LimitReq};
 pub use try_paths::TryPathsConfig;
+
+use ws::ServerWsOperate;

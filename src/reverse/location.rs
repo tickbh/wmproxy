@@ -10,7 +10,7 @@
 // -----
 // Created Date: 2023/10/18 02:31:52
 
-use std::{collections::HashMap, hash::Hash};
+use std::{collections::HashMap, hash::Hash, net::SocketAddr};
 
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
@@ -31,7 +31,9 @@ pub struct LocationConfig {
     #[serde_as(as = "Vec<DisplayFromStr>")]
     #[serde(default = "Vec::new")]
     pub headers: Vec<ConfigHeader>,
-    pub reverse_proxy: Option<String>,
+
+    #[serde_as(as = "Option<DisplayFromStr>")]
+    pub reverse_proxy: Option<Url>,
     /// 请求方法
     pub method: Option<String>,
     pub server_name: Option<String>,
@@ -125,17 +127,13 @@ impl LocationConfig {
     pub async fn deal_reverse_proxy(
         &self,
         req: &mut Request<Body>,
-        reverse: String,
+        url: &Url,
     ) -> ProtResult<(
         Response<Body>,
         Option<Sender<Request<Body>>>,
         Option<Receiver<ProtResult<Response<Body>>>>,
     )> {
-        let url = TryInto::<Url>::try_into(reverse.clone()).ok();
-        if url.is_none() || url.as_ref().unwrap().domain.is_none() {
-            return Err(ProtError::Extension("unknow data"));
-        }
-        let mut url = url.unwrap();
+        let mut url = url.clone();
         let domain = url.domain.clone().unwrap();
 
         if let Ok(addr) = ReverseHelper::get_upstream_addr(&self.upstream, &*domain) {
@@ -169,7 +167,8 @@ impl LocationConfig {
         } else {
             let client = Client::builder()
                 .timeout_layer(proxy_timeout)
-                .connect_tls_by_stream(stream, url)
+                .url(url.clone())?
+                .connect_tls_by_stream(stream)
                 .await?;
             Self::deal_client(req, client).await?
         };
@@ -191,12 +190,41 @@ impl LocationConfig {
             return Ok((res, None, None));
         }
         if let Some(reverse) = &self.reverse_proxy {
-            return self.deal_reverse_proxy(req, reverse.clone()).await;
+            return self.deal_reverse_proxy(req, reverse).await;
         }
         return Err(ProtError::Extension("unknow data"));
     }
 
     pub fn get_log_names(&self, names: &mut HashMap<String, String>) {
         self.comm.get_log_names(names);
+    }
+    
+    pub fn get_upstream_addr(&self) -> ProtResult<SocketAddr> {
+        let mut name = String::new();
+        if let Some(r) = &self.reverse_proxy {
+            name = r.domain.clone().unwrap_or(String::new());
+        }
+        for stream in &self.upstream {
+            if stream.name == name {
+                return stream.get_server_addr()
+            } else if name == "" {
+                return stream.get_server_addr()
+            }
+        }
+        return Err(ProtError::Extension(""));
+    }
+    
+    pub fn get_reverse_url(&self) -> ProtResult<(Url, String)> {
+        let addr = self.get_upstream_addr()?;
+        if let Some(r) = &self.reverse_proxy {
+            let mut url = r.clone();
+            let domain = url.domain.clone().unwrap_or(String::new());
+            url.domain = Some(format!("{}", addr.ip()));
+            Ok((url, domain))
+        } else {
+            let url = Url::parse(format!("http://{}/", addr).into_bytes())?;
+            let domain = format!("{}", addr.ip());
+            Ok((url, domain))
+        }
     }
 }

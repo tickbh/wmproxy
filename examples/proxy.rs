@@ -59,7 +59,8 @@ async fn test_proxy(
     let client = match Client::builder()
         .add_proxy(&proxy)
         .unwrap()
-        .connect(url)
+        .url(url).unwrap()
+        .connect()
         .await
     {
         Ok(client) => {

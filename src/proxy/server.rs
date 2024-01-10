@@ -3,7 +3,7 @@ use std::net::IpAddr;
 use tokio::io::{AsyncRead, AsyncWrite};
 use webparse::BinaryMut;
 
-use crate::{Flag, MappingConfig, error::ProxyTypeResult, ProxyError, ProxyHttp, ProxySocks5, ConfigHeader};
+use crate::{Flag, error::ProxyTypeResult, ProxyError, ProxyHttp, ProxySocks5, ConfigHeader};
 
 /// 代理服务器类, 提供代理服务
 pub struct ProxyServer {

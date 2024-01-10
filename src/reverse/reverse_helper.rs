@@ -10,11 +10,11 @@
 // -----
 // Created Date: 2023/10/21 10:39:07
 
-use std::net::SocketAddr;
+use std::{net::SocketAddr, sync::Arc};
 
-use wenmeng::{ProtResult, ProtError};
+use wenmeng::{ProtResult, ProtError, RecvRequest};
 
-use super::UpstreamConfig;
+use super::{UpstreamConfig, ServerConfig, LocationConfig};
 
 
 pub struct ReverseHelper;
@@ -30,5 +30,22 @@ impl ReverseHelper {
             }
         }
         return Err(ProtError::Extension(""));
+    }
+    
+    pub fn get_location_by_req<'a>(servers: &'a Vec<Arc<ServerConfig>>, req: &RecvRequest) -> Option<&'a LocationConfig> {
+        let server_len = servers.len();
+        let host = req.get_host().unwrap_or(String::new());
+        // 不管有没有匹配, 都执行最后一个
+        for (index, s) in servers.iter().enumerate() {
+            if s.server_name == host || host.is_empty() || index == server_len - 1 {
+                let path = req.path().clone();
+                for idx in 0..s.location.len() {
+                    if s.location[idx].is_match_rule(&path, req.method()) {
+                        return Some(&s.location[idx]);
+                    }
+                }
+            }
+        }
+        return None;
     }
 }

@@ -10,11 +10,11 @@
 // -----
 // Created Date: 2023/09/15 03:12:20
 
-use std::{io::Cursor, ops::Deref, any::Any};
+use std::{io::Cursor, any::Any};
 
 use crate::{HealthCheck, ProxyError, ConfigHeader, Helper};
 use async_trait::async_trait;
-use tokio::{io::{copy_bidirectional, AsyncRead, AsyncReadExt, AsyncWrite, ReadBuf}, net::{TcpStream, tcp}, sync::mpsc::{Receiver, Sender}};
+use tokio::{io::{copy_bidirectional, AsyncRead, AsyncReadExt, AsyncWrite, ReadBuf}, net::{TcpStream}, sync::mpsc::{Receiver, Sender}};
 use webparse::{BinaryMut, BufMut, Method, Response};
 use wenmeng::{HttpTrait, RecvRequest, ProtResult, RecvResponse, Server, Client, ClientOption, ProtError, MaybeHttpsStream, Body};
 
@@ -198,7 +198,7 @@ impl ProxyHttp {
         // 需要将已读的数据buffer重新加到server的已读cache中, 否则解析会出错
         let mut server = Server::new_by_cache(inbound, None, buffer);
         // 构建HTTP服务回调
-        let mut operate = Operate {
+        let operate = Operate {
             username: username.clone(),
             password: password.clone(),
             stream: None,

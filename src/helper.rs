@@ -11,10 +11,8 @@
 // Created Date: 2023/09/26 10:43:25
 
 use std::{
-    borrow::Cow,
     cell::RefCell,
     collections::HashMap,
-    hash::Hash,
     io,
     net::ToSocketAddrs,
     str::FromStr,
@@ -244,6 +242,7 @@ impl Helper {
     pub fn format_req_may_regex(req: &Request<Body>, formats: &str) -> String {
         let formats = formats.trim();
         if formats.contains(char::is_whitespace) {
+            // 因为均是从配置中读取的数据, 在这里缓存正则表达示会在总量上受到配置的限制
             lazy_static! {
                 static ref RE_CACHES: Mutex<HashMap<&'static str, Regex>> =
                     Mutex::new(HashMap::new());
@@ -259,7 +258,7 @@ impl Helper {
             }
 
             if let Ok(mut guard) = RE_CACHES.lock() {
-                if let Some(re) = guard.get(&vals[1]) {
+                if let Some(re) = guard.get(&vals[0]) {
                     return Self::inner_oper_regex(req, re, &vals[1..]);
                 } else {
                     if let Ok(re) = Regex::new(vals[0]) {
@@ -415,7 +414,6 @@ impl Helper {
 mod tests {
     use webparse::Request;
     use wenmeng::Body;
-
     use crate::Helper;
 
     fn build_request() -> Request<Body> {

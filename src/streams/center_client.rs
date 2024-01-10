@@ -27,7 +27,7 @@ use webparse::{BinaryMut, Buf};
 use crate::proxy::ProxyServer;
 use crate::{
     HealthCheck, Helper, MappingConfig, ProtClose, ProtCreate, ProtFrame, ProxyConfig, ProxyResult,
-    TransStream, VirtualStream, WMCore,
+    TransStream, VirtualStream,
 };
 
 /// 中心客户端

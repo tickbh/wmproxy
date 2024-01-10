@@ -44,8 +44,8 @@ impl OneHealth {
         let url = format!("{}://{}/", self.method, self.addr);
         let req = Request::builder().method("GET").url(url.clone()).body("").unwrap();
 
-        let client = Client::builder()
-            .connect(url).await?;
+        let client = Client::builder().url(url)?
+            .connect().await?;
     
         let (mut recv, _sender) = client.send2(req.into_type()).await?;
         match recv.recv().await {

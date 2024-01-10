@@ -186,7 +186,8 @@ mod tests {
 
             let client = Client::builder()
                 .http2_only(true)
-                .connect(&*url)
+                .url(&*url).unwrap()
+                .connect()
                 .await
                 .unwrap();
 
@@ -208,7 +209,8 @@ mod tests {
 
             let client = Client::builder()
                 .http2_only(true)
-                .connect_with_domain(&*url, "soft.wm-proxy.com")
+                .url(&*url).unwrap()
+                .connect_with_domain("soft.wm-proxy.com")
                 .await
                 .unwrap();
 
@@ -229,7 +231,8 @@ mod tests {
 
             let client = Client::builder()
                 .http2_only(true)
-                .connect(&*url)
+                .url(&*url).unwrap()
+                .connect()
                 .await
                 .unwrap();
 
@@ -252,7 +255,8 @@ mod tests {
                 .http2_only(true)
                 .add_proxy(&*format!("http://{}", proxy_addr.unwrap()))
                 .unwrap()
-                .connect(&*url)
+                .url(&*url).unwrap()
+                .connect()
                 .await
                 .unwrap();
 

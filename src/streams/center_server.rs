@@ -32,7 +32,7 @@ use crate::{
     prot::{ProtClose, ProtFrame},
     proxy::ProxyServer,
     trans::{TransHttp, TransTcp},
-    Helper, MappingConfig, ProtCreate, ProxyConfig, ProxyResult, VirtualStream, WMCore,
+    Helper, MappingConfig, ProtCreate, ProxyConfig, ProxyResult, VirtualStream,
 };
 
 /// 中心服务端
@@ -215,7 +215,7 @@ impl CenterServer {
                                 let mut guard = mappings.write().await;
                                 *guard = p.into_mappings();
                             }
-                            ProtFrame::Token(t) => {}
+                            ProtFrame::Token(_t) => {}
                         }
                     }
                     None => {

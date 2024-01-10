@@ -12,7 +12,7 @@
 
 use std::{
     io::{self},
-    net::{IpAddr, SocketAddr},
+    net::{SocketAddr},
     sync::Arc,
 };
 
@@ -28,15 +28,14 @@ use tokio::{
     },
 };
 use tokio_rustls::{rustls, TlsAcceptor, TlsConnector};
-use webparse::BinaryMut;
+
 
 use crate::{
-    error::ProxyTypeResult,
     option::ConfigOption,
     proxy::ProxyServer,
     reverse::{HttpConfig, ServerConfig, StreamConfig, StreamUdp},
-    ActiveHealth, CenterClient, CenterServer, Flag, HealthCheck, OneHealth, ProxyError, ProxyHttp,
-    ProxyResult, ProxySocks5,
+    ActiveHealth, CenterClient, CenterServer, HealthCheck, OneHealth,
+    ProxyResult,
 };
 
 pub struct WMCore {
