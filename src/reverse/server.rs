@@ -10,14 +10,16 @@
 // -----
 // Created Date: 2023/10/18 02:32:15
 
-use std::{net::SocketAddr, collections::HashMap};
+use std::{collections::HashMap, net::{SocketAddr, ToSocketAddrs}};
+use chrono::format;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
+use wenmeng::ProtResult;
 
 
 use crate::ConfigHeader;
 
-use super::{LocationConfig, UpstreamConfig, common::CommonConfig};
+use super::{LocationConfig, UpstreamConfig, common::CommonConfig, ReverseHelper};
 
 fn default_bind_mode() -> String {
     "tcp".to_string()
@@ -27,7 +29,7 @@ fn default_bind_mode() -> String {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServerConfig {
     pub bind_addr: SocketAddr,
-    pub server_name: String,
+    pub up_name: String,
     pub root: Option<String>,
     pub cert: Option<String>,
     pub key: Option<String>,
@@ -54,7 +56,7 @@ impl ServerConfig {
         for l in &mut self.location {
             l.comm.copy_from_parent(&self.comm);
             l.comm.pre_deal();
-            l.server_name = Some(self.server_name.clone());
+            l.up_name = Some(self.up_name.clone());
             l.upstream.append(&mut self.upstream.clone());
             l.headers.append(&mut self.headers.clone());
             if l.root.is_none() && self.root.is_some() {
@@ -78,5 +80,42 @@ impl ServerConfig {
         for l in &self.location {
             l.get_log_names(names);
         }
+    }
+
+    pub fn build_url(&self, addr: &SocketAddr) -> String {
+        if self.comm.proxy_url.is_some() {
+            let mut url = self.comm.proxy_url.clone().unwrap();
+            url.domain = Some(format!("{}", addr.ip()));
+            url.port = Some(addr.port());
+            format!("{}", url)
+        } else {
+            format!("http://{}", addr)
+        }
+    }
+
+    pub fn get_addr_domain(&self) -> ProtResult<(Option<SocketAddr>, Option<String>)> {
+        let mut domain = self.comm.domain.clone();
+        let mut addr = None;
+        if self.comm.proxy_url.is_some() {
+            if domain.is_none() {
+                domain = self.comm.proxy_url.as_ref().unwrap().domain.clone();
+            }
+            if let Some(domain) = &self.comm.proxy_url.as_ref().unwrap().domain {
+                addr = ReverseHelper::get_upstream_addr(&self.upstream, &domain);
+                if addr.is_some() && self.comm.proxy_url.as_ref().unwrap().port.is_some() {
+                    addr.as_mut().unwrap().set_port(self.comm.proxy_url.as_ref().unwrap().port.unwrap());
+                }
+            }
+            if addr.is_none() {
+                if let Some(c) = self.comm.proxy_url.as_ref().unwrap().get_connect_url() {
+                    addr = c.to_socket_addrs()?.next();
+                }
+            }
+        }
+
+        if addr.is_none() {
+            addr = ReverseHelper::get_upstream_addr(&self.upstream, &self.up_name)
+        }
+        Ok((addr, domain))
     }
 }

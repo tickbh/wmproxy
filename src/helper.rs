@@ -411,6 +411,7 @@ impl Helper {
     // }
 }
 
+#[cfg(test)]
 mod tests {
     use webparse::Request;
     use wenmeng::Body;

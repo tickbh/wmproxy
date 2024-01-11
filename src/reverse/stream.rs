@@ -19,6 +19,7 @@ use std::{
     time::{Instant, Duration},
 };
 
+use async_std::net::ToSocketAddrs;
 use futures_core::Stream;
 
 use serde::{Deserialize, Serialize};
@@ -32,9 +33,10 @@ use tokio::{
 };
 use tokio_util::sync::PollSender;
 use webparse::{BinaryMut, Buf, BufMut};
+use wenmeng::{plugins::{StreamToWs, WsToStream}, ProtError};
 
 
-use crate::{HealthCheck, Helper, ProxyResult};
+use crate::{HealthCheck, Helper, ProxyResult, ProxyError};
 
 use super::{ReverseHelper, ServerConfig, UpstreamConfig};
 
@@ -99,9 +101,34 @@ impl StreamConfig {
         let value = data.lock().await;
         for (_, s) in value.server.iter().enumerate() {
             if s.bind_addr.port() == local_addr.port() {
-                let addr = ReverseHelper::get_upstream_addr(&s.upstream, "")?;
-                let mut connect = HealthCheck::connect(&addr).await?;
-                copy_bidirectional(&mut inbound, &mut connect).await?;
+                
+                let (addr, domain) = s.get_addr_domain()?;
+                if addr.is_none() {
+                    return Err(ProxyError::Extension("unknow addr"));
+                }
+                let addr = addr.unwrap();
+                if s.bind_mode == "ws2tcp" {
+                    let mut ws_to_stream = WsToStream::new(inbound, addr)?;
+                    if domain.is_some() {
+                        ws_to_stream.set_domain(domain.unwrap());
+                    }
+                    let _ = ws_to_stream.copy_bidirectional().await;
+                } else if s.bind_mode == "tcp2ws" {
+                    let mut stream_to_ws = StreamToWs::new(inbound, format!("ws://{}", addr))?;
+                    if domain.is_some() {
+                        stream_to_ws.set_domain(domain.unwrap());
+                    }
+                    let _ = stream_to_ws.copy_bidirectional().await;
+                } else if s.bind_mode == "tcp2wss" {
+                    let mut stream_to_ws = StreamToWs::new(inbound, format!("wss://{}", addr))?;
+                    if domain.is_some() {
+                        stream_to_ws.set_domain(domain.unwrap());
+                    }
+                    let _ = stream_to_ws.copy_bidirectional().await;
+                } else {
+                    let mut connect = HealthCheck::connect(&addr).await?;
+                    copy_bidirectional(&mut inbound, &mut connect).await?;
+                }
                 break;
             }
         }
@@ -241,8 +268,8 @@ impl StreamUdp {
         }
         let mut remote_addr = None;
         for up in &self.server.upstream {
-            if up.name == self.server.server_name {
-                remote_addr = Some(up.get_server_addr()?);
+            if up.name == self.server.up_name {
+                remote_addr = up.get_server_addr();
             }
         }
         if remote_addr.is_none() {

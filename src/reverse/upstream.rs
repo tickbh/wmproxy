@@ -72,9 +72,9 @@ pub struct UpstreamConfig {
 }
 
 impl UpstreamConfig {
-    pub fn get_server_addr(&self) -> ProtResult<SocketAddr> {
+    pub fn get_server_addr(&self) -> Option<SocketAddr> {
         if self.server.is_empty() {
-            return Err(ProtError::Extension("empty upstream"));
+            return None;
         }
         let (sum, sum_all) = self.calc_sum_weight();
         let mut rng = rand::thread_rng();
@@ -83,7 +83,7 @@ impl UpstreamConfig {
             for server in &self.server {
                 if !HealthCheck::check_fall_down(&server.addr, &server.fail_timeout, &server.fall_times, &server.rise_times) {
                     if random_weight <= server.weight {
-                        return Ok(server.addr.clone());
+                        return Some(server.addr.clone());
                     }
                     random_weight -= server.weight;
                 }
@@ -92,12 +92,12 @@ impl UpstreamConfig {
             let mut random_weight = rng.gen_range(0..sum_all);
             for server in &self.server {
                 if random_weight <= server.weight {
-                    return Ok(server.addr.clone());
+                    return Some(server.addr.clone());
                 }
                 random_weight -= server.weight;
             }
         }
-        return Err(ProtError::Extension("empty upstream"));
+        return None;
         
     }
 

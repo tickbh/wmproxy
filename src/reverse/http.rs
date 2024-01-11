@@ -191,7 +191,7 @@ impl HttpConfig {
                 let key = sign::any_supported_type(&Self::load_keys(&value.key)?)
                     .map_err(|_| ProtError::Extension("unvaild key"))?;
                 let ck = CertifiedKey::new(Self::load_certs(&value.cert)?, key);
-                resolve.add(&value.server_name, ck).map_err(|e| {
+                resolve.add(&value.up_name, ck).map_err(|e| {
                     log::warn!("添加证书时失败:{:?}", e);
                     ProtError::Extension("key error")
                 })?;
@@ -367,7 +367,7 @@ impl HttpConfig {
         let host = req.get_host().unwrap_or(String::new());
         // 不管有没有匹配, 都执行最后一个
         for (index, s) in servers.iter().enumerate() {
-            if s.server_name == host || host.is_empty() || index == server_len - 1 {
+            if s.up_name == host || host.is_empty() || index == server_len - 1 {
                 return Self::deal_match_location(
                     req,
                     cache,

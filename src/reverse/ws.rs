@@ -30,7 +30,7 @@ use serde_with::{serde_as, DisplayFromStr};
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::TcpListener,
-    sync::mpsc::{Receiver, Sender, channel},
+    sync::mpsc::{channel, Receiver, Sender},
 };
 use tokio_rustls::TlsAcceptor;
 use webparse::{
@@ -64,6 +64,9 @@ impl WsTrait for ServerWsOperate {
         if let Some(location) =
             ReverseHelper::get_location_by_req(&self.inner.servers, shake.request.as_ref().unwrap())
         {
+            if !location.is_ws {
+                return Err(ProtError::Extension("Not Support Ws"));
+            }
             if let Ok((url, domain)) = location.get_reverse_url() {
                 println!("connect url = {}, domain = {:?}", url, domain);
                 let mut client = Client::builder()
@@ -104,15 +107,20 @@ impl WsTrait for ServerWsOperate {
     }
 
     /// 收到来在远端的ping消息, 默认返回pong消息
-    async fn on_ping(&mut self, val: Vec<u8>) -> ProtResult<OwnedMessage> {
+    async fn on_ping(&mut self, val: Vec<u8>) -> ProtResult<Option<OwnedMessage>> {
         if let Some(s) = &self.sender {
             s.send(OwnedMessage::Ping(val.clone())).await?;
         }
-        return Ok(OwnedMessage::Pong(val));
+        return Ok(None);
     }
 
     /// 收到来在远端的pong消息, 默认不做任何处理, 可自定义处理如ttl等
-    async fn on_pong(&mut self, _val: Vec<u8>) {}
+    async fn on_pong(&mut self, val: Vec<u8>) -> ProtResult<()> {
+        if let Some(s) = &self.sender {
+            let _ = s.send(OwnedMessage::Pong(val)).await?;
+        }
+        Ok(())
+    }
 
     /// 收到来在远端的message消息, 必须覆写该函数
     async fn on_message(&mut self, msg: OwnedMessage) -> ProtResult<()> {
@@ -164,15 +172,20 @@ impl WsTrait for ClientWsOperate {
     }
 
     /// 收到来在远端的ping消息, 默认返回pong消息
-    async fn on_ping(&mut self, val: Vec<u8>) -> ProtResult<OwnedMessage> {
+    async fn on_ping(&mut self, val: Vec<u8>) -> ProtResult<Option<OwnedMessage>> {
         if let Some(s) = &self.sender {
-            s.send(OwnedMessage::Ping(val.clone())).await?;
+            s.send(OwnedMessage::Ping(val)).await?;
         }
-        return Ok(OwnedMessage::Pong(val));
+        return Ok(None);
     }
 
     /// 收到来在远端的pong消息, 默认不做任何处理, 可自定义处理如ttl等
-    async fn on_pong(&mut self, _val: Vec<u8>) {}
+    async fn on_pong(&mut self, val: Vec<u8>) -> ProtResult<()> {
+        if let Some(s) = &self.sender {
+            let _ = s.send(OwnedMessage::Pong(val)).await?;
+        }
+        Ok(())
+    }
 
     /// 收到来在远端的message消息, 必须覆写该函数
     async fn on_message(&mut self, msg: OwnedMessage) -> ProtResult<()> {

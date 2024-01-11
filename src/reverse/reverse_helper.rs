@@ -21,7 +21,7 @@ pub struct ReverseHelper;
 
 impl ReverseHelper {
 
-    pub fn get_upstream_addr(upstream: &Vec<UpstreamConfig>, name: &str) -> ProtResult<SocketAddr> {
+    pub fn get_upstream_addr(upstream: &Vec<UpstreamConfig>, name: &str) -> Option<SocketAddr> {
         for stream in upstream {
             if &stream.name == name {
                 return stream.get_server_addr()
@@ -29,7 +29,7 @@ impl ReverseHelper {
                 return stream.get_server_addr()
             }
         }
-        return Err(ProtError::Extension(""));
+        return None;
     }
     
     pub fn get_location_by_req<'a>(servers: &'a Vec<Arc<ServerConfig>>, req: &RecvRequest) -> Option<&'a LocationConfig> {
@@ -37,7 +37,7 @@ impl ReverseHelper {
         let host = req.get_host().unwrap_or(String::new());
         // 不管有没有匹配, 都执行最后一个
         for (index, s) in servers.iter().enumerate() {
-            if s.server_name == host || host.is_empty() || index == server_len - 1 {
+            if s.up_name == host || host.is_empty() || index == server_len - 1 {
                 let path = req.path().clone();
                 for idx in 0..s.location.len() {
                     if s.location[idx].is_match_rule(&path, req.method()) {

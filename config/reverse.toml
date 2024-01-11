@@ -43,7 +43,7 @@ server = [
 # 反向代理中的具体服务，可配置多个多组
 [[http.server]]
 bind_addr = "0.0.0.0:82"
-server_name = "soft.wm-proxy.com"
+up_name = "soft.wm-proxy.com"
 proxy_connect_timeout = "10s"
 proxy_read_timeout = "10s"
 proxy_write_timeout = "10s"
@@ -73,6 +73,7 @@ try_paths = "{path}/ '/ro(\\w+)/(.*) {path} /ro$1/Cargo.toml' /root/README.md"
 
 [[http.server.location]]
 rule = "/ws"
+is_ws = true
 reverse_proxy = "http://ws"
 headers = ["+ aaa bbb"]
 
@@ -92,27 +93,46 @@ server = [
   #  {addr="127.0.0.1:8081"}
 ]
 
+[[stream.upstream]]
+name = "ws"
+server = [
+  { addr = "127.0.0.1:8081", fail_timeout = 30 },
+  #  {addr="127.0.0.1:8081"}
+]
+
 # 负载均衡，bind为udp则表示udp连接
 [[stream.upstream]]
 name = "udp"
 bind = "udp"
 server = [{ addr = "127.0.0.1:8089" }]
 
-# 四层服务器，server_name映射upstream的name
+# 四层服务器，up_name映射upstream的name
 [[stream.server]]
 bind_addr = "0.0.0.0:83"
-server_name = "server"
+up_name = "server"
+
+[[stream.server]]
+bind_addr = "0.0.0.0:85"
+up_name = "ws"
+proxy_url = "ws://127.0.0.1:8081/"
+bind_mode = "tcp2ws"
 
 # 四层服务器，udp转发
 [[stream.server]]
 bind_addr = "0.0.0.0:84"
 bind_mode = "udp"
-server_name = "udp"
+up_name = "udp"
 timeout = "500s"
+
+[[stream.server]]
+bind_addr = "0.0.0.0:86"
+up_name = "ws1"
+proxy_url = "tcp://127.0.0.1:8082"
+bind_mode = "ws2tcp"
 
 # [[http.server]]
 # bind_addr = "0.0.0.0:81"
-# server_name = "local.tool.fit"
+# up_name = "local.tool.fit"
 # root="E:/1"
 # cert="key/local.tool.fit.pem"
 # key="key/local.tool.fit.key"

@@ -298,9 +298,9 @@ impl WMCore {
                             tokio::spawn(async move {
                                 if let Ok(stream) = tls_accept.accept(conn).await {
                                     let data = stream.get_ref();
-                                    let server_name = data.1.server_name().clone().map(|s| s.to_string());
+                                    let up_name = data.1.server_name().clone().map(|s| s.to_string());
                                     for s in &local_servers {
-                                        if server_name.is_some() && &s.server_name == server_name.as_ref().unwrap() {
+                                        if up_name.is_some() && &s.up_name == up_name.as_ref().unwrap() {
                                             let _ = HttpConfig::process(vec![s.clone()], stream, addr).await;
                                             return;
                                         }

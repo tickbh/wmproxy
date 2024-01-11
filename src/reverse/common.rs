@@ -16,6 +16,7 @@ use crate::{ConfigDuration, ConfigLog, ConfigRate, IpSets};
 use crate::{DisplayFromStrOrNumber};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
+use webparse::Url;
 use wenmeng::RateLimitLayer;
 use wenmeng::TimeoutLayer;
 
@@ -60,6 +61,10 @@ pub struct CommonConfig {
     pub allow_ip: Option<IpSets>,
     #[serde_as(as = "Option<DisplayFromStr>")]
     pub deny_ip: Option<IpSets>,
+    #[serde_as(as = "Option<DisplayFromStr>")]
+    pub domain: Option<String>,
+    #[serde_as(as = "Option<DisplayFromStr>")]
+    pub proxy_url: Option<Url>,
 }
 
 impl CommonConfig {
@@ -87,6 +92,9 @@ impl CommonConfig {
             limit_req: None,
             allow_ip: None,
             deny_ip: None,
+
+            domain: None,
+            proxy_url: None,
         }
     }
 

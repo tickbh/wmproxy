@@ -89,6 +89,7 @@ impl Display for ConfigDuration {
 }
 
 
+#[cfg(test)]
 mod tests {
     macro_rules! mdur {
         ($sec:expr, $ms:expr, $buf:expr) => (

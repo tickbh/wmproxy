@@ -32,11 +32,12 @@ pub struct LocationConfig {
     #[serde(default = "Vec::new")]
     pub headers: Vec<ConfigHeader>,
 
-    #[serde_as(as = "Option<DisplayFromStr>")]
-    pub reverse_proxy: Option<Url>,
     /// 请求方法
     pub method: Option<String>,
-    pub server_name: Option<String>,
+    pub up_name: Option<String>,
+
+    #[serde(default)]
+    pub is_ws: bool,
 
     pub root: Option<String>,
     #[serde(default = "Vec::new")]
@@ -54,8 +55,8 @@ pub struct LocationConfig {
 impl Hash for LocationConfig {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         state.write(self.rule.as_bytes());
-        if let Some(server_name) = &self.server_name {
-            state.write(server_name.as_bytes());
+        if let Some(up_name) = &self.up_name {
+            state.write(up_name.as_bytes());
         }
         if let Some(method) = &self.method {
             state.write(method.as_bytes());
@@ -67,7 +68,7 @@ impl Hash for LocationConfig {
 impl PartialEq for LocationConfig {
     fn eq(&self, other: &LocationConfig) -> bool {
         self.rule == other.rule
-            && self.server_name == other.server_name
+            && self.up_name == other.up_name
             && self.method == other.method
     }
 }
@@ -79,10 +80,10 @@ impl LocationConfig {
         LocationConfig {
             rule: self.rule.clone(),
             method: self.method.clone(),
-            server_name: self.server_name.clone(),
+            up_name: self.up_name.clone(),
+            is_ws: self.is_ws,
             file_server: None,
             headers: vec![],
-            reverse_proxy: None,
             try_paths: None,
             root: None,
             upstream: vec![],
@@ -136,7 +137,7 @@ impl LocationConfig {
         let mut url = url.clone();
         let domain = url.domain.clone().unwrap();
 
-        if let Ok(addr) = ReverseHelper::get_upstream_addr(&self.upstream, &*domain) {
+        if let Some(addr) = ReverseHelper::get_upstream_addr(&self.upstream, &*domain) {
             url.domain = Some(addr.ip().to_string());
             url.port = Some(addr.port());
         }
@@ -189,7 +190,7 @@ impl LocationConfig {
             let res = file_server.deal_request(req).await?;
             return Ok((res, None, None));
         }
-        if let Some(reverse) = &self.reverse_proxy {
+        if let Some(reverse) = &self.comm.proxy_url {
             return self.deal_reverse_proxy(req, reverse).await;
         }
         return Err(ProtError::Extension("unknow data"));
@@ -199,9 +200,9 @@ impl LocationConfig {
         self.comm.get_log_names(names);
     }
     
-    pub fn get_upstream_addr(&self) -> ProtResult<SocketAddr> {
+    pub fn get_upstream_addr(&self) -> Option<SocketAddr> {
         let mut name = String::new();
-        if let Some(r) = &self.reverse_proxy {
+        if let Some(r) = &self.comm.proxy_url {
             name = r.domain.clone().unwrap_or(String::new());
         }
         for stream in &self.upstream {
@@ -211,21 +212,24 @@ impl LocationConfig {
                 return stream.get_server_addr()
             }
         }
-        return Err(ProtError::Extension(""));
+        return None;
     }
     
     pub fn get_reverse_url(&self) -> ProtResult<(Url, String)> {
-        let addr = self.get_upstream_addr()?;
-        if let Some(r) = &self.reverse_proxy {
-            let mut url = r.clone();
-            let domain = url.domain.clone().unwrap_or(String::new());
-            url.domain = Some(format!("{}", addr.ip()));
-            url.port = Some(addr.port());
-            Ok((url, domain))
+        if let Some(addr) = self.get_upstream_addr() {
+            if let Some(r) = &self.comm.proxy_url {
+                let mut url = r.clone();
+                let domain = url.domain.clone().unwrap_or(String::new());
+                url.domain = Some(format!("{}", addr.ip()));
+                url.port = Some(addr.port());
+                Ok((url, domain))
+            } else {
+                let url = Url::parse(format!("http://{}/", addr).into_bytes())?;
+                let domain = format!("{}", addr.ip());
+                Ok((url, domain))
+            }
         } else {
-            let url = Url::parse(format!("http://{}/", addr).into_bytes())?;
-            let domain = format!("{}", addr.ip());
-            Ok((url, domain))
+            Err(ProtError::Extension("error"))
         }
     }
 }

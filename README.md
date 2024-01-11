@@ -168,6 +168,7 @@ proxy:
 - [x] 四层TCP负载
 - [x] 四层UDP负载
 - [x] 流量控制
+- [x] websocket转发
 
 ### 基础能力
 - [x] 日志
@@ -179,3 +180,5 @@ proxy:
 - [x] 支持 HTTP2 的内网穿透
 - [x] 控制微端
 - [x] try_paths
+- [x] tcp转websocket
+- [x] websocket转tcp

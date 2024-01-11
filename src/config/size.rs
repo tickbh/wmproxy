@@ -97,6 +97,7 @@ impl Display for ConfigSize {
 }
 
 
+#[cfg(test)]
 mod tests {
     macro_rules! msize {
         ($buf:expr, $equal:expr) => (

@@ -111,6 +111,7 @@ impl Display for IpSets {
 }
 
 
+#[cfg(test)]
 mod tests {
     use std::net::{Ipv4Addr, IpAddr};
     use crate::IpSets;
