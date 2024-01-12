@@ -19,7 +19,7 @@ use serde::{Serialize, Deserialize};
 use serde_with::serde_as;
 use serde_with::DurationSeconds;
 
-use wenmeng::{ProtResult, ProtError};
+
 use crate::{HealthCheck};
 
 

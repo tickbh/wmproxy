@@ -11,7 +11,7 @@
 // Created Date: 2023/10/18 02:32:15
 
 use std::{collections::HashMap, net::{SocketAddr, ToSocketAddrs}};
-use chrono::format;
+
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
 use wenmeng::ProtResult;
@@ -25,10 +25,15 @@ fn default_bind_mode() -> String {
     "tcp".to_string()
 }
 
+fn default_up_name() -> String {
+    "".to_string()
+}
 #[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServerConfig {
     pub bind_addr: SocketAddr,
+    
+    #[serde(default = "default_up_name")]
     pub up_name: String,
     pub root: Option<String>,
     pub cert: Option<String>,

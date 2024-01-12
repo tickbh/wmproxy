@@ -32,4 +32,3 @@ pub use common::CommonConfig;
 pub use limit_req::{LimitReqMiddleware, LimitReq};
 pub use try_paths::TryPathsConfig;
 
-use ws::ServerWsOperate;

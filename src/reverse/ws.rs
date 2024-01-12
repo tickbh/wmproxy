@@ -10,43 +10,19 @@
 // -----
 // Created Date: 2023/10/18 02:32:23
 
-use std::{
-    collections::{HashMap, HashSet},
-    fs::File,
-    io::{self, BufReader},
-    net::{IpAddr, SocketAddr},
-    sync::Arc,
-};
+use std::sync::Arc;
 
-use crate::{data::LimitReqData, Helper, ProxyResult};
 use async_trait::async_trait;
-use rustls::{
-    server::ResolvesServerCertUsingSni,
-    sign::{self, CertifiedKey},
-    Certificate, PrivateKey,
-};
-use serde::{Deserialize, Serialize};
-use serde_with::{serde_as, DisplayFromStr};
-use tokio::{
-    io::{AsyncRead, AsyncWrite},
-    net::TcpListener,
-    sync::mpsc::{channel, Receiver, Sender},
-};
-use tokio_rustls::TlsAcceptor;
-use webparse::{
-    ws::{CloseData, OwnedMessage},
-    Request, Response,
-};
+
+use tokio::sync::mpsc::{channel, Receiver, Sender};
+
+use webparse::ws::{CloseData, OwnedMessage};
 use wenmeng::{
     ws::{WsHandshake, WsOption, WsTrait},
-    Body, Client, HttpTrait, Middleware, ProtError, ProtResult, RecvRequest, RecvResponse, Server,
+    Client, ProtError, ProtResult,
 };
 
-use super::{
-    common::CommonConfig, limit_req::LimitReqZone, LimitReqMiddleware, LocationConfig,
-    ReverseHelper, ServerConfig, UpstreamConfig,
-};
-use async_recursion::async_recursion;
+use super::{ReverseHelper, ServerConfig};
 
 pub struct ServerWsOperate {
     inner: InnerWsOper,
@@ -158,7 +134,7 @@ pub struct ClientWsOperate {
 #[async_trait]
 impl WsTrait for ClientWsOperate {
     /// 握手完成后之后的回调,服务端返回了Response之后就认为握手成功
-    async fn on_open(&mut self, shake: WsHandshake) -> ProtResult<Option<WsOption>> {
+    async fn on_open(&mut self, _shake: WsHandshake) -> ProtResult<Option<WsOption>> {
         let mut option = WsOption::new();
         option.receiver = self.receiver.take();
         Ok(Some(option))

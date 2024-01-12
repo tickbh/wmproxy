@@ -113,7 +113,6 @@ up_name = "server"
 
 [[stream.server]]
 bind_addr = "0.0.0.0:85"
-up_name = "ws"
 proxy_url = "ws://127.0.0.1:8081/"
 bind_mode = "tcp2ws"
 

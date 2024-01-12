@@ -19,7 +19,7 @@ use std::{
     time::{Instant, Duration},
 };
 
-use async_std::net::ToSocketAddrs;
+
 use futures_core::Stream;
 
 use serde::{Deserialize, Serialize};
@@ -33,12 +33,12 @@ use tokio::{
 };
 use tokio_util::sync::PollSender;
 use webparse::{BinaryMut, Buf, BufMut};
-use wenmeng::{plugins::{StreamToWs, WsToStream}, ProtError};
+use wenmeng::{plugins::{StreamToWs, WsToStream}};
 
 
 use crate::{HealthCheck, Helper, ProxyResult, ProxyError};
 
-use super::{ReverseHelper, ServerConfig, UpstreamConfig};
+use super::{ServerConfig, UpstreamConfig};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StreamConfig {

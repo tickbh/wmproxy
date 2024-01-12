@@ -445,8 +445,9 @@ impl HttpConfig {
                 .addr(addr)
                 .timeout_layer(timeout)
                 .stream(inbound);
-
+            // 设置HTTP回调
             server.set_callback_http(Box::new(Operate { inner: oper }));
+            // 设置websocket回调,客户端有可能升级到websocket协议
             server.set_callback_ws(Box::new(ServerWsOperate::new(servers)));
             if let Err(e) = server.incoming().await {
                 if server.get_req_num() == 0 {

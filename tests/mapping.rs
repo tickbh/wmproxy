@@ -15,7 +15,7 @@ mod tests {
         sync::mpsc::{channel, Sender},
     };
     use webparse::{BinaryMut, Buf, Request, Response, Version};
-    use wmproxy::{ConfigHeader, ConfigOption, MappingConfig, ProxyConfig, ProxyResult, WMCore};
+    use wmproxy::{ConfigHeader, ConfigOption, MappingConfig, ProxyConfig, WMCore};
 
     use wenmeng::{
         self, Body, Client, HttpTrait, ProtResult, RecvRequest, RecvResponse, Server,

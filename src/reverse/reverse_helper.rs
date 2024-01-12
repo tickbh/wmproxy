@@ -12,7 +12,7 @@
 
 use std::{net::SocketAddr, sync::Arc};
 
-use wenmeng::{ProtResult, ProtError, RecvRequest};
+use wenmeng::{RecvRequest};
 
 use super::{UpstreamConfig, ServerConfig, LocationConfig};
 
