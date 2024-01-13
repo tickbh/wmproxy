@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # 拉取了可以编译的RUST版本
-ARG RUST_VERSION=1.71.1
+ARG RUST_VERSION=1.75
 ARG APP_NAME=wmproxy
 FROM rust:${RUST_VERSION}-slim-bullseye AS build
 ARG APP_NAME

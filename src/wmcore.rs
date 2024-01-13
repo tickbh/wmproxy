@@ -246,7 +246,6 @@ impl WMCore {
             let _ = sender.send(()).await;
         }
         self.do_start_health_check().await?;
-
         loop {
             tokio::select! {
                 Some((inbound, addr)) = Self::tcp_listen_work(&self.center_listener) => {
@@ -345,7 +344,6 @@ impl WMCore {
             }
             log::trace!("处理一条连接完毕，循环继续处理下一条信息");
         }
-        Ok(())
     }
 
     pub async fn start_serve(

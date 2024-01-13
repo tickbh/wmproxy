@@ -1,6 +1,6 @@
 proxy:
   #绑定的ip地址
-  bind_addr: 127.0.0.1:8091
+  bind_addr: 0.0.0.0:8091
 
   #代理支持的功能，1为http，2为https，4为socks5
   flag: 7
@@ -8,11 +8,11 @@ proxy:
   password: wmproxy
 
   #内网映射http绑定地址
-  map_http_bind: 127.0.0.1:8001
+  map_http_bind: 0.0.0.0:8001
   #内网映射tcp绑定地址
-  map_tcp_bind: 127.0.0.1:8002
+  map_tcp_bind: 0.0.0.0:8002
   #内网映射https绑定地址
-  map_https_bind: 127.0.0.1:8003
+  map_https_bind: 0.0.0.0:8003
   #内网映射的公钥证书，为空则是默认证书
   map_cert: 
   #内网映射的私钥证书，为空则是默认证书

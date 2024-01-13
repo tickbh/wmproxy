@@ -50,7 +50,8 @@ base64 = "0.21.4"
 async-recursion = "1.0.5"
 
 webparse = { version = "0.2.3"}
-wenmeng={version="0.2.3"}
+# wenmeng={version="0.2.3"}
+wenmeng={git="https://github.com/tickbh/wenmeng.git"}
 # [dependencies.webparse]
 # path = "../webparse"
 

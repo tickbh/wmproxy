@@ -22,6 +22,7 @@ use std::{
 };
 
 use commander::Commander;
+use log::LevelFilter;
 use rustls::{Certificate, ClientConfig, PrivateKey};
 
 use serde::{Deserialize, Serialize};
@@ -33,55 +34,6 @@ use crate::{
     reverse::{HttpConfig, StreamConfig, UpstreamConfig},
     CenterClient, Flag, Helper, MappingConfig, OneHealth, ProxyError, ProxyResult,
 };
-
-use bitflags::bitflags;
-
-bitflags! {
-    #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Default)]
-    pub struct Mode: u8 {
-        /// 未知类型, 单进程模型
-        const NONE = 0x0;
-        /// 仅客户端类型
-        const CLIENT = 0x1;
-        /// 仅服务端类型
-        const SERVER = 0x2;
-        /// 中转客户端及服务端
-        const ALL = 0x3;
-    }
-}
-
-impl Mode {
-    pub fn is_none(&self) -> bool {
-        self.bits() == 0
-    }
-
-    pub fn is_client(&self) -> bool {
-        self.contains(Self::CLIENT)
-    }
-
-    pub fn is_server(&self) -> bool {
-        self.contains(Self::SERVER)
-    }
-}
-
-impl Serialize for Mode {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        serializer.serialize_u8(self.bits())
-    }
-}
-
-impl<'a> Deserialize<'a> for Mode {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'a>,
-    {
-        let v = u8::deserialize(deserializer)?;
-        Ok(Mode::from_bits(v).unwrap_or(Mode::NONE))
-    }
-}
 
 pub struct Builder {
     inner: ProxyResult<ProxyConfig>,
@@ -301,6 +253,8 @@ pub fn default_control_port() -> SocketAddr {
     "127.0.0.1:8837".parse().unwrap()
 }
 
+
+#[serde_as]
 /// 代理类, 一个代理类启动一种类型的代理
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConfigOption {
@@ -318,6 +272,8 @@ pub struct ConfigOption {
     pub(crate) disable_stdout: bool,
     #[serde(default)]
     pub(crate) disable_control: bool,
+    #[serde_as(as = "Option<DisplayFromStr>")]
+    pub(crate) default_level: Option<LevelFilter>,
 }
 
 impl Default for ConfigOption {
@@ -329,6 +285,7 @@ impl Default for ConfigOption {
             control: default_control_port(),
             disable_stdout: Default::default(),
             disable_control: Default::default(),
+            default_level: None,
         }
     }
 }
@@ -681,6 +638,7 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
     }
 }
 
+
 impl ConfigOption {
     pub fn new_by_proxy(proxy: ProxyConfig) -> Self {
         let mut config = ConfigOption::default();
@@ -688,6 +646,7 @@ impl ConfigOption {
         config.disable_control = true;
         config
     }
+    
     pub fn parse_env() -> ProxyResult<ConfigOption> {
         let command = Commander::new()
             .version(&env!("CARGO_PKG_VERSION").to_string())
@@ -704,6 +663,7 @@ impl ConfigOption {
                 None,
             )
             .option_str("-c, --config", "配置文件", None)
+            .option_str("--control value", "控制的监听地址", Some("127.0.0.1:8837".to_string()))
             .option_str("--http value", "内网穿透的http代理监听地址", None)
             .option_str("--https value", "内网穿透的https代理监听地址", None)
             .option_str("--tcp value", "内网穿透的tcp代理监听地址", None)
@@ -755,7 +715,7 @@ impl ConfigOption {
         }
 
         let listen_host = command.get_str("b").unwrap();
-        let addr = listen_host.parse().unwrap();
+        let addr = listen_host.parse().map_err(|_| ProxyError::extension("监听地址-b参数出错"))?;
         let mut builder = ProxyConfig::builder().bind_addr(addr);
 
         builder = builder.flag(Flag::HTTP | Flag::HTTPS | Flag::SOCKS5);
@@ -786,15 +746,21 @@ impl ConfigOption {
         if let Some(s) = command.get_str("S") {
             builder = builder.server(s.parse::<SocketAddr>().ok());
         };
-
+        
+        let crontrol = if let Some(control) = command.get_str("control") {
+            control.as_str().parse().map_err(|_| ProxyError::extension("控制台--control地址转化失败"))?
+        } else {
+            default_control_port()
+        };
         log::debug!("启动默认信息，只开启代理信息");
         Ok(ConfigOption {
             proxy: Some(builder.inner?),
             http: None,
             stream: None,
-            control: default_control_port(),
+            control: crontrol,
             disable_stdout: false,
             disable_control: false,
+            default_level: None,
         })
     }
 

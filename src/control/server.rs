@@ -177,6 +177,7 @@ impl ControlServer {
             
             tokio::select! {
                 Ok((conn, addr)) = listener.accept() => {
+                    log::info!("控制端口请求：{:?}，开始处理。", addr);
                     let cc = control.clone();
                     tokio::spawn(async move {
                         let mut server = Server::new(conn, Some(addr));

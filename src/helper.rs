@@ -180,7 +180,7 @@ impl Helper {
             root = root.appender("stdout");
         }
 
-        let log_config = log_config.build(root.build(LevelFilter::Info)).unwrap();
+        let log_config = log_config.build(root.build(option.default_level.unwrap_or(LevelFilter::Trace))).unwrap();
         // 检查静态变量中是否存在handle可能在多线程中,需加锁
         if LOG4RS_HANDLE.lock().unwrap().is_some() {
             LOG4RS_HANDLE
