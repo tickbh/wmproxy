@@ -1,11 +1,11 @@
 // Copyright 2022 - 2023 Wenmeng See the COPYRIGHT
 // file at the top-level directory of this distribution.
-// 
+//
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
-// 
+//
 // Author: tickbh
 // -----
 // Created Date: 2023/09/27 11:26:50
@@ -21,12 +21,11 @@ use tokio::{
     },
 };
 use webparse::{Request, Response};
-use wenmeng::{
-    Client, HttpTrait, ProtResult, RecvRequest, RecvResponse, Body, Server,
-};
+use wenmeng::{Body, Client, HttpTrait, ProtResult, RecvRequest, RecvResponse, Server};
 
-use crate::{MappingConfig, ProtCreate, ProtFrame, ProxyError, VirtualStream, Helper};
+use crate::{Helper, MappingConfig, ProtCreate, ProtFrame, ProxyError, VirtualStream};
 
+static TIP_NOT_FOUND: &'static str = "当前连接未检测到与之匹配的域名，请检查配置是否正确，或者查看官方网站<a href=\"https://github.com/tickbh/wmproxy\"/>wmproxy</a>。";
 struct Operate {
     oper: HttpOper,
 }
@@ -72,10 +71,21 @@ impl TransHttp {
         }
     }
 
+    fn not_found_response() -> ProtResult<RecvResponse> {
+        return Ok(Response::builder()
+            .status(200)
+            .header("Content-Type", "text/html; charset=utf-8")
+            .body(TIP_NOT_FOUND)
+            .ok()
+            .unwrap()
+            .into_type());
+    }
+
     async fn inner_operate(
         req: &mut Request<Body>,
         oper: &mut HttpOper,
     ) -> ProtResult<Response<Body>> {
+        
         let sender = oper.virtual_sender.take();
         // 传在该参数则为第一次, 第一次的时候发送Create创建绑定连接
         if sender.is_some() {
@@ -94,12 +104,7 @@ impl TransHttp {
                     }
                 }
                 if !is_find {
-                    return Ok(Response::builder()
-                        .status(404)
-                        .body("not found")
-                        .ok()
-                        .unwrap()
-                        .into_type());
+                    return Self::not_found_response();
                 }
                 oper.http_map = config;
             }
@@ -112,29 +117,22 @@ impl TransHttp {
         if let Some(config) = &oper.http_map {
             // 复写Request的头文件信息
             Helper::rewrite_request(req, &config.headers);
-        }
-
-        // 将请求发送出去
-        oper.sender
-            .send(req.replace_clone(Body::empty()))
-            .await?;
-        // 等待返回数据的到来
-        let res = oper.receiver.recv().await;
-        if res.is_some() && res.as_ref().unwrap().is_ok() {
-            let mut res = res.unwrap().unwrap();
-            if let Some(config) = &oper.http_map {
-                // 复写Response的头文件信息
-                Helper::rewrite_response(&mut res, &config.headers);
+            
+            // 将请求发送出去
+            oper.sender.send(req.replace_clone(Body::empty())).await?;
+            // 等待返回数据的到来
+            let res = oper.receiver.recv().await;
+            if res.is_some() && res.as_ref().unwrap().is_ok() {
+                let mut res = res.unwrap().unwrap();
+                if let Some(config) = &oper.http_map {
+                    // 复写Response的头文件信息
+                    Helper::rewrite_response(&mut res, &config.headers);
+                }
+                return Ok(res);
             }
-            return Ok(res);
-        } else {
-            return Ok(Response::builder()
-                .status(503)
-                .body("cant trans")
-                .ok()
-                .unwrap()
-                .into_type());
         }
+        return Self::not_found_response();
+
     }
 
     pub async fn process<T>(self, inbound: T, addr: SocketAddr) -> Result<(), ProxyError<T>>
