@@ -3,8 +3,8 @@ services:
 
   wmproxy_server:
     container_name: wmproxy_server_docker        # 指定容器的名称
-    # image: dreamwhat/wmproxy
-    image: wmproxy
+    image: dreamwhat/wmproxy:0.2.3.1
+    # image: wmproxy
     command:
       - sh
       - -c
@@ -13,6 +13,9 @@ services:
     ports:
       - "127.0.0.1:8837:8837"
       - "8091:8091"
+      - "8001:8001"  #http映射
+      - "8002:8002"  #tcp映射
+      - "8003:8003"  #https映射
     volumes:
       - ./mapping_server.toml/:/etc/config/mapping_server.toml:r
 

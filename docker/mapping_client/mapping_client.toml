@@ -2,7 +2,7 @@ control = "0.0.0.0:8838"
 
 [proxy]
 # 连接服务端地址
-server = "192.168.17.22:8091"
+server = "wmproxy_server_docker:8091"
 bind_addr = "0.0.0.0:8090"
 flag = "http https socks5"
 # 连接服务端是否加密
@@ -17,7 +17,7 @@ password = "wmproxy"
 [[proxy.mappings]]
 name = "web"
 mode = "http"
-local_addr = "0.0.0.0:8080"
+local_addr = "192.168.17.22:8080"
 domain = "localhost"
 
 headers = [
@@ -31,5 +31,5 @@ headers = [
 [[proxy.mappings]]
 name = "tcp"
 mode = "tcp"
-local_addr = "0.0.0.0:8080"
+local_addr = "192.168.17.22:8080"
 domain = ""

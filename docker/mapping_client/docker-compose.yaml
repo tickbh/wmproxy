@@ -3,8 +3,8 @@ services:
 
   wmproxy_client:
     container_name: wmproxy_client_docker        # 指定容器的名称
-    # image: dreamwhat/wmproxy:0.2.3
-    image: wmproxy
+    image: dreamwhat/wmproxy:0.2.3.1
+    # image: wmproxy
     command:
       - sh
       - -c
