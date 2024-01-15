@@ -145,7 +145,7 @@ impl ProtFrame {
         Self::Close(ProtClose::new_by_reason(sock_map, reason))
     }
 
-    pub fn new_data(sock_map: u32, data: Binary) -> Self {
+    pub fn new_data(sock_map: u32, data: Vec<u8>) -> Self {
         Self::Data(ProtData::new(sock_map, data))
     }
 

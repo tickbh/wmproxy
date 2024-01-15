@@ -68,7 +68,7 @@ impl AsyncRead for VirtualStream
                         } else if v.is_data() {
                             match v {
                                 ProtFrame::Data(d) => {
-                                    self.read.put_slice(&d.data().chunk());
+                                    self.read.put_slice(&d.data());
                                 }
                                 _ => unreachable!(),
                             }
@@ -108,9 +108,9 @@ impl AsyncWrite for VirtualStream
         if let Err(_) = ready!(self.sender.poll_reserve(cx)) {
             return Poll::Pending;
         }
-        let binary = Binary::from(self.write.chunk().to_vec());
+        let data = self.write.chunk().to_vec();
         let id = self.id;
-        if let Ok(_) = self.sender.send_item(ProtFrame::Data(ProtData::new(id, binary))) {
+        if let Ok(_) = self.sender.send_item(ProtFrame::Data(ProtData::new(id, data))) {
             self.write.clear();
         }
         Poll::Ready(Ok(buf.len()))
@@ -124,9 +124,9 @@ impl AsyncWrite for VirtualStream
             if let Err(_) = ready!(self.sender.poll_reserve(cx)) {
                 return Poll::Pending;
             }
-            let binary = Binary::from(self.write.chunk().to_vec());
+            let data = self.write.chunk().to_vec();
             let id = self.id;
-            if let Ok(_) = self.sender.send_item(ProtFrame::Data(ProtData::new(id, binary))) {
+            if let Ok(_) = self.sender.send_item(ProtFrame::Data(ProtData::new(id, data))) {
                 self.write.clear();
             }
         }
