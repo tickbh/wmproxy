@@ -154,7 +154,7 @@ mod tests {
             .username(Some(username.clone()))
             .password(Some(password.clone()))
             .center(true)
-            .server(Some(server_addr))
+            .server(Some(format!("{}", server_addr)))
             .into_value()
             .unwrap();
 

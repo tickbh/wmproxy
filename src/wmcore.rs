@@ -361,7 +361,7 @@ impl WMCore {
         domain: Option<String>,
         tls_client: Option<Arc<rustls::ClientConfig>>,
         mut inbound: T,
-        server: SocketAddr,
+        server: String,
     ) -> ProxyResult<()>
     where
         T: AsyncRead + AsyncWrite + Unpin,

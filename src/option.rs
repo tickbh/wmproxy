@@ -75,7 +75,7 @@ impl Builder {
         })
     }
 
-    pub fn server(self, addr: Option<SocketAddr>) -> Builder {
+    pub fn server(self, addr: Option<String>) -> Builder {
         self.and_then(|mut proxy| {
             proxy.server = addr;
             Ok(proxy)
@@ -213,7 +213,8 @@ pub struct ProxyConfig {
     pub(crate) flag: Flag,
     #[serde(default)]
     pub(crate) mode: String,
-    pub(crate) server: Option<SocketAddr>,
+    
+    pub(crate) server: Option<String>,
     /// 用于socks验证及中心服务器验证
     pub(crate) username: Option<String>,
     /// 用于socks验证及中心服务器验证
@@ -572,13 +573,13 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
                 match center.connect().await {
                     Ok(true) => (),
                     Ok(false) => {
-                        log::error!("未能正确连上服务端:{:?}", self.server.unwrap());
+                        log::error!("未能正确连上服务端:{:?}", self.server.clone().unwrap());
                         process::exit(1);
                     }
                     Err(err) => {
                         log::error!(
                             "未能正确连上服务端:{:?}, 发生错误:{:?}",
-                            self.server.unwrap(),
+                            self.server.clone().unwrap(),
                             err
                         );
                         process::exit(1);
@@ -744,7 +745,7 @@ impl ConfigOption {
             builder = builder.map_proxy_bind(proxy.parse::<SocketAddr>().ok());
         };
         if let Some(s) = command.get_str("S") {
-            builder = builder.server(s.parse::<SocketAddr>().ok());
+            builder = builder.server(Some(s));
         };
         
         let crontrol = if let Some(control) = command.get_str("control") {
@@ -809,15 +810,15 @@ impl ConfigOption {
     pub fn get_health_check(&self) -> Vec<OneHealth> {
         let mut result = vec![];
         let mut already: HashSet<SocketAddr> = HashSet::new();
-        if let Some(proxy) = &self.proxy {
-            if let Some(server) = proxy.server {
-                result.push(OneHealth::new(
-                    server,
-                    String::new(),
-                    Duration::from_secs(5),
-                ));
-            }
-        }
+        // if let Some(proxy) = &self.proxy {
+        //     if let Some(server) = proxy.server {
+        //         result.push(OneHealth::new(
+        //             server,
+        //             String::new(),
+        //             Duration::from_secs(5),
+        //         ));
+        //     }
+        // }
 
         if let Some(http) = &self.http {
             Self::try_add_upstream(&mut result, &mut already, &http.upstream);

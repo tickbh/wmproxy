@@ -1,3 +1,4 @@
+default_level = "trace"
 [proxy]
 #绑定的ip地址
 bind_addr = "0.0.0.0:8091"
@@ -16,8 +17,8 @@ map_https_bind = "0.0.0.0:8003"
 #内网映射的私钥证书，为空则是默认证书
 # map_key =
 # 双向认证
-two_way_tls = true
-#接收客户端是为是加密客户端
-tc = true
+# two_way_tls = true
+# #接收客户端是为是加密客户端
+# tc = true
 #当前服务模式，server为服务端，client为客户端
 mode = "server"

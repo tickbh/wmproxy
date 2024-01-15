@@ -102,7 +102,11 @@ async fn test_proxy(
 #[tokio::main]
 async fn main() {
 
-    let addr = "127.0.0.1:0".parse().unwrap();
+    
+    let addr  = "localhost:123".parse::<SocketAddr>();
+    println!("addr = {:?}", addr);
+
+    let addr: SocketAddr = "127.0.0.1:0".parse().unwrap();
         let username = "wmproxy".to_string();
         let password = "wmproxy".to_string();
 
@@ -124,7 +128,7 @@ async fn main() {
             .username(Some(username.clone()))
             .password(Some(password.clone()))
             .center(true)
-            .server(Some(server_addr))
+            .server(Some(format!("{}", server_addr)))
             .into_value()
             .unwrap();
 
