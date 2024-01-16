@@ -9,7 +9,7 @@ services:
       - sh
       - -c
       - |
-        wmproxy -c /etc/config/mapping_server.toml
+        wmproxy config -c /etc/config/mapping_server.toml
     ports:
       - "127.0.0.1:8837:8837"
       - "8091:8091"

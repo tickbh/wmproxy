@@ -3,13 +3,13 @@ services:
 
   wmproxy_client:
     container_name: wmproxy_client_docker        # 指定容器的名称
-    image: dreamwhat/wmproxy:0.2.3.2
+    image: dreamwhat/wmproxy:0.2.4
     # image: wmproxy
     command:
       - sh
       - -c
       - |
-        wmproxy -c /etc/config/mapping_client.toml
+        wmproxy config -c /etc/config/mapping_client.toml
     ports:
       - "127.0.0.1:8838:8838"
       - "8090:8090"
