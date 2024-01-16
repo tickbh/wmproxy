@@ -18,7 +18,7 @@ use async_trait::async_trait;
 use tokio::{sync::{mpsc::{Sender, channel, Receiver}, Mutex}, net::TcpListener};
 use webparse::{Request, Response, HeaderName};
 use wenmeng::{Server, Body, ProtResult, HttpTrait, RecvRequest, RecvResponse};
-use crate::{ConfigOption, WMCore, ProxyResult, Helper};
+use crate::{ConfigOption, WMCore, ProxyResult, Helper, arg};
 
 /// 控制端，可以对配置进行热更新
 pub struct ControlServer {
@@ -67,7 +67,7 @@ impl ControlServer {
     }
 
     pub async fn do_restart_serve(&mut self) -> ProxyResult<()> {
-        let option = ConfigOption::parse_env()?;
+        let option = arg::parse_env()?;
         Helper::try_init_log(&option);
         self.inner_start_server(option).await?;
         Ok(())

@@ -10,7 +10,7 @@
 // -----
 // Created Date: 2023/10/07 09:40:42
 
-use std::{net::SocketAddr};
+use std::{net::SocketAddr, str::FromStr};
 
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
@@ -60,5 +60,13 @@ impl MappingConfig {
     
     pub fn is_proxy(&self) -> bool {
         self.mode.eq_ignore_ascii_case("proxy")
+    }
+}
+
+impl FromStr for MappingConfig {
+    type Err=std::io::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        todo!()
     }
 }

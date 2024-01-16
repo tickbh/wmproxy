@@ -14,13 +14,14 @@ use std::{
     collections::{HashMap, HashSet},
     fs::File,
     io::{self, BufReader, Read},
-    net::{IpAddr, SocketAddr},
+    net::{IpAddr, Ipv4Addr, SocketAddr},
     path::PathBuf,
     process,
     sync::Arc,
     time::Duration,
 };
 
+use bpaf::*;
 use commander::Commander;
 use log::LevelFilter;
 use rustls::{Certificate, ClientConfig, PrivateKey};
@@ -204,31 +205,53 @@ fn default_bool_true() -> bool {
 
 /// 代理类, 一个代理类启动一种类型的代理
 #[serde_as]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Bpaf)]
 pub struct ProxyConfig {
+    /// 代理绑定端口地址
+    #[bpaf(
+        fallback(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8090)),
+        display_fallback,
+        short('b'),
+        long
+    )]
     #[serde(default = "default_bind_addr")]
     pub(crate) bind_addr: SocketAddr,
+
+    /// 代理种类, 如http https socks5
+    #[bpaf(fallback(Flag::default()))]
     #[serde_as(as = "DisplayFromStr")]
     #[serde(default)]
     pub(crate) flag: Flag,
+    /// 启动程序类型
+    #[bpaf(fallback("client".to_string()))]
     #[serde(default)]
     pub(crate) mode: String,
-    
+
+    /// 连接代理服务端地址
+    #[bpaf(short('S'), long("server"))]
     pub(crate) server: Option<String>,
     /// 用于socks验证及中心服务器验证
+    #[bpaf(long("user"))]
     pub(crate) username: Option<String>,
     /// 用于socks验证及中心服务器验证
+    #[bpaf(long("pass"))]
     pub(crate) password: Option<String>,
+    /// udp的绑定地址
     pub(crate) udp_bind: Option<IpAddr>,
-
+    /// 内网http的映射地址
     pub(crate) map_http_bind: Option<SocketAddr>,
+    /// 内网https的映射地址
     pub(crate) map_https_bind: Option<SocketAddr>,
+    /// 内网tcp的映射地址
     pub(crate) map_tcp_bind: Option<SocketAddr>,
+    /// 内网代理的映射地址
     pub(crate) map_proxy_bind: Option<SocketAddr>,
+    /// 内网映射的证书cert
     pub(crate) map_cert: Option<String>,
+    /// 内网映射的证书key
     pub(crate) map_key: Option<String>,
 
-    //// 是否启用协议转发
+    /// 是否启用协议转发
     #[serde(default = "default_bool_true")]
     pub(crate) center: bool,
     /// 连接服务端是否启用tls
@@ -253,7 +276,6 @@ pub struct ProxyConfig {
 pub fn default_control_port() -> SocketAddr {
     "127.0.0.1:8837".parse().unwrap()
 }
-
 
 #[serde_as]
 /// 代理类, 一个代理类启动一种类型的代理
@@ -634,11 +656,16 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
             log::info!("内网穿透，tcp绑定：{:?}，提供tcp内网功能。", ls);
             proxy_listener = Some(Helper::bind(ls).await?);
         };
-        
-        Ok((http_listener, https_listener, tcp_listener, proxy_listener, map_accept))
+
+        Ok((
+            http_listener,
+            https_listener,
+            tcp_listener,
+            proxy_listener,
+            map_accept,
+        ))
     }
 }
-
 
 impl ConfigOption {
     pub fn new_by_proxy(proxy: ProxyConfig) -> Self {
@@ -647,7 +674,7 @@ impl ConfigOption {
         config.disable_control = true;
         config
     }
-    
+
     pub fn parse_env() -> ProxyResult<ConfigOption> {
         let command = Commander::new()
             .version(&env!("CARGO_PKG_VERSION").to_string())
@@ -664,7 +691,11 @@ impl ConfigOption {
                 None,
             )
             .option_str("-c, --config", "配置文件", None)
-            .option_str("--control value", "控制的监听地址", Some("127.0.0.1:8837".to_string()))
+            .option_str(
+                "--control value",
+                "控制的监听地址",
+                Some("127.0.0.1:8837".to_string()),
+            )
             .option_str("--http value", "内网穿透的http代理监听地址", None)
             .option_str("--https value", "内网穿透的https代理监听地址", None)
             .option_str("--tcp value", "内网穿透的tcp代理监听地址", None)
@@ -716,7 +747,9 @@ impl ConfigOption {
         }
 
         let listen_host = command.get_str("b").unwrap();
-        let addr = listen_host.parse().map_err(|_| ProxyError::extension("监听地址-b参数出错"))?;
+        let addr = listen_host
+            .parse()
+            .map_err(|_| ProxyError::extension("监听地址-b参数出错"))?;
         let mut builder = ProxyConfig::builder().bind_addr(addr);
 
         builder = builder.flag(Flag::HTTP | Flag::HTTPS | Flag::SOCKS5);
@@ -747,9 +780,12 @@ impl ConfigOption {
         if let Some(s) = command.get_str("S") {
             builder = builder.server(Some(s));
         };
-        
+
         let crontrol = if let Some(control) = command.get_str("control") {
-            control.as_str().parse().map_err(|_| ProxyError::extension("控制台--control地址转化失败"))?
+            control
+                .as_str()
+                .parse()
+                .map_err(|_| ProxyError::extension("控制台--control地址转化失败"))?
         } else {
             default_control_port()
         };
@@ -766,7 +802,7 @@ impl ConfigOption {
     }
 
     pub fn is_empty_listen(&self) -> bool {
-        if self.http.is_some() || self.stream.is_some() || self.proxy.is_some()  {
+        if self.http.is_some() || self.stream.is_some() || self.proxy.is_some() {
             return false;
         }
         true

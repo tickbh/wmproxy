@@ -48,12 +48,15 @@ async-std = "1.12.0"
 
 base64 = "0.21.4"
 async-recursion = "1.0.5"
-
+bpaf = { version="0.9.8", features = ["derive", "extradocs", "batteries", "autocomplete"]}
 webparse = { version = "0.2.3"}
 # wenmeng={version="0.2.3"}
 wenmeng={git="https://github.com/tickbh/wenmeng.git"}
 # [dependencies.webparse]
 # path = "../webparse"
 
+[features]
+bright-color = ["bpaf/bright-color"]
+dull-color = ["bpaf/dull-color"]
 # [dependencies.wenmeng]
 # path = "../wenmeng"
