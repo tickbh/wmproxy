@@ -162,7 +162,7 @@ mod tests {
 
         let proxy = ProxyConfig::builder()
             .bind_addr(addr)
-            .server(Some(server_addr))
+            .server(Some(format!("{}", server_addr)))
             .center(true)
             .mode("client".to_string())
             .mapping(mapping)

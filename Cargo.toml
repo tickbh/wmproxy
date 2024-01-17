@@ -1,33 +1,32 @@
 [package]
 name = "wmproxy"
-version = "0.2.3"
+version = "0.2.4"
 edition = "2021"
-authors = [ "tickbh <tickdream125@hotmail.com>" ]
+authors = ["tickbh <tickdream125@hotmail.com>"]
 description = " http https proxy by rust"
 repository = "https://github.com/tickbh/wmproxy"
 license = "Apache-2.0"
-keywords = ["http2", "socks5", "websocket", "nginx","proxy"]
+keywords = ["http2", "socks5", "websocket", "nginx", "proxy"]
 
 [dependencies]
 
 tokio = { version = "1.32.0", features = ["full", "tracing"] }
-commander = "0.1.3"
 forever-rs = { version = "0.1.0" }
 log = "0.4.19"
-bitflags="2.4"
+bitflags = "2.4"
 
 tokio-util = "0.7"
 rustls = { version = "0.21.7", default-features = false }
 webpki-roots = "0.25"
 rustls-pemfile = "1.0.3"
 webpki = { version = "0.22", features = ["alloc", "std"] }
-tokio-rustls="0.24"
+tokio-rustls = "0.24"
 futures-core = { version = "0.3", default-features = false }
 futures = "0.3.28"
 
 env_logger = "0.10.0"
 serde = { version = "1.0", features = ["derive"] }
-serde_with="3.4.0"
+serde_with = "3.4.0"
 serde_yaml = "0.9"
 serde_json = "1.0.107"
 toml = "0.8.2"
@@ -35,7 +34,7 @@ lazy_static = "1.4.0"
 rand = "0.8.5"
 socket2 = "0.5.5"
 
-log4rs="1.2.0"
+log4rs = "1.2.0"
 
 chrono = "0.4.31"
 
@@ -48,12 +47,20 @@ async-std = "1.12.0"
 
 base64 = "0.21.4"
 async-recursion = "1.0.5"
-
-webparse = { version = "0.2.3"}
-# wenmeng={version="0.2.3"}
-wenmeng={git="https://github.com/tickbh/wenmeng.git"}
+bpaf = { version = "0.9.8", features = [
+    "derive",
+    "extradocs",
+    "batteries",
+    "autocomplete",
+] }
+webparse = { version = "0.2.4" }
+wenmeng = { version = "0.2.4" }
+# wenmeng={git="https://github.com/tickbh/wenmeng.git"}
 # [dependencies.webparse]
 # path = "../webparse"
 
+[features]
+bright-color = ["bpaf/bright-color"]
+dull-color = ["bpaf/dull-color"]
 # [dependencies.wenmeng]
 # path = "../wenmeng"

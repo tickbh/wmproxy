@@ -19,33 +19,33 @@ cargo install --path .
 
 ```docker
 docker pull dreamwhat/wmproxy
-docker run -p 82:82 -p 8090:8090 -p 127.0.0.1:8837:8837 --name proxy_bash dreamwhat/wmproxy /bin/./wmproxy -b -b 0.0.0.0:8090
+docker run -p 82:82 -p 8090:8090 -p 127.0.0.1:8837:8837 --name proxy_bash dreamwhat/wmproxy /bin/./wmproxy proxy -b 0.0.0.0:8090
 ```
 
 ### 使用
 默认端口为8090端口，默认监听地址为127.0.0.1
 ```bash
 # 直接通用默认参数
-wmproxy
+wmproxy proxy
 
 # 设置账号密码
-wmproxy -b 0.0.0.0:8090 --user wmproxy --pass wmproxy
+wmproxy proxy -b 0.0.0.0:8090 --user wmproxy --pass wmproxy
 
 # 其它指令
 wmproxy --help
 
 #配置文件版启动
-wmproxy -c config/client.toml
+wmproxy config -c config/client.toml
 ```
 
 ##### 启动二级代理
 1. 在本地启动代理
 ```bash
-wmproxy -b 127.0.0.1 -p 8090 -S 127.0.0.1:8091 --ts
+wmproxy proxy -b 127.0.0.1:8090 -S 127.0.0.1:8091 --ts
 ```
 或者
 ```bash
-wmproxy -c config/client.toml
+wmproxy config -c config/client.toml
 ```
 配置文件如下:
 ```toml
@@ -88,11 +88,11 @@ domain = ""
 
 2. 在远程启动代理
 ```bash
-wmproxy --user proxy --pass proxy -b 0.0.0.0:8091 --tc
+wmproxy proxy --user proxy --pass proxy -b 0.0.0.0:8091 --tc
 ```
 或者
 ```bash
-wmproxy -c config/server.toml
+wmproxy config -c config/server.toml
 ```
 配置文件如下:
 ```toml

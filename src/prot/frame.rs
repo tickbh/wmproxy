@@ -11,7 +11,7 @@
 // Created Date: 2023/09/22 10:30:10
 
 
-use webparse::{Buf, http2::frame::{read_u24, encode_u24}, BufMut, Binary};
+use webparse::{Buf, http2::frame::{read_u24, encode_u24}, BufMut};
 
 use crate::{ProxyResult, MappingConfig};
 
@@ -145,7 +145,7 @@ impl ProtFrame {
         Self::Close(ProtClose::new_by_reason(sock_map, reason))
     }
 
-    pub fn new_data(sock_map: u32, data: Binary) -> Self {
+    pub fn new_data(sock_map: u32, data: Vec<u8>) -> Self {
         Self::Data(ProtData::new(sock_map, data))
     }
 

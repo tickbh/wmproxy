@@ -10,7 +10,7 @@
 // -----
 // Created Date: 2023/09/22 10:28:41
 
-use webparse::{Binary, Buf, BufMut, Serialize};
+use webparse::{Buf, BufMut, Serialize};
 
 use crate::{
     prot::{ProtFlag, ProtKind},
@@ -23,32 +23,33 @@ use super::ProtFrameHeader;
 #[derive(Debug)]
 pub struct ProtData {
     sock_map: u32,
-    data: Binary,
+    data: Vec<u8>,
 }
 
 impl ProtData {
-    pub fn new(sock_map: u32, data: Binary) -> ProtData {
+    pub fn new(sock_map: u32, data: Vec<u8>) -> ProtData {
         Self { sock_map, data }
     }
 
-    pub fn parse<T: Buf>(header: ProtFrameHeader, buf: T) -> ProxyResult<ProtData> {
+    pub fn parse<T: Buf>(header: ProtFrameHeader, mut buf: T) -> ProxyResult<ProtData> {
+        log::trace!("代理中心: 解码Data数据长度={}", header.length);
         Ok(Self {
             sock_map: header.sock_map(),
-            data: buf.into_binary(),
+            data: buf.advance_chunk(header.length as usize).to_vec(),
         })
     }
 
     pub fn encode<B: Buf + BufMut>(mut self, buf: &mut B) -> ProxyResult<usize> {
-        log::trace!("encoding Data; len={}", self.data.remaining());
+        log::trace!("代理中心: 编码Data数据长度={}", self.data.len());
         let mut head = ProtFrameHeader::new(ProtKind::Data, ProtFlag::zero(), self.sock_map);
-        head.length = self.data.remaining() as u32;
+        head.length = self.data.len() as u32;
         let mut size = 0;
         size += head.encode(buf)?;
         size += self.data.serialize(buf)?;
         Ok(size)
     }
 
-    pub fn data(&self) -> &Binary {
+    pub fn data(&self) -> &Vec<u8> {
         &self.data
     }
 

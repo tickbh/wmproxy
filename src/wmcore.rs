@@ -35,7 +35,7 @@ use crate::{
     proxy::ProxyServer,
     reverse::{HttpConfig, ServerConfig, StreamConfig, StreamUdp},
     ActiveHealth, CenterClient, CenterServer, HealthCheck, OneHealth,
-    ProxyResult,
+    ProxyResult, Helper,
 };
 
 pub struct WMCore {
@@ -139,7 +139,7 @@ impl WMCore {
 
     async fn tcp_listen_work(listen: &Option<TcpListener>) -> Option<(TcpStream, SocketAddr)> {
         if listen.is_some() {
-            match listen.as_ref().unwrap().accept().await {
+            match Helper::tcp_accept(listen.as_ref().unwrap()).await {
                 Ok((tcp, addr)) => Some((tcp, addr)),
                 Err(_e) => None,
             }
@@ -155,7 +155,7 @@ impl WMCore {
     ) -> (io::Result<(TcpStream, SocketAddr)>, usize) {
         if !listens.is_empty() {
             let (conn, index, _) =
-                select_all(listens.iter_mut().map(|listener| listener.accept().boxed())).await;
+                select_all(listens.iter_mut().map(|listener| Helper::tcp_accept(listener).boxed())).await;
             (conn, index)
         } else {
             let pend = std::future::pending();
@@ -361,7 +361,7 @@ impl WMCore {
         domain: Option<String>,
         tls_client: Option<Arc<rustls::ClientConfig>>,
         mut inbound: T,
-        server: SocketAddr,
+        server: String,
     ) -> ProxyResult<()>
     where
         T: AsyncRead + AsyncWrite + Unpin,

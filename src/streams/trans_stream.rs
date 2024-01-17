@@ -81,7 +81,7 @@ where
         loop {
             // 有剩余数据，优先转化成Prot，因为数据可能从外部直接带入
             if self.read.has_remaining() {
-                link.push_back(ProtFrame::new_data(self.id, self.read.copy_to_binary()));
+                link.push_back(ProtFrame::new_data(self.id, self.read.chunk().to_vec()));
                 self.read.clear();
             }
 
@@ -102,7 +102,7 @@ where
                                 self.write.clear();
                             }
                         }
-                        Err(_) => todo!(),
+                        Err(e) => return Err(e),
                     }
                 }
                 r = self.out_receiver.recv() => {
@@ -112,7 +112,7 @@ where
                         } else if v.is_data() {
                             match v {
                                 ProtFrame::Data(d) => {
-                                    self.write.put_slice(&d.data().chunk());
+                                    self.write.put_slice(&d.data());
                                 }
                                 _ => unreachable!(),
                             }

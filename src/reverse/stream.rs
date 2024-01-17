@@ -202,11 +202,9 @@ impl StreamUdp {
                 return Ok(());
             }
         };
-        // udp.connect(remote_addr).await?;
         let mut cache = vec![0u8; 9096];
         let mut send_cache = LinkedList::<Vec<u8>>::new();
         send_cache.push_back(data);
-        // let mut delay = tokio::time::timeout(duration, future)
         loop {
             let mut interest = Interest::READABLE;
             if !send_cache.is_empty() {
@@ -250,8 +248,6 @@ impl StreamUdp {
                 }
             }
         }
-
-        Ok(())
     }
 
     pub async fn process_data(&mut self, data: Vec<u8>, addr: SocketAddr) -> ProxyResult<()> {

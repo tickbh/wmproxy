@@ -13,15 +13,14 @@
 use std::{
     collections::{HashMap, HashSet},
     fs::File,
-    io::{self, BufReader, Read},
-    net::{IpAddr, SocketAddr},
-    path::PathBuf,
+    io::{self, BufReader},
+    net::{IpAddr, Ipv4Addr, SocketAddr},
     process,
     sync::Arc,
     time::Duration,
 };
 
-use commander::Commander;
+use bpaf::*;
 use log::LevelFilter;
 use rustls::{Certificate, ClientConfig, PrivateKey};
 
@@ -75,7 +74,7 @@ impl Builder {
         })
     }
 
-    pub fn server(self, addr: Option<SocketAddr>) -> Builder {
+    pub fn server(self, addr: Option<String>) -> Builder {
         self.and_then(|mut proxy| {
             proxy.server = addr;
             Ok(proxy)
@@ -204,30 +203,53 @@ fn default_bool_true() -> bool {
 
 /// 代理类, 一个代理类启动一种类型的代理
 #[serde_as]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Bpaf)]
 pub struct ProxyConfig {
+    /// 代理绑定端口地址
+    #[bpaf(
+        fallback(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8090)),
+        display_fallback,
+        short('b'),
+        long
+    )]
     #[serde(default = "default_bind_addr")]
     pub(crate) bind_addr: SocketAddr,
+
+    /// 代理种类, 如http https socks5
+    #[bpaf(fallback(Flag::default()))]
     #[serde_as(as = "DisplayFromStr")]
     #[serde(default)]
     pub(crate) flag: Flag,
+    /// 启动程序类型
+    #[bpaf(fallback("client".to_string()))]
     #[serde(default)]
     pub(crate) mode: String,
-    pub(crate) server: Option<SocketAddr>,
+
+    /// 连接代理服务端地址
+    #[bpaf(short('S'), long("server"))]
+    pub(crate) server: Option<String>,
     /// 用于socks验证及中心服务器验证
+    #[bpaf(long("user"))]
     pub(crate) username: Option<String>,
     /// 用于socks验证及中心服务器验证
+    #[bpaf(long("pass"))]
     pub(crate) password: Option<String>,
+    /// udp的绑定地址
     pub(crate) udp_bind: Option<IpAddr>,
-
+    /// 内网http的映射地址
     pub(crate) map_http_bind: Option<SocketAddr>,
+    /// 内网https的映射地址
     pub(crate) map_https_bind: Option<SocketAddr>,
+    /// 内网tcp的映射地址
     pub(crate) map_tcp_bind: Option<SocketAddr>,
+    /// 内网代理的映射地址
     pub(crate) map_proxy_bind: Option<SocketAddr>,
+    /// 内网映射的证书cert
     pub(crate) map_cert: Option<String>,
+    /// 内网映射的证书key
     pub(crate) map_key: Option<String>,
 
-    //// 是否启用协议转发
+    /// 是否启用协议转发
     #[serde(default = "default_bool_true")]
     pub(crate) center: bool,
     /// 连接服务端是否启用tls
@@ -252,7 +274,6 @@ pub struct ProxyConfig {
 pub fn default_control_port() -> SocketAddr {
     "127.0.0.1:8837".parse().unwrap()
 }
-
 
 #[serde_as]
 /// 代理类, 一个代理类启动一种类型的代理
@@ -572,13 +593,13 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
                 match center.connect().await {
                     Ok(true) => (),
                     Ok(false) => {
-                        log::error!("未能正确连上服务端:{:?}", self.server.unwrap());
+                        log::error!("未能正确连上服务端:{:?}", self.server.clone().unwrap());
                         process::exit(1);
                     }
                     Err(err) => {
                         log::error!(
                             "未能正确连上服务端:{:?}, 发生错误:{:?}",
-                            self.server.unwrap(),
+                            self.server.clone().unwrap(),
                             err
                         );
                         process::exit(1);
@@ -633,11 +654,16 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
             log::info!("内网穿透，tcp绑定：{:?}，提供tcp内网功能。", ls);
             proxy_listener = Some(Helper::bind(ls).await?);
         };
-        
-        Ok((http_listener, https_listener, tcp_listener, proxy_listener, map_accept))
+
+        Ok((
+            http_listener,
+            https_listener,
+            tcp_listener,
+            proxy_listener,
+            map_accept,
+        ))
     }
 }
-
 
 impl ConfigOption {
     pub fn new_by_proxy(proxy: ProxyConfig) -> Self {
@@ -646,126 +672,9 @@ impl ConfigOption {
         config.disable_control = true;
         config
     }
-    
-    pub fn parse_env() -> ProxyResult<ConfigOption> {
-        let command = Commander::new()
-            .version(&env!("CARGO_PKG_VERSION").to_string())
-            .usage("-b 127.0.0.1:8090")
-            .usage_desc("wmproxy -b 127.0.0.1:8090")
-            .option_list(
-                "-f, --flag [value]",
-                "可兼容的方法, 如http https socks5",
-                None,
-            )
-            .option_str(
-                "-m, --mode value",
-                "client.表示客户端,server 表示服务端,all表示服务端及客户端",
-                None,
-            )
-            .option_str("-c, --config", "配置文件", None)
-            .option_str("--control value", "控制的监听地址", Some("127.0.0.1:8837".to_string()))
-            .option_str("--http value", "内网穿透的http代理监听地址", None)
-            .option_str("--https value", "内网穿透的https代理监听地址", None)
-            .option_str("--tcp value", "内网穿透的tcp代理监听地址", None)
-            // .option("--proxy value", "是否只接收来自代理的连接", Some(false))
-            .option("--center value", "是否启用协议转发", Some(false))
-            .option("--tc value", "接收客户端是否加密", Some(false))
-            .option("--ts value", "连接服务端是否加密", Some(false))
-            .option_str("--cert value", "证书的公钥", None)
-            .option_str("--key value", "证书的私钥", None)
-            .option_str("--domain value", "证书的域名", None)
-            .option_str(
-                "-b, --bind value",
-                "监听地址及端口",
-                Some("127.0.0.1:8090".to_string()),
-            )
-            .option_str("--user value", "auth的用户名", None)
-            .option_str("-S value", "父级的监听端口地址,如127.0.0.1:8091", None)
-            .option_str("--pass value", "auth的密码", None)
-            .option_str(
-                "--udp value",
-                "udp的监听地址,如127.0.0.1,socks5的udp协议用",
-                None,
-            )
-            .parse_env_or_exit();
-
-        if let Some(config) = command.get_str("c") {
-            let path = PathBuf::from(&config);
-            let mut file = File::open(config)?;
-            let mut contents = String::new();
-            file.read_to_string(&mut contents)?;
-            let extension = path.extension().unwrap().to_string_lossy().to_string();
-            let mut option = match &*extension {
-                "yaml" => serde_yaml::from_str::<ConfigOption>(&contents).map_err(|e| {
-                    println!("parse error msg = {:?}", e);
-                    io::Error::new(io::ErrorKind::Other, "parse yaml error")
-                })?,
-                "toml" => toml::from_str::<ConfigOption>(&contents).map_err(|e| {
-                    println!("parse error msg = {:?}", e);
-                    io::Error::new(io::ErrorKind::Other, "parse toml error")
-                })?,
-                _ => {
-                    let e = io::Error::new(io::ErrorKind::Other, "unknow format error");
-                    return Err(e.into());
-                }
-            };
-
-            option.after_load_option()?;
-            return Ok(option);
-        }
-
-        let listen_host = command.get_str("b").unwrap();
-        let addr = listen_host.parse().map_err(|_| ProxyError::extension("监听地址-b参数出错"))?;
-        let mut builder = ProxyConfig::builder().bind_addr(addr);
-
-        builder = builder.flag(Flag::HTTP | Flag::HTTPS | Flag::SOCKS5);
-        builder = builder.mode(command.get_str("m").unwrap_or(String::new()));
-        builder = builder.username(command.get_str("user"));
-        builder = builder.password(command.get_str("pass"));
-        builder = builder.tc(command.get("tc").unwrap_or(false));
-        builder = builder.ts(command.get("ts").unwrap_or(false));
-        builder = builder.center(command.get("center").unwrap_or(false));
-        builder = builder.domain(command.get_str("domain"));
-        builder = builder.cert(command.get_str("cert"));
-        builder = builder.key(command.get_str("key"));
-        if let Some(udp) = command.get_str("udp") {
-            builder = builder.udp_bind(udp.parse::<IpAddr>().ok());
-        };
-        if let Some(http) = command.get_str("http") {
-            builder = builder.map_http_bind(http.parse::<SocketAddr>().ok());
-        };
-        if let Some(https) = command.get_str("https") {
-            builder = builder.map_https_bind(https.parse::<SocketAddr>().ok());
-        };
-        if let Some(tcp) = command.get_str("tcp") {
-            builder = builder.map_tcp_bind(tcp.parse::<SocketAddr>().ok());
-        };
-        if let Some(proxy) = command.get_str("proxy") {
-            builder = builder.map_proxy_bind(proxy.parse::<SocketAddr>().ok());
-        };
-        if let Some(s) = command.get_str("S") {
-            builder = builder.server(s.parse::<SocketAddr>().ok());
-        };
-        
-        let crontrol = if let Some(control) = command.get_str("control") {
-            control.as_str().parse().map_err(|_| ProxyError::extension("控制台--control地址转化失败"))?
-        } else {
-            default_control_port()
-        };
-        log::debug!("启动默认信息，只开启代理信息");
-        Ok(ConfigOption {
-            proxy: Some(builder.inner?),
-            http: None,
-            stream: None,
-            control: crontrol,
-            disable_stdout: false,
-            disable_control: false,
-            default_level: None,
-        })
-    }
 
     pub fn is_empty_listen(&self) -> bool {
-        if self.http.is_some() || self.stream.is_some() || self.proxy.is_some()  {
+        if self.http.is_some() || self.stream.is_some() || self.proxy.is_some() {
             return false;
         }
         true
@@ -809,15 +718,15 @@ impl ConfigOption {
     pub fn get_health_check(&self) -> Vec<OneHealth> {
         let mut result = vec![];
         let mut already: HashSet<SocketAddr> = HashSet::new();
-        if let Some(proxy) = &self.proxy {
-            if let Some(server) = proxy.server {
-                result.push(OneHealth::new(
-                    server,
-                    String::new(),
-                    Duration::from_secs(5),
-                ));
-            }
-        }
+        // if let Some(proxy) = &self.proxy {
+        //     if let Some(server) = proxy.server {
+        //         result.push(OneHealth::new(
+        //             server,
+        //             String::new(),
+        //             Duration::from_secs(5),
+        //         ));
+        //     }
+        // }
 
         if let Some(http) = &self.http {
             Self::try_add_upstream(&mut result, &mut already, &http.upstream);

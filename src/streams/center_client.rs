@@ -12,7 +12,7 @@
 
 use std::sync::Arc;
 use std::time::Duration;
-use std::{collections::HashMap, io, net::SocketAddr};
+use std::{collections::HashMap, io};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::mpsc::Receiver;
 use tokio::{io::split, net::TcpStream, sync::mpsc::channel};
@@ -39,7 +39,7 @@ pub struct CenterClient {
     /// tls的客户端连接域名
     domain: Option<String>,
     /// 连接中心服务器的地址
-    server_addr: SocketAddr,
+    server_addr: String,
     /// 内网映射的相关消息
     mappings: Vec<MappingConfig>,
 
@@ -64,7 +64,7 @@ pub struct CenterClient {
 impl CenterClient {
     pub fn new(
         option: ProxyConfig,
-        server_addr: SocketAddr,
+        server_addr: String,
         tls_client: Option<Arc<rustls::ClientConfig>>,
         domain: Option<String>,
         mappings: Vec<MappingConfig>,
@@ -91,7 +91,7 @@ impl CenterClient {
 
     async fn inner_connect(
         tls_client: Option<Arc<rustls::ClientConfig>>,
-        server_addr: SocketAddr,
+        server_addr: String,
         domain: Option<String>,
     ) -> ProxyResult<(Option<TcpStream>, Option<TlsStream<TcpStream>>)> {
         if tls_client.is_some() {
@@ -113,7 +113,7 @@ impl CenterClient {
     pub async fn connect(&mut self) -> ProxyResult<bool> {
         let (stream, tls_stream) = Self::inner_connect(
             self.tls_client.clone(),
-            self.server_addr,
+            self.server_addr.clone(),
             self.domain.clone(),
         )
         .await?;
