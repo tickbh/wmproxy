@@ -339,7 +339,6 @@ impl HttpConfig {
                     }
                 }
             } else {
-                log::trace!("建立新连接http请求数据");
                 let (res, sender, receiver) = l.deal_request(req).await?;
                 if sender.is_some() && receiver.is_some() {
                     cache.insert(clone, (sender.unwrap(), receiver.unwrap()));

@@ -20,7 +20,7 @@ use wenmeng::{Body, Client, ProtError, ProtResult};
 
 use crate::{ConfigHeader, FileServer, HealthCheck, Helper};
 
-use super::{common::CommonConfig, ReverseHelper, UpstreamConfig, TryPathsConfig};
+use super::{common::CommonConfig, ReverseHelper, TryPathsConfig, UpstreamConfig};
 
 #[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -49,7 +49,6 @@ pub struct LocationConfig {
     #[serde(flatten)]
     #[serde(default = "CommonConfig::new")]
     pub comm: CommonConfig,
-    
 }
 
 impl Hash for LocationConfig {
@@ -67,15 +66,27 @@ impl Hash for LocationConfig {
 
 impl PartialEq for LocationConfig {
     fn eq(&self, other: &LocationConfig) -> bool {
-        self.rule == other.rule
-            && self.up_name == other.up_name
-            && self.method == other.method
+        self.rule == other.rule && self.up_name == other.up_name && self.method == other.method
     }
 }
 
 impl Eq for LocationConfig {}
 
 impl LocationConfig {
+    pub fn new() -> Self {
+        Self {
+            rule: "/".to_string(),
+            file_server: None,
+            headers: vec![],
+            method: None,
+            up_name: None,
+            is_ws: false,
+            root: None,
+            upstream: vec![],
+            try_paths: None,
+            comm: CommonConfig::new(),
+        }
+    }
     pub fn clone_only_hash(&self) -> LocationConfig {
         LocationConfig {
             rule: self.rule.clone(),
@@ -199,7 +210,7 @@ impl LocationConfig {
     pub fn get_log_names(&self, names: &mut HashMap<String, String>) {
         self.comm.get_log_names(names);
     }
-    
+
     pub fn get_upstream_addr(&self) -> Option<SocketAddr> {
         let mut name = String::new();
         if let Some(r) = &self.comm.proxy_url {
@@ -207,14 +218,14 @@ impl LocationConfig {
         }
         for stream in &self.upstream {
             if stream.name == name {
-                return stream.get_server_addr()
+                return stream.get_server_addr();
             } else if name == "" {
-                return stream.get_server_addr()
+                return stream.get_server_addr();
             }
         }
         return None;
     }
-    
+
     pub fn get_reverse_url(&self) -> ProtResult<(Url, String)> {
         if let Some(addr) = self.get_upstream_addr() {
             if let Some(r) = &self.comm.proxy_url {

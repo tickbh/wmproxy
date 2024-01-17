@@ -56,6 +56,20 @@ pub struct ServerConfig {
 }
 
 impl ServerConfig {
+    pub fn new(bind_addr: SocketAddr) -> Self {
+        ServerConfig {
+            bind_addr,
+            up_name: default_up_name(),
+            root: None,
+            cert: None,
+            key: None,
+            bind_mode: default_bind_mode(),
+            headers: vec![],
+            location: vec![],
+            upstream: vec![],
+            comm: CommonConfig::new(),
+        }
+    }
     /// 将配置参数提前共享给子级
     pub fn copy_to_child(&mut self) {
         for l in &mut self.location {
