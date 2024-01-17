@@ -10,11 +10,11 @@
 // -----
 // Created Date: 2023/09/27 11:26:50
 
-use std::{fmt::Debug, io::Read, net::SocketAddr, sync::Arc};
+use std::{fmt::Debug, net::SocketAddr, sync::Arc};
 
 use async_trait::async_trait;
 use tokio::{
-    io::{AsyncRead, AsyncReadExt, AsyncWrite},
+    io::{AsyncRead, AsyncWrite},
     sync::{
         mpsc::{channel, Receiver, Sender},
         RwLock,

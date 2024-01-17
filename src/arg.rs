@@ -12,7 +12,7 @@
 
 // use std::net::SocketAddr;
 
-use std::{net::{SocketAddr, SocketAddrV4, Ipv4Addr, IpAddr}, path::PathBuf, fs::File, io::{Read, self}};
+use std::{net::{SocketAddr, Ipv4Addr, IpAddr}, path::PathBuf, fs::File, io::{Read, self}};
 
 use bpaf::*;
 use log::LevelFilter;
@@ -44,14 +44,13 @@ struct Config {
 }
 
 #[derive(Debug, Clone)]
-pub enum Command {
+enum Command {
     Proxy(ProxyConfig),
     Config(Config),
 }
 
 
 fn parse_command() -> impl Parser<(Command, Shared)> {
-    
     let action = proxy_config().map(Command::Proxy);
     let action = construct!(action, shared()).to_options().command("proxy");
     let config = config().map(Command::Config);

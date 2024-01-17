@@ -17,7 +17,7 @@ use std::{
 use tokio_util::sync::PollSender;
 
 use tokio::{io::{AsyncRead, AsyncWrite}, sync::mpsc::{Sender, Receiver}};
-use webparse::{Binary, BinaryMut, Buf};
+use webparse::{BinaryMut, Buf};
 
 use crate::prot::ProtData;
 use crate::{prot::ProtFrame};

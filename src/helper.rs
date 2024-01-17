@@ -14,7 +14,7 @@ use std::{
     cell::RefCell,
     collections::HashMap,
     io,
-    net::ToSocketAddrs,
+    net::{ToSocketAddrs, SocketAddr},
     str::FromStr,
     sync::{Arc, Mutex},
 };
@@ -32,7 +32,7 @@ use log4rs::{
 };
 use regex::Regex;
 use socket2::{Domain, Socket, Type};
-use tokio::net::{TcpListener, UdpSocket};
+use tokio::net::{TcpListener, UdpSocket, TcpStream};
 use webparse::{http2::frame::read_u24, BinaryMut, Buf, Request, Response, Serialize};
 use wenmeng::{Body, HeaderHelper};
 
@@ -281,11 +281,6 @@ impl Helper {
     ) {
         if let Some(access) = access {
             if let Some(formats) = log_formats.get(&access.format) {
-                // log::error!(target: &access.name, "this is error");
-                // log::warn!(target: &access.name, "this is warn");
-                // log::info!(target: &access.name, "this is info");
-                // log::debug!(target: &access.name, "this is debug");
-                // log::trace!(target: &access.name, "this is trace");
                 // 需要先判断是否该日志已开启, 如果未开启直接写入将浪费性能
                 if log_enabled!(target: &access.name, access.level) {
                     // 将format转化成pattern会有相当的性能损失, 此处缓存pattern结果
@@ -402,6 +397,17 @@ impl Helper {
                 }
             }
         }
+    }
+
+    
+    pub async fn tcp_accept(listener: &TcpListener) -> io::Result<(TcpStream, SocketAddr)> {
+        let (s, a) = listener.accept().await?;
+        if let Ok(l) = listener.local_addr() {
+            log::trace!("收到客户端建立连接{a} -> {l}");
+        } else {
+            log::trace!("收到客户端建立连接{a} -> 未获取本地地址");
+        }
+        Ok((s, a))
     }
 
     // pub async fn udp_recv_from(socket: &UdpSocket, buf: &mut [u8]) -> io::Result<usize> {

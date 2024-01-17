@@ -309,9 +309,9 @@ impl HttpConfig {
                     }
                 }
             }
-            return Ok(Response::builder()
+            return Ok(Response::text()
                 .status(try_paths.fail_status)
-                .body("not valid to try")
+                .body("未发现合适的Try进行服务")
                 .unwrap()
                 .into_type());
         } else {
@@ -320,27 +320,26 @@ impl HttpConfig {
             if cache.contains_key(&clone) {
                 let mut cache_client = cache.remove(&clone).unwrap();
                 if !cache_client.0.is_closed() {
-                    println!("do req data by cache");
                     let _send = cache_client.0.send(req.replace_clone(Body::empty())).await;
                     match cache_client.1.recv().await {
                         Some(res) => {
-                            if res.is_ok() {
-                                log::trace!("cache client receive response");
+                            if let Ok(r) = &res {
+                                log::trace!("复用连接收到Response {}", r.status());
                                 cache.insert(clone, cache_client);
                             }
                             return res;
                         }
                         None => {
-                            log::trace!("cache client close response");
+                            log::trace!("复用连接收到空消息,关闭复用连接");
                             return Ok(Response::status503()
-                                .body("already lose connection")
+                                .body("意外的服务端关闭连接")
                                 .unwrap()
                                 .into_type());
                         }
                     }
                 }
             } else {
-                log::trace!("do req data by new");
+                log::trace!("建立新连接http请求数据");
                 let (res, sender, receiver) = l.deal_request(req).await?;
                 if sender.is_some() && receiver.is_some() {
                     cache.insert(clone, (sender.unwrap(), receiver.unwrap()));

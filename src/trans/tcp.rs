@@ -13,7 +13,7 @@
 use std::sync::Arc;
 
 use tokio::{
-    io::{AsyncRead, AsyncReadExt, AsyncWrite},
+    io::{AsyncRead, AsyncWrite},
     sync::{mpsc::{Sender, channel}, RwLock},
 };
 

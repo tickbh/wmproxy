@@ -22,6 +22,7 @@ use super::ProtFrameHeader;
 /// 新的Socket连接请求, 
 /// 接收方创建一个虚拟链接来对应该Socket的读取写入
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct ProtCreate {
     sock_map: u32,
     mode: u8,

@@ -10,7 +10,7 @@
 // -----
 // Created Date: 2023/09/22 10:28:41
 
-use webparse::{Binary, Buf, BufMut, Serialize};
+use webparse::{Buf, BufMut, Serialize};
 
 use crate::{
     prot::{ProtFlag, ProtKind},
@@ -32,7 +32,7 @@ impl ProtData {
     }
 
     pub fn parse<T: Buf>(header: ProtFrameHeader, mut buf: T) -> ProxyResult<ProtData> {
-        log::trace!("decoding Data; len={} buf size = {}", header.length, buf.remaining());
+        log::trace!("代理中心: 解码Data数据长度={}", header.length);
         Ok(Self {
             sock_map: header.sock_map(),
             data: buf.advance_chunk(header.length as usize).to_vec(),
@@ -40,7 +40,7 @@ impl ProtData {
     }
 
     pub fn encode<B: Buf + BufMut>(mut self, buf: &mut B) -> ProxyResult<usize> {
-        log::trace!("encoding Data; len={}", self.data.len());
+        log::trace!("代理中心: 编码Data数据长度={}", self.data.len());
         let mut head = ProtFrameHeader::new(ProtKind::Data, ProtFlag::zero(), self.sock_map);
         head.length = self.data.len() as u32;
         let mut size = 0;

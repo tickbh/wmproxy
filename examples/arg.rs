@@ -107,10 +107,6 @@ enum Command {
     Build(Build),
 }
 
-fn shared() -> impl Parser<Vec<String>> {
-    positional("ARG").many()
-}
-
 fn speed() -> impl Parser<f64> {
     long("speed")
         .help("Speed in KPH")
@@ -119,7 +115,7 @@ fn speed() -> impl Parser<f64> {
 
 fn parse_command() -> impl Parser<(Command, f64)> {
     let action = action().map(Command::Action);
-    let val = all().command("all");
+    let _val = all().command("all");
     let action = construct!(action, speed()).to_options().command("action");
     let build = build().map(Command::Build);
     let build = construct!(build, speed()).to_options().command("");

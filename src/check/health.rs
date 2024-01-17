@@ -215,16 +215,18 @@ impl HealthCheck {
             if Self::is_fall_down(&addr) {
                 last_err = Some(io::Error::new(io::ErrorKind::Other, "health check falldown"));
             } else {
-                log::trace!("connect addr = {:?}", addr);
+                log::trace!("尝试与远端{addr}建立连接");
                 match TcpStream::connect(&addr).await {
                     Ok(stream) => 
                     {
-                        log::trace!("success connect addr = {:?}", addr);
+                        if let Ok(local) = stream.local_addr() {
+                            log::trace!("成功与远端{addr}建立连接:{local}->{addr}");
+                        }
                         Self::add_rise_up(addr);
                         return Ok(stream)
                     },
                     Err(e) => {
-                        log::trace!("connect failed addr = {:?}", e);
+                        log::trace!("与远端{addr}建立连接失败, 原因: {:?}", e);
                         Self::add_fall_down(addr);
                         last_err = Some(e)
                     },

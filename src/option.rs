@@ -13,16 +13,14 @@
 use std::{
     collections::{HashMap, HashSet},
     fs::File,
-    io::{self, BufReader, Read},
+    io::{self, BufReader},
     net::{IpAddr, Ipv4Addr, SocketAddr},
-    path::PathBuf,
     process,
     sync::Arc,
     time::Duration,
 };
 
 use bpaf::*;
-use commander::Commander;
 use log::LevelFilter;
 use rustls::{Certificate, ClientConfig, PrivateKey};
 
