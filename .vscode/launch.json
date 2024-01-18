@@ -100,6 +100,24 @@
         {
             "type": "lldb",
             "request": "launch",
+            "name": "file-server",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=wmproxy",
+                    "--package=wmproxy"
+                ],
+                "filter": {
+                    "name": "wmproxy",
+                    "kind": "bin"
+                }
+            },
+            "args": ["file-server", "-l", ":8869", "--access-log", "logs/cctv.log trace"],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
             "name": "client",
             "cargo": {
                 "args": [

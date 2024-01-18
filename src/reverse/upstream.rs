@@ -1,27 +1,23 @@
 // Copyright 2022 - 2023 Wenmeng See the COPYRIGHT
 // file at the top-level directory of this distribution.
-// 
+//
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
-// 
+//
 // Author: tickbh
 // -----
 // Created Date: 2023/10/20 10:19:47
 
-
-
 use std::{net::SocketAddr, time::Duration};
 
 use rand::Rng;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 use serde_with::DurationSeconds;
 
-
-use crate::{HealthCheck};
-
+use crate::HealthCheck;
 
 fn default_weight() -> u16 {
     100
@@ -72,6 +68,13 @@ pub struct UpstreamConfig {
 }
 
 impl UpstreamConfig {
+    pub fn new_single(name: String, to: SocketAddr) -> Self {
+        Self {
+            name,
+            bind: String::new(),
+            server: vec![SingleStreamConfig::new_simple(to)],
+        }
+    }
     pub fn get_server_addr(&self) -> Option<SocketAddr> {
         if self.server.is_empty() {
             return None;
@@ -81,7 +84,12 @@ impl UpstreamConfig {
         if sum != 0 {
             let mut random_weight = rng.gen_range(0..sum);
             for server in &self.server {
-                if !HealthCheck::check_fall_down(&server.addr, &server.fail_timeout, &server.fall_times, &server.rise_times) {
+                if !HealthCheck::check_fall_down(
+                    &server.addr,
+                    &server.fail_timeout,
+                    &server.fall_times,
+                    &server.rise_times,
+                ) {
                     if random_weight <= server.weight {
                         return Some(server.addr.clone());
                     }
@@ -98,7 +106,6 @@ impl UpstreamConfig {
             }
         }
         return None;
-        
     }
 
     pub fn calc_sum_weight(&self) -> (u16, u16) {
@@ -111,5 +118,18 @@ impl UpstreamConfig {
             sum_all += server.weight;
         }
         return (sum, sum_all);
+    }
+}
+
+impl SingleStreamConfig {
+    pub fn new_simple(addr: SocketAddr) -> Self {
+        Self {
+            addr,
+            weight: 100,
+            fail_timeout: Duration::from_secs(60),
+            fall_times: 3,
+            rise_times: 2,
+            status: None,
+        }
     }
 }

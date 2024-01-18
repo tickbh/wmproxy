@@ -74,12 +74,12 @@ try_paths = "{path}/ '/ro(\\w+)/(.*) {path} /ro$1/Cargo.toml' /root/README.md"
 [[http.server.location]]
 rule = "/ws"
 is_ws = true
-reverse_proxy = "http://ws"
+proxy_url = "http://ws"
 headers = ["+ aaa bbb"]
 
 [[http.server.location]]
 rule = "/"
-reverse_proxy = "http://server"
+proxy_url = "http://server"
 headers = ["+ aaa bbb"]
 
 # IP的四层协议处理

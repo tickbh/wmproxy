@@ -35,12 +35,12 @@ use tokio::{
 use tokio_rustls::TlsAcceptor;
 use webparse::{Request, Response};
 use wenmeng::{
-    Body, Middleware, HttpTrait, ProtError, ProtResult, RecvRequest, RecvResponse, Server,
+    Body, HttpTrait, Middleware, ProtError, ProtResult, RecvRequest, RecvResponse, Server,
 };
 
 use super::{
-    common::CommonConfig, limit_req::LimitReqZone, LimitReqMiddleware, LocationConfig,
-    ServerConfig, UpstreamConfig, ws::ServerWsOperate,
+    common::CommonConfig, limit_req::LimitReqZone, ws::ServerWsOperate, LimitReqMiddleware,
+    LocationConfig, ServerConfig, UpstreamConfig,
 };
 use async_recursion::async_recursion;
 
@@ -112,6 +112,9 @@ impl HttpConfig {
     }
 
     pub fn after_load_option(&mut self) -> ProtResult<()> {
+        if !self.comm.log_format.contains_key(&"main".to_string()) {
+            self.comm.log_format.insert("main".to_string(), "{d(%Y-%m-%d %H:%M:%S)} {client_ip} {l} {url} path:{path} query:{query} host:{host} status: {status} {up_status} referer: {referer} user_agent: {user_agent} cookie: {cookie}".to_string());
+        }
         self.copy_to_child();
         for (k, zone) in &self.limit_req_zone {
             LimitReqData::cache(k.to_string(), zone.limit, zone.rate.nums, zone.rate.per)?;
@@ -252,7 +255,6 @@ impl HttpConfig {
                 .into_type());
         }
 
-
         let l = l.unwrap();
         if let Some(limit_req) = &l.comm.limit_req {
             if let Some(res) = LimitReqMiddleware::new(limit_req.clone())
@@ -295,14 +297,8 @@ impl HttpConfig {
                 let new_path = Helper::format_req_may_regex(req, &**val);
                 // 重写path好方便后续处理无感
                 req.set_path(new_path);
-                if let Ok(res) = Self::deal_match_location(
-                    req,
-                    cache,
-                    server.clone(),
-                    deals,
-                    try_deals,
-                )
-                .await
+                if let Ok(res) =
+                    Self::deal_match_location(req, cache, server.clone(), deals, try_deals).await
                 {
                     if !res.status().is_client_error() && !res.status().is_server_error() {
                         return Ok(res);

@@ -10,10 +10,7 @@
 // -----
 // Created Date: 2023/12/04 10:44:24
 
-use std::{str::FromStr, io, fmt::Display};
-
-
-
+use std::{fmt::Display, io, str::FromStr};
 
 use crate::Helper;
 
@@ -93,12 +90,10 @@ impl FromStr for ConfigHeader {
     type Err = io::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-
-
         if s.len() == 0 {
             return Err(io::Error::new(io::ErrorKind::InvalidInput, ""));
         }
-        
+
         let vals = Helper::split_by_whitespace(s);
         let mut oper = HeaderOper::Replace;
         let mut is_proxy = false;
@@ -108,23 +103,20 @@ impl FromStr for ConfigHeader {
                     is_proxy = true;
                     oper = HeaderOper::from_str(vals[1])?;
                     (vals[2].to_string(), vals[3].to_string())
-                },
+                }
                 (3, "proxy") => {
                     is_proxy = true;
                     (vals[1].to_string(), vals[2].to_string())
-                },
+                }
                 (3, _) => {
                     oper = HeaderOper::from_str(vals[0])?;
                     (vals[1].to_string(), vals[2].to_string())
-                },
+                }
                 (2, "-") => {
-                    
                     oper = HeaderOper::from_str(vals[0])?;
                     (vals[1].to_string(), String::new())
-                },
-                (2, _) => {
-                    (vals[0].to_string(), vals[1].to_string())
-                },
+                }
+                (2, _) => (vals[0].to_string(), vals[1].to_string()),
                 _ => {
                     return Err(io::Error::new(io::ErrorKind::InvalidInput, ""));
                 }
@@ -140,16 +132,13 @@ impl Display for ConfigHeader {
         match (self.is_proxy, &self.oper) {
             (true, HeaderOper::Default) => {
                 f.write_fmt(format_args!("proxy {} {}", self.key, self.val))
-            },
-            (true, _) => {
-                f.write_fmt(format_args!("proxy {} {} {}", self.oper, self.key, self.val))
-            },
-            (_, HeaderOper::Default) => {
-                f.write_fmt(format_args!("{} {}", self.key, self.val))
-            },
-            (_, _) => {
-                f.write_fmt(format_args!("{} {} {}", self.oper, self.key, self.val))
-            },
+            }
+            (true, _) => f.write_fmt(format_args!(
+                "proxy {} {} {}",
+                self.oper, self.key, self.val
+            )),
+            (_, HeaderOper::Default) => f.write_fmt(format_args!("{} {}", self.key, self.val)),
+            (_, _) => f.write_fmt(format_args!("{} {} {}", self.oper, self.key, self.val)),
         }
     }
 }
@@ -158,19 +147,16 @@ impl Display for ConfigHeader {
 mod tests {
     use std::str::FromStr;
 
-    use crate::{HeaderOper};
-
+    use crate::HeaderOper;
 
     macro_rules! header_compare {
-        ($raw:expr, $proxy:expr, $oper:expr, $key:expr, $val:expr) => (
-            {
-                let config = crate::ConfigHeader::from_str($raw).unwrap();
-                assert_eq!(config.is_proxy, $proxy);
-                assert_eq!(config.oper, $oper);
-                assert_eq!(&config.key, $key);
-                assert_eq!(&config.val, $val);
-            }
-        )
+        ($raw:expr, $proxy:expr, $oper:expr, $key:expr, $val:expr) => {{
+            let config = crate::ConfigHeader::from_str($raw).unwrap();
+            assert_eq!(config.is_proxy, $proxy);
+            assert_eq!(config.oper, $oper);
+            assert_eq!(&config.key, $key);
+            assert_eq!(&config.val, $val);
+        }};
     }
 
     #[test]
@@ -181,9 +167,27 @@ mod tests {
         header_compare!("? key val", false, HeaderOper::Default, "key", "val");
         header_compare!("- key", false, HeaderOper::Del, "key", "");
         // 多空格
-        header_compare!("proxy     + key     val", true, HeaderOper::Add, "key", "val");
+        header_compare!(
+            "proxy     + key     val",
+            true,
+            HeaderOper::Add,
+            "key",
+            "val"
+        );
         // 包含引号
-        header_compare!("proxy + key     \"val 1\"", true, HeaderOper::Add, "key", "val 1");
-        header_compare!("proxy + key     'val 1'", true, HeaderOper::Add, "key", "val 1");
+        header_compare!(
+            "proxy + key     \"val 1\"",
+            true,
+            HeaderOper::Add,
+            "key",
+            "val 1"
+        );
+        header_compare!(
+            "proxy + key     'val 1'",
+            true,
+            HeaderOper::Add,
+            "key",
+            "val 1"
+        );
     }
 }

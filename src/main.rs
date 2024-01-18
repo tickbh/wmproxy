@@ -14,7 +14,7 @@
 use wmproxy::{ProxyResult, ControlServer, Helper, arg};
 
 async fn run_main() -> ProxyResult<()> {
-    let option = arg::parse_env()?;
+    let option = arg::parse_env().await?;
     Helper::try_init_log(&option);
     let control = ControlServer::new(option);
     control.start_serve().await?;

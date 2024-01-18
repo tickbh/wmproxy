@@ -67,7 +67,7 @@ impl ControlServer {
     }
 
     pub async fn do_restart_serve(&mut self) -> ProxyResult<()> {
-        let option = arg::parse_env()?;
+        let option = arg::parse_env().await?;
         Helper::try_init_log(&option);
         self.inner_start_server(option).await?;
         Ok(())
