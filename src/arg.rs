@@ -13,14 +13,11 @@
 // use std::net::SocketAddr;
 
 use std::process::id;
-use std::thread::sleep;
-use std::time::Duration;
 use std::{
     fmt::Display,
     fs::File,
     io::{self, Read, Write},
     net::{AddrParseError, IpAddr, Ipv4Addr, SocketAddr},
-    os::windows::process,
     path::PathBuf,
     process::exit,
     str::FromStr,
@@ -28,7 +25,6 @@ use std::{
 
 use bpaf::*;
 use log::{Level, LevelFilter};
-use tokio::task::spawn_blocking;
 use webparse::{Url, Request};
 use wenmeng::Client;
 
@@ -187,8 +183,7 @@ fn parse_command() -> impl Parser<(Command, Shared)> {
     let start = construct!(start, shared()).to_options().command("start");
     
     let stop = stop_config().map(Command::Stop);
-    let stop = construct!(stop, shared()).to_options().command("start");
-
+    let stop = construct!(stop, shared()).to_options().command("stop");
 
     let file_config = file_server_config().map(Command::FileServer);
     let file_config = construct!(file_config, shared())
@@ -236,8 +231,8 @@ fn kill_process_by_id(id: String) -> Option<i32> {
         return Some(-1);
     }
     let child = if cfg!(target_os = "windows") {
-        ::std::process::Command::new("kill")
-                .arg(id)
+        ::std::process::Command::new("taskkill")
+                .args(["/f".to_string(), "/pid".to_string(), id.clone()])
                 .output()
                 .expect("failed to execute process")
     } else {
