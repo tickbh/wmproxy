@@ -206,7 +206,7 @@ impl HttpConfig {
             }
             bind_port.insert(value.bind_addr.port());
 
-            log::info!("负载均衡：{:?}，提供http转发功能。", value.bind_addr);
+            log::info!("HTTP服务：{:?}，提供http处理及转发功能。", value.bind_addr);
             let listener = Helper::bind(value.bind_addr).await?;
             listeners.push(listener);
             tlss.push(is_ssl);

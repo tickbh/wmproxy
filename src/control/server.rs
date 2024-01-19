@@ -166,7 +166,13 @@ impl ControlServer {
                 return Ok(())
             }
             log::info!("控制端口绑定：{:?}，提供中控功能。", value.control);
-            TcpListener::bind(value.control).await?
+            match TcpListener::bind(value.control).await {
+                Ok(tcp) =>tcp,
+                Err(e) => {
+                    log::info!("控制端口绑定失败：{}，请配置不同端口。",value.control);
+                    return Err(e.into());
+                }
+            }
         };
 
         loop {

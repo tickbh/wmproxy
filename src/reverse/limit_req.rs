@@ -112,14 +112,14 @@ impl FromStr for LimitReqZone {
     type Err = ProxyError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let v = s.split(" ").collect::<Vec<&str>>();
+        let v = s.split_whitespace().collect::<Vec<&str>>();
         let key = v[0].to_string();
         let mut limit = 0;
         let mut rate = Rate::default();
         for idx in 1..v.len() {
             let key_value = v[idx].split("=").map(|k| k.trim()).collect::<Vec<&str>>();
             if key_value.len() <= 1 {
-                return Err(ProxyError::Extension("未知的LimitReq"));
+                return Err(ProxyError::Extension("LimitReq的输入异常,无法正确解析"));
             }
             match key_value[0] {
                 "limit" => {
@@ -131,7 +131,7 @@ impl FromStr for LimitReqZone {
                     rate = c.0;
                 }
                 _ => {
-                    return Err(ProxyError::Extension("未知的LimitReq"));
+                    return Err(ProxyError::Extension("LimitReq的输入异常,无法正确解析"));
                 }
             }
         }
@@ -156,7 +156,7 @@ impl FromStr for LimitReq {
         for idx in 0..v.len() {
             let key_value = v[idx].split("=").map(|k| k.trim()).collect::<Vec<&str>>();
             if key_value.len() <= 1 {
-                return Err(ProxyError::Extension("未知的LimitReq"));
+                return Err(ProxyError::Extension("LimitReq的输入异常,无法正确解析"));
             }
             match key_value[0] {
                 "zone" => {
@@ -168,7 +168,7 @@ impl FromStr for LimitReq {
                         .map_err(|_e| ProxyError::Extension("parse error"))?;
                 }
                 _ => {
-                    return Err(ProxyError::Extension("未知的LimitReq"));
+                    return Err(ProxyError::Extension("LimitReq的输入异常,无法正确解析"));
                 }
             }
         }

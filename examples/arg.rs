@@ -1,129 +1,43 @@
-
-// use bpaf::*;
-
-// #[derive(Debug, Clone, Bpaf)]
-// #[allow(dead_code)]
-// #[bpaf(options("hackerman"))]
-// struct All {
-//     #[bpaf(long, short, argument("CRATE"))]
-//     pub fff: String,
-//     /// aaaaaaaaaaaaadfwerwe
-//     #[bpaf(long, short, argument("SPEC fddsa"))]
-//     pub xxx: Option<String>,
-// }
-
-// #[derive(Debug, Clone, Bpaf)]
-// #[bpaf(options("hackerman"))]
-// pub enum Action {
-//     #[bpaf(command("explain"))]
-//     Explain {
-//         #[bpaf(long, short, argument("CRATE"))]
-//         krate: String,
-//         /// aaaaaaaaaaaaadfwerwe
-//         #[bpaf(long, short, argument("SPEC fddsa"))]
-//         feature: Option<String>,
-//         #[bpaf(external(version_if))]
-//         version: Option<String>,
-//     },
-//     #[bpaf(command("global"))]
-//     Global {
-//         #[bpaf(positional("CRATE"))]
-//         krate: String,
-//     }
-// }
-
-// fn feature_if() -> impl Parser<Option<String>> {
-//     // here feature starts as any string on a command line that does not start with a dash
-//     positional::<String>("FEATURE")
-//         // guard restricts it such that it can't be a valid version
-//         .guard(move |s| !is_version(s), "")
-//         // last two steps describe what to do with strings in this position but are actually
-//         // versions.
-//         // optional allows parser to represent an ignored value with None
-//         .optional()
-//         // and catch lets optional to handle parse failures coming from guard
-//         .catch()
-// }
-
-// fn version_if() -> impl Parser<Option<String>> {
-//     positional::<String>("VERSION")
-//         .guard(move |s| is_version(s), "")
-//         .optional()
-//         .catch()
-// }
-
-// fn is_version(v: &str) -> bool {
-//     v.chars().all(|c| c.is_numeric())
-// }
-
-
-// fn parse_command() -> impl Parser<(Action, All)> {
-//     let action = action().map(Action::Explain);
-//     let action = construct!(action, shared()).to_options().command("action");
-//     let build = build().map(Command::Build);
-//     let build = construct!(build, shared()).to_options().command("build");
-//     construct!([action, build])
-// }
-
-// fn main() {
-//     let action = action().map(Command::Action);
-//     let action = construct!(action, shared()).to_options().command("action");
-
-//     let vals = construct!(action(), all());
-//     println!("{:?}", action().fallback_to_usage().run());
-// }
-
-
-
-use bpaf::*;
+use bpaf::{short, Bpaf, Parser};
+use std::path::PathBuf;
 
 #[derive(Debug, Clone, Bpaf)]
+#[bpaf(options, version)]
 #[allow(dead_code)]
-#[bpaf(options("hackerman"))]
-struct All {
-    #[bpaf(long, short, argument("CRATE"))]
-    pub fff: String,
-    /// aaaaaaaaaaaaadfwerwe
-    #[bpaf(long, short, argument("SPEC fddsa"))]
-    pub xxx: Option<String>,
+struct Opts {
+    /// 是否开始调试模式
+    #[bpaf(short, long)]
+    debug: bool,
+    /// 这是一个注释,将被忽略
+    #[bpaf(external(verbose))]
+    verbose: usize,
+    /// 设置速度, 拥有默认速度
+    #[bpaf(argument("SPEED"), fallback(42.0), display_fallback)]
+    speed: f64,
+    /// 输出目录
+    output: PathBuf,
+
+    /// 将检测必须为正数
+    #[bpaf(guard(positive, "must be positive"), fallback(1))]
+    nb_cars: u32,
+    files_to_process: Vec<PathBuf>,
 }
 
-#[derive(Debug, Clone, Bpaf)]
-#[allow(dead_code)]
-struct Action {
-    verbose: bool,
-    number: u32,
+fn verbose() -> impl Parser<usize> {
+    // number of occurrences of the v/verbose flag capped at 3
+    short('v')
+        .long("verbose")
+        .help("启动verbose模式\n根据输入的v的个数来判定等级\n可以 -v -v -v 或者 -vvv")
+        .req_flag(())
+        .many()
+        .map(|xs| xs.len())
+        .guard(|&x| x <= 3, "最多仅能输入三个v")
 }
 
-#[derive(Debug, Clone, Bpaf)]
-#[allow(dead_code)]
-struct Build {
-    verbose: bool,
-}
-
-#[derive(Debug, Clone)]
-enum Command {
-    Action(Action),
-    Build(Build),
-}
-
-fn speed() -> impl Parser<f64> {
-    long("speed")
-        .help("Speed in KPH")
-        .argument::<f64>("SPEED")
-}
-
-fn parse_command() -> impl Parser<(Command, f64)> {
-    let action = action().map(Command::Action);
-    let _val = all().command("all");
-    let action = construct!(action, speed()).to_options().command("action");
-    let build = build().map(Command::Build);
-    let build = construct!(build, speed()).to_options().command("");
-    construct!([action, build])
+fn positive(input: &u32) -> bool {
+    *input > 1
 }
 
 fn main() {
-    let opts = parse_command().to_options().run();
-
-    println!("{:?}", opts);
+    println!("{:#?}", opts().run());
 }
