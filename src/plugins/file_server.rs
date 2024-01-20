@@ -10,19 +10,21 @@
 // -----
 // Created Date: 2023/11/10 02:21:22
 
+use chrono::{TimeZone, Utc};
 use serde_with::{serde_as, DisplayFromStr};
 use wenmeng::{Body, ProtResult, RecvResponse};
 // use crate::{plugins::calc_file_size};
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
+use std::time::SystemTime;
 use std::{collections::HashMap, io};
 use tokio::fs::File;
 use webparse::{BinaryMut, Buf, HeaderName, Request, Response};
 
-use crate::ConfigDuration;
 use crate::plugins::calc_file_size;
 use crate::reverse::CommonConfig;
+use crate::ConfigDuration;
 
 lazy_static! {
     static ref DEFAULT_MIMETYPE: HashMap<&'static str, &'static str> = {
@@ -241,14 +243,23 @@ impl FileServer {
         }
     }
 
-    pub fn after_file_response(&self, res: &mut RecvResponse) {
+    pub fn after_file_response(&self, res: &mut RecvResponse, last_modify: Option<SystemTime>) {
         if let Some(c) = &self.cache_time {
-            res.headers_mut().insert(HeaderName::CACHE_CONTROL, format!("max-age={}", c.0.as_secs()));
+            res.headers_mut().insert(
+                HeaderName::CACHE_CONTROL,
+                format!("max-age={}", c.0.as_secs()),
+            );
         }
         if self.disable_compress {
-            res
-                .headers_mut()
-                .insert(HeaderName::CONTENT_ENCODING, "");
+            res.headers_mut().insert(HeaderName::CONTENT_ENCODING, "");
+        }
+        res.headers_mut().insert("Date", Utc::now().to_rfc2822());
+        if let Some(last) = last_modify {
+            if let Ok(n) = last.duration_since(SystemTime::UNIX_EPOCH) {
+                if let Some(u) = Utc.timestamp_opt(n.as_secs() as i64, 0).latest() {
+                    res.headers_mut().insert("Last-Modified", u.to_rfc2822());
+                }
+            }
         }
     }
 
@@ -260,14 +271,13 @@ impl FileServer {
                 .version(req.version().clone())
                 .status(200);
             let mut response = builder
-                .header(
-                    HeaderName::CONTENT_TYPE,
-                    "text/plain; charset=utf-8",
-                )
+                .header(HeaderName::CONTENT_TYPE, "text/plain; charset=utf-8")
                 .header(HeaderName::CONTENT_LENGTH, robots.as_bytes().len())
                 .header(HeaderName::TRANSFER_ENCODING, "chunked")
-                .body(robots).unwrap().into_type();
-            self.after_file_response(&mut response);
+                .body(robots)
+                .unwrap()
+                .into_type();
+            self.after_file_response(&mut response, None);
             return Ok(response);
         }
         // 无效前缀，无法处理
@@ -413,7 +423,9 @@ impl FileServer {
                     // 如果预压缩文件存在
                     if new.exists() {
                         let file = File::open(new).await?;
-                        let data_size = file.metadata().await?.len();
+                        let metadata = file.metadata().await?;
+                        let data_size = metadata.len();
+                        let last_modify = metadata.modified().ok();
                         let mut recv = Body::new_file(file, data_size);
                         // recv.set_rate_limit(RateLimitLayer::new(10240, Duration::from_millis(100)));
                         match &**pre {
@@ -433,7 +445,7 @@ impl FileServer {
                             .header(HeaderName::TRANSFER_ENCODING, "chunked")
                             .body(recv)
                             .map_err(|_err| io::Error::new(io::ErrorKind::Other, ""))?;
-                        self.after_file_response(&mut response);
+                        self.after_file_response(&mut response, last_modify);
                         return Ok(response);
                     }
                 }
@@ -444,7 +456,9 @@ impl FileServer {
             }
 
             let file = File::open(real_path).await?;
-            let data_size = file.metadata().await?.len();
+            let metadata = file.metadata().await?;
+            let data_size = metadata.len();
+            let last_modify = metadata.modified().ok();
             let recv = Body::new_file(file, data_size);
             let builder = Response::builder().version(req.version().clone());
             let mut response = builder
@@ -455,7 +469,7 @@ impl FileServer {
                 .header(HeaderName::TRANSFER_ENCODING, "chunked")
                 .body(recv)
                 .map_err(|_err| io::Error::new(io::ErrorKind::Other, ""))?;
-            self.after_file_response(&mut response);
+            self.after_file_response(&mut response, last_modify);
             return Ok(response);
         }
     }
