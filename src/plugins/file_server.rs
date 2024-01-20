@@ -1,25 +1,26 @@
 // Copyright 2022 - 2023 Wenmeng See the COPYRIGHT
 // file at the top-level directory of this distribution.
-// 
+//
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
-// 
+//
 // Author: tickbh
 // -----
 // Created Date: 2023/11/10 02:21:22
 
-use wenmeng::{Body, ProtResult};
+use serde_with::{serde_as, DisplayFromStr};
+use wenmeng::{Body, ProtResult, RecvResponse};
 // use crate::{plugins::calc_file_size};
 use lazy_static::lazy_static;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
+use std::path::Path;
 use std::{collections::HashMap, io};
-use std::path::{Path};
 use tokio::fs::File;
 use webparse::{BinaryMut, Buf, HeaderName, Request, Response};
 
-
+use crate::ConfigDuration;
 use crate::plugins::calc_file_size;
 use crate::reverse::CommonConfig;
 
@@ -78,16 +79,14 @@ lazy_static! {
         m.insert("avi", "video/x-msvideo");
         m
     };
-
     static ref CURRENT_DIR: String = {
         if let Ok(path) = std::env::current_dir() {
             path.to_string_lossy().to_string()
-         } else {
-             String::new()
-         }
+        } else {
+            String::new()
+        }
     };
 }
-
 
 fn default_mimetype() -> String {
     "application/octet-stream".to_string()
@@ -110,15 +109,22 @@ fn default_precompressed() -> Vec<String> {
 }
 
 /// 代理类, 一个代理类启动一种类型的代理
+#[serde_as]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FileServer {
     // #[serde(default = "default_root")]
     pub root: Option<String>,
     #[serde(default)]
     pub prefix: String,
-    #[serde(default="default_mimetype")]
+    #[serde(default = "default_mimetype")]
     pub default_mimetype: String,
-    #[serde(default="default_hide")]
+    #[serde(default = "HashMap::new")]
+    pub ext_mimetype: HashMap<String, String>,
+    #[serde_as(as = "Option<DisplayFromStr>")]
+    pub cache_time: Option<ConfigDuration>,
+    #[serde_as(as = "Option<DisplayFromStr>")]
+    pub robots: Option<String>,
+    #[serde(default = "default_hide")]
     pub hide: Vec<String>,
     #[serde(default = "default_index")]
     pub index: Vec<String>,
@@ -130,7 +136,7 @@ pub struct FileServer {
     pub disable_compress: bool,
     #[serde(default)]
     pub browse: bool,
-    #[serde(default="CommonConfig::new")]
+    #[serde(default = "CommonConfig::new")]
     pub comm: CommonConfig,
 }
 
@@ -165,12 +171,14 @@ i.icon-zip {
 
 impl FileServer {
     pub fn new(root: String, prefix: String) -> Self {
-        
         let mut config = Self {
             root: if root.len() > 0 { Some(root) } else { None },
             prefix,
             hide: vec![],
             default_mimetype: default_mimetype(),
+            ext_mimetype: HashMap::new(),
+            cache_time: None,
+            robots: None,
             index: default_index(),
             status: 404,
             precompressed: vec![],
@@ -209,7 +217,7 @@ impl FileServer {
         let value = path.to_string_lossy();
         for hide in &self.hide {
             if value.contains(&*hide) {
-                return true
+                return true;
             }
         }
         false
@@ -217,17 +225,51 @@ impl FileServer {
 
     fn ret_error_msg(&self, msg: &'static str) -> Response<Body> {
         Response::builder()
-                .status(self.status)
-                .body(msg)
-                .unwrap()
-                .into_type()
+            .status(self.status)
+            .body(msg)
+            .unwrap()
+            .into_type()
     }
 
-    pub async fn deal_request(
-        &self,
-        req: &mut Request<Body>,
-    ) -> ProtResult<Response<Body>> {
+    pub fn get_mimetype(&self, extension: &String) -> String {
+        if let Some(s) = DEFAULT_MIMETYPE.get(&**extension) {
+            s.to_string()
+        } else if let Some(s) = self.ext_mimetype.get(extension) {
+            s.to_string()
+        } else {
+            self.default_mimetype.to_string()
+        }
+    }
+
+    pub fn after_file_response(&self, res: &mut RecvResponse) {
+        if let Some(c) = &self.cache_time {
+            res.headers_mut().insert(HeaderName::CACHE_CONTROL, format!("max-age={}", c.0.as_secs()));
+        }
+        if self.disable_compress {
+            res
+                .headers_mut()
+                .insert(HeaderName::CONTENT_ENCODING, "");
+        }
+    }
+
+    pub async fn deal_request(&self, req: &mut Request<Body>) -> ProtResult<Response<Body>> {
         let path = req.path().clone();
+        if path == "/robots.txt" && self.robots.is_some() {
+            let robots = self.robots.clone().unwrap();
+            let builder = Response::builder()
+                .version(req.version().clone())
+                .status(200);
+            let mut response = builder
+                .header(
+                    HeaderName::CONTENT_TYPE,
+                    "text/plain; charset=utf-8",
+                )
+                .header(HeaderName::CONTENT_LENGTH, robots.as_bytes().len())
+                .header(HeaderName::TRANSFER_ENCODING, "chunked")
+                .body(robots).unwrap().into_type();
+            self.after_file_response(&mut response);
+            return Ok(response);
+        }
         // 无效前缀，无法处理
         if !path.starts_with(&self.prefix) {
             return Ok(self.ret_error_msg("unknow path"));
@@ -244,7 +286,7 @@ impl FileServer {
         if !real_path.starts_with(root_path) || self.is_hide_path(root_path.as_ref()) {
             return Ok(self.ret_error_msg("can't view parent file"));
         }
-        
+
         // 访问路径是目录，尝试是否有index的文件，如果有还是以文件访问
         if real_path.is_dir() {
             for index in &self.index {
@@ -328,13 +370,17 @@ impl FileServer {
             if let Some(rate) = self.comm.get_rate_limit() {
                 recv.set_rate_limit(rate);
             }
-            let builder = Response::builder().version(req.version().clone()).status(200);
+            let builder = Response::builder()
+                .version(req.version().clone())
+                .status(200);
             let mut response = builder
                 .header(HeaderName::CONTENT_TYPE, "text/html; charset=utf-8")
                 .body(recv)
                 .map_err(|_err| io::Error::new(io::ErrorKind::Other, ""))?;
             if self.disable_compress {
-                response.headers_mut().insert(HeaderName::CONTENT_ENCODING, "");
+                response
+                    .headers_mut()
+                    .insert(HeaderName::CONTENT_ENCODING, "");
             }
             return Ok(response);
         } else {
@@ -349,11 +395,7 @@ impl FileServer {
                 String::new()
             };
 
-            let application = if let Some(s) = DEFAULT_MIMETYPE.get(&*extension) {
-                s.to_string()
-            } else {
-                self.default_mimetype.to_string()
-            };
+            let application = self.get_mimetype(&extension);
             //查找是否有合适的预压缩文件
             if let Some(accept) = req.headers().get_option_value(&HeaderName::ACCEPT_ENCODING) {
                 for pre in &self.precompressed {
@@ -379,7 +421,9 @@ impl FileServer {
                             "br" => recv.set_compress_brotli(),
                             _ => unreachable!(),
                         }
-                        let builder = Response::builder().version(req.version().clone()).status(200);
+                        let builder = Response::builder()
+                            .version(req.version().clone())
+                            .status(200);
                         let mut response = builder
                             .header(HeaderName::CONTENT_ENCODING, pre.to_string())
                             .header(
@@ -389,9 +433,7 @@ impl FileServer {
                             .header(HeaderName::TRANSFER_ENCODING, "chunked")
                             .body(recv)
                             .map_err(|_err| io::Error::new(io::ErrorKind::Other, ""))?;
-                        if self.disable_compress {
-                            response.headers_mut().insert(HeaderName::CONTENT_ENCODING, "");
-                        }
+                        self.after_file_response(&mut response);
                         return Ok(response);
                     }
                 }
@@ -413,11 +455,8 @@ impl FileServer {
                 .header(HeaderName::TRANSFER_ENCODING, "chunked")
                 .body(recv)
                 .map_err(|_err| io::Error::new(io::ErrorKind::Other, ""))?;
-            if self.disable_compress {
-                response.headers_mut().insert(HeaderName::CONTENT_ENCODING, "");
-            }
+            self.after_file_response(&mut response);
             return Ok(response);
         }
     }
 }
-

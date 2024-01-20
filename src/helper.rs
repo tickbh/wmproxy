@@ -74,7 +74,7 @@ impl Helper {
 
     #[cfg(not(target_os = "windows"))]
     fn set_reuse_port(socket: &Socket, reuse: bool) -> io::Result<()> {
-        socket.set_reuse_port(true)?;
+        socket.set_reuse_port(reuse)?;
         Ok(())
     }
 

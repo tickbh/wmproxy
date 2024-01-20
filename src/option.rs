@@ -715,6 +715,7 @@ impl ConfigOption {
         }
     }
 
+    /// 获取所有待健康检查的列表
     pub fn get_health_check(&self) -> Vec<OneHealth> {
         let mut result = vec![];
         let mut already: HashSet<SocketAddr> = HashSet::new();

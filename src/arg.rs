@@ -29,6 +29,7 @@ use webparse::{Request, Url};
 use wenmeng::Client;
 
 use crate::reverse::StreamConfig;
+use crate::ConfigDuration;
 use crate::{
     option::proxy_config,
     reverse::{HttpConfig, LocationConfig, ServerConfig, UpstreamConfig},
@@ -148,6 +149,15 @@ struct FileServerConfig {
     /// 是否支持目录
     #[bpaf(short, long)]
     pub(crate) browse: bool,
+    /// 设置robots.txt返回
+    #[bpaf(long)]
+    pub(crate) robots: Option<String>,
+    /// 设置robots.txt返回
+    #[bpaf(short, long)]
+    pub(crate) cache_time: Option<ConfigDuration>,
+    /// 设置robots.txt返回
+    #[bpaf(short, long)]
+    pub(crate) ext_mimetype: Vec<String>,
     /// 访问日志放的位置如"logs/access.log trace"
     #[bpaf(long)]
     pub(crate) access_log: Option<String>,
@@ -456,7 +466,11 @@ pub async fn parse_env() -> ProxyResult<ConfigOption> {
             let mut http = HttpConfig::new();
             let mut server = ServerConfig::new(file.listen.0);
             let mut location = LocationConfig::new();
-            location.file_server = Some(FileServer::new(file.root, "".to_string()));
+            let mut file_server = FileServer::new(file.root, "".to_string());
+            file_server.robots = file.robots;
+            file_server.cache_time = file.cache_time;
+
+            location.file_server = Some(file_server);
             if let Some(access) = file.access_log {
                 http.comm.access_log = Some(ConfigLog::new(
                     "access".to_string(),
