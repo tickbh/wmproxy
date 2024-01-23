@@ -4,3 +4,4 @@ Cargo.lock
 /key
 .cargo
 /logs/*.log
+wmproxy.md

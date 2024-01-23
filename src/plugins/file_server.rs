@@ -10,7 +10,7 @@
 // -----
 // Created Date: 2023/11/10 02:21:22
 
-use chrono::{TimeZone, Utc};
+use chrono::{TimeZone, Utc, DateTime};
 use serde_with::{serde_as, DisplayFromStr};
 use wenmeng::{Body, ProtResult, RecvRequest, RecvResponse};
 // use crate::{plugins::calc_file_size};
@@ -256,10 +256,37 @@ impl FileServer {
         format!("{:x}-{:x}", seconds, len)
     }
 
-    pub fn try_cache(&self, req: &mut RecvRequest, metadata: &Metadata) -> Option<RecvResponse> {
+    pub fn to_rfc2822(utc: DateTime<Utc>) -> String {
+        let val = utc.to_rfc2822();
+        val.replace("+0000", "GMT")
+    }
+
+    pub fn calc_lastmodifed(val: &str) -> u64 {
+        if let Ok(s) = chrono::DateTime::parse_from_rfc2822(&val) {
+            return s.timestamp() as u64;
+        } else {
+            return 0;
+        }
+    }
+
+    pub async fn try_cache(&self, req: &mut RecvRequest, metadata: &Metadata) -> Option<RecvResponse> {
         if let Some(value) = req.headers().get_str_value(&"If-None-Match") {
             if value == Self::calc_etag(metadata) {
-                return Some(Response::builder().status(304).body(Body::empty()).unwrap());
+                let mut res = Response::builder().status(304).body(Body::empty()).unwrap();
+                let _ = self.after_file_response(req, &mut res, Some(metadata)).await;
+                return Some(res);
+            }
+        }
+
+        if let Some(value) = req.headers().get_str_value(&"If-Modified-Since") {
+            if let Ok(last) = metadata.modified() {
+                if let Ok(n) = last.duration_since(SystemTime::UNIX_EPOCH) {
+                    if Self::calc_lastmodifed(&value) == n.as_secs() {
+                        let mut res = Response::builder().status(304).body(Body::empty()).unwrap();
+                        let _ = self.after_file_response(req, &mut res, Some(metadata)).await;
+                        return Some(res);
+                    }
+                }
             }
         }
         None
@@ -309,7 +336,7 @@ impl FileServer {
         &self,
         req: &mut RecvRequest,
         res: &mut RecvResponse,
-        metadata: Option<Metadata>,
+        metadata: Option<&Metadata>,
     ) -> ProtResult<()> {
         if let Some(c) = &self.cache_time {
             res.headers_mut().insert(
@@ -320,7 +347,7 @@ impl FileServer {
         if self.disable_compress {
             res.headers_mut().insert(HeaderName::CONTENT_ENCODING, "");
         }
-        res.headers_mut().insert("Date", Utc::now().to_rfc2822());
+        res.headers_mut().insert("Date", Self::to_rfc2822(Utc::now()));
         if let Some(data) = metadata {
 
             let mut seconds = 0;
@@ -328,7 +355,7 @@ impl FileServer {
                 if let Ok(n) = last.duration_since(SystemTime::UNIX_EPOCH) {
                     seconds = n.as_secs();
                     if let Some(u) = Utc.timestamp_opt(n.as_secs() as i64, 0).latest() {
-                        res.headers_mut().insert("Last-Modified", u.to_rfc2822());
+                        res.headers_mut().insert("Last-Modified", Self::to_rfc2822(u));
                     }
                 }
             }
@@ -343,10 +370,8 @@ impl FileServer {
                     if res.headers().is_equal(&HeaderName::ETAG, &range.as_bytes()) {
                         is_match = true;
                     }
-                    if !is_match {
-                        if let Ok(s) = chrono::DateTime::parse_from_rfc2822(&range) {
-                            is_match = s.timestamp() == seconds as i64;
-                        }
+                    if !is_match && Self::calc_lastmodifed(&range) == seconds && seconds != 0 {
+                        is_match = true;
                     }
                     if !is_match {
                         return Ok(());
@@ -549,7 +574,7 @@ impl FileServer {
                     if new.exists() {
                         let file = File::open(new).await?;
                         let metadata = file.metadata().await?;
-                        if let Some(r) = self.try_cache(req, &metadata) {
+                        if let Some(r) = self.try_cache(req, &metadata).await {
                             return Ok(r);
                         }
                         let data_size = metadata.len();
@@ -572,7 +597,7 @@ impl FileServer {
                             .header(HeaderName::TRANSFER_ENCODING, "chunked")
                             .body(recv)
                             .map_err(|_err| io::Error::new(io::ErrorKind::Other, ""))?;
-                        self.after_file_response(req, &mut response, Some(metadata))
+                        self.after_file_response(req, &mut response, Some(&metadata))
                             .await?;
                         return Ok(response);
                     }
@@ -585,7 +610,7 @@ impl FileServer {
 
             let file = File::open(real_path).await?;
             let metadata = file.metadata().await?;
-            if let Some(r) = self.try_cache(req, &metadata) {
+            if let Some(r) = self.try_cache(req, &metadata).await {
                 return Ok(r);
             }
             let data_size = metadata.len();
@@ -599,7 +624,7 @@ impl FileServer {
                 .header(HeaderName::TRANSFER_ENCODING, "chunked")
                 .body(recv)
                 .map_err(|_err| io::Error::new(io::ErrorKind::Other, ""))?;
-            self.after_file_response(req, &mut response, Some(metadata))
+            self.after_file_response(req, &mut response, Some(&metadata))
                 .await?;
             return Ok(response);
         }
