@@ -53,14 +53,15 @@ bpaf = { version = "0.9.8", features = [
     "batteries",
     "autocomplete",
 ] }
-webparse = { version = "0.2.4" }
-wenmeng = { version = "0.2.5" }
+# webparse = { version = "0.2.4" }
+# wenmeng = { version = "0.2.5" }
 # wenmeng={git="https://github.com/tickbh/wenmeng.git"}
-# [dependencies.webparse]
-# path = "../webparse"
-
 [features]
 bright-color = ["bpaf/bright-color"]
 dull-color = ["bpaf/dull-color"]
-# [dependencies.wenmeng]
-# path = "../wenmeng"
+
+[dependencies.webparse]
+path = "../webparse"
+
+[dependencies.wenmeng]
+path = "../wenmeng"

@@ -12,19 +12,20 @@
 
 use chrono::{TimeZone, Utc};
 use serde_with::{serde_as, DisplayFromStr};
-use wenmeng::{Body, ProtResult, RecvResponse};
+use wenmeng::{Body, ProtResult, RecvRequest, RecvResponse};
 // use crate::{plugins::calc_file_size};
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
+use std::fs::Metadata;
 use std::path::Path;
 use std::time::SystemTime;
 use std::{collections::HashMap, io};
 use tokio::fs::File;
-use webparse::{BinaryMut, Buf, HeaderName, Request, Response};
+use webparse::{BinaryMut, Buf, HeaderName, Request, Response, StatusCode, Url, Method};
 
 use crate::plugins::calc_file_size;
 use crate::reverse::CommonConfig;
-use crate::ConfigDuration;
+use crate::{ConfigDuration, ProxyResult};
 
 lazy_static! {
     static ref DEFAULT_MIMETYPE: HashMap<&'static str, &'static str> = {
@@ -243,7 +244,73 @@ impl FileServer {
         }
     }
 
-    pub fn after_file_response(&self, res: &mut RecvResponse, last_modify: Option<SystemTime>) {
+    pub fn calc_etag(data: &Metadata) -> String {
+        let mut seconds = 0;
+        let len = data.len();
+        if let Ok(last) = data.modified() {
+            if let Ok(n) = last.duration_since(SystemTime::UNIX_EPOCH) {
+                seconds = n.as_secs();
+            }
+        }
+
+        format!("{:x}-{:x}", seconds, len)
+    }
+
+    pub fn try_cache(&self, req: &mut RecvRequest, metadata: &Metadata) -> Option<RecvResponse> {
+        if let Some(value) = req.headers().get_str_value(&"If-None-Match") {
+            if value == Self::calc_etag(metadata) {
+                return Some(Response::builder().status(304).body(Body::empty()).unwrap());
+            }
+        }
+        None
+    }
+
+    pub fn calc_bytes_range(val: &str, len: u64) -> Option<(u64, u64)> {
+        let vals = val.split("=").collect::<Vec<&str>>();
+        if vals.len() != 2 || vals[0].trim() != "bytes" {
+            return None;
+        }
+        let vals = vals[1].split(",").collect::<Vec<&str>>();
+        // 存在多个range, 暂时只取一个range, 只支持单一的
+        let val = vals[0].trim();
+        // 取前缀及后缀
+        let vals = val.split("-").collect::<Vec<&str>>();
+        // 格式不合法, 无法解析'-500', '9500-', '500-600'
+        if vals.len() != 2 {
+            return None;
+        }
+        let (start, end);
+        if vals[0].len() == 0 {
+            start = 0;
+        } else {
+            if let Ok(v) = vals[0].parse() {
+                start = v;
+            } else {
+                return None;
+            }
+        }
+        if vals[1].len() == 0 {
+            end = len;
+        } else {
+            if let Ok(v) = vals[1].parse() {
+                end = v;
+            } else {
+                return None;
+            }
+        }
+
+        if end < start {
+            return None;
+        }
+        Some((start, end))
+    }
+
+    pub async fn after_file_response(
+        &self,
+        req: &mut RecvRequest,
+        res: &mut RecvResponse,
+        metadata: Option<Metadata>,
+    ) -> ProtResult<()> {
         if let Some(c) = &self.cache_time {
             res.headers_mut().insert(
                 HeaderName::CACHE_CONTROL,
@@ -254,17 +321,72 @@ impl FileServer {
             res.headers_mut().insert(HeaderName::CONTENT_ENCODING, "");
         }
         res.headers_mut().insert("Date", Utc::now().to_rfc2822());
-        if let Some(last) = last_modify {
-            if let Ok(n) = last.duration_since(SystemTime::UNIX_EPOCH) {
-                if let Some(u) = Utc.timestamp_opt(n.as_secs() as i64, 0).latest() {
-                    res.headers_mut().insert("Last-Modified", u.to_rfc2822());
+        if let Some(data) = metadata {
+
+            let mut seconds = 0;
+            if let Ok(last) = data.modified() {
+                if let Ok(n) = last.duration_since(SystemTime::UNIX_EPOCH) {
+                    seconds = n.as_secs();
+                    if let Some(u) = Utc.timestamp_opt(n.as_secs() as i64, 0).latest() {
+                        res.headers_mut().insert("Last-Modified", u.to_rfc2822());
+                    }
                 }
             }
+            res.headers_mut().insert(HeaderName::ETAG, Self::calc_etag(&data));
+
+            let accept_range = req.headers().get_str_value(&HeaderName::ACCEPT_RANGES);
+
+            if accept_range.is_none() || accept_range.as_ref().map(|s| &**s) == Some("bytes") {
+                // 不符合条件
+                if let Some(range) = req.headers().get_str_value(&HeaderName::IF_RANGE) {
+                    let mut is_match = false;
+                    if res.headers().is_equal(&HeaderName::ETAG, &range.as_bytes()) {
+                        is_match = true;
+                    }
+                    if !is_match {
+                        if let Ok(s) = chrono::DateTime::parse_from_rfc2822(&range) {
+                            is_match = s.timestamp() == seconds as i64;
+                        }
+                    }
+                    if !is_match {
+                        return Ok(());
+                    }
+                }
+                if let Some(bytes) = req.headers().get_str_value(&HeaderName::RANGE) {
+                    match Self::calc_bytes_range(&bytes, data.len()) {
+                        Some((start, end)) => {
+                            res.body_mut().set_start_end(start, end).await?;
+                            res.headers_mut().insert(
+                                HeaderName::CONTENT_RANGE,
+                                format!("bytes {start}-{end}/{}", data.len()),
+                            );
+                            *res.status_mut() = StatusCode::PARTIAL_CONTENT;
+                        }
+                        None => {
+                            *res.status_mut() = StatusCode::RANGE_NOT_SATISFIABLE;
+                            res.headers_mut().insert(
+                                HeaderName::CONTENT_RANGE,
+                                format!("bytes */{}", data.len()),
+                            );
+                            res.replace_body(Body::empty());
+                        }
+                    };
+                }
+            }
+
+            if req.method() == &Method::Head {
+                res.replace_body(Body::empty());
+                res.headers_mut().insert(HeaderName::ACCEPT_RANGES, "bytes");
+                res.headers_mut().insert(HeaderName::CONTENT_LENGTH, format!("{}", data.len()));
+            }
+
+
         }
+        Ok(())
     }
 
-    pub async fn deal_request(&self, req: &mut Request<Body>) -> ProtResult<Response<Body>> {
-        let path = req.path().clone();
+    pub async fn deal_request(&self, req: &mut RecvRequest) -> ProtResult<Response<Body>> {
+        let mut path = req.path().clone();
         if path == "/robots.txt" && self.robots.is_some() {
             let robots = self.robots.clone().unwrap();
             let builder = Response::builder()
@@ -277,12 +399,15 @@ impl FileServer {
                 .body(robots)
                 .unwrap()
                 .into_type();
-            self.after_file_response(&mut response, None);
+            self.after_file_response(req, &mut response, None).await?;
             return Ok(response);
         }
         // 无效前缀，无法处理
         if !path.starts_with(&self.prefix) {
             return Ok(self.ret_error_msg("unknow path"));
+        }
+        if path.contains("%") {
+            path = Url::url_decode(&path)?;
         }
         let mut root = self.root.clone().unwrap_or(CURRENT_DIR.clone());
         if root.is_empty() {
@@ -424,8 +549,10 @@ impl FileServer {
                     if new.exists() {
                         let file = File::open(new).await?;
                         let metadata = file.metadata().await?;
+                        if let Some(r) = self.try_cache(req, &metadata) {
+                            return Ok(r);
+                        }
                         let data_size = metadata.len();
-                        let last_modify = metadata.modified().ok();
                         let mut recv = Body::new_file(file, data_size);
                         // recv.set_rate_limit(RateLimitLayer::new(10240, Duration::from_millis(100)));
                         match &**pre {
@@ -445,7 +572,8 @@ impl FileServer {
                             .header(HeaderName::TRANSFER_ENCODING, "chunked")
                             .body(recv)
                             .map_err(|_err| io::Error::new(io::ErrorKind::Other, ""))?;
-                        self.after_file_response(&mut response, last_modify);
+                        self.after_file_response(req, &mut response, Some(metadata))
+                            .await?;
                         return Ok(response);
                     }
                 }
@@ -457,8 +585,10 @@ impl FileServer {
 
             let file = File::open(real_path).await?;
             let metadata = file.metadata().await?;
+            if let Some(r) = self.try_cache(req, &metadata) {
+                return Ok(r);
+            }
             let data_size = metadata.len();
-            let last_modify = metadata.modified().ok();
             let recv = Body::new_file(file, data_size);
             let builder = Response::builder().version(req.version().clone());
             let mut response = builder
@@ -469,7 +599,8 @@ impl FileServer {
                 .header(HeaderName::TRANSFER_ENCODING, "chunked")
                 .body(recv)
                 .map_err(|_err| io::Error::new(io::ErrorKind::Other, ""))?;
-            self.after_file_response(&mut response, last_modify);
+            self.after_file_response(req, &mut response, Some(metadata))
+                .await?;
             return Ok(response);
         }
     }

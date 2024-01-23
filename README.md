@@ -1,5 +1,5 @@
 # wmproxy
-`wmproxy`已用`Rust`实现`http/https`代理, `socks5`代理, 反向代理, 负载均衡, 静态文件服务器，四层TCP/UDP转发，内网穿透，后续将实现`websocket`代理等，会将实现过程分享出来，感兴趣的可以一起造个轮子
+`wmproxy`已用`Rust`实现`http/https`代理, `socks5`代理, 反向代理, 负载均衡, 静态文件服务器，`websocket`代理，四层TCP/UDP转发，内网穿透等，会将实现过程分享出来，感兴趣的可以一起造个轮子
 
 ## 📦 安装 & 🏃 使用
 
