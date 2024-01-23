@@ -252,7 +252,6 @@ impl FileServer {
                 seconds = n.as_secs();
             }
         }
-
         format!("{:x}-{:x}", seconds, len)
     }
 
@@ -432,7 +431,9 @@ impl FileServer {
             return Ok(self.ret_error_msg("unknow path"));
         }
         if path.contains("%") {
-            path = Url::url_decode(&path)?;
+            if let Ok(p) = Url::url_decode(&path) {
+                path = p;
+            }
         }
         let mut root = self.root.clone().unwrap_or(CURRENT_DIR.clone());
         if root.is_empty() {
