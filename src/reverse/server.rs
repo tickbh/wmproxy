@@ -75,6 +75,14 @@ impl ServerConfig {
         for l in &mut self.location {
             l.comm.copy_from_parent(&self.comm);
             l.comm.pre_deal();
+            if let Some(n) = l.rule.get_match_name() {
+                if l.comm.match_names.contains_key(&n) {
+                    l.rule = l.comm.match_names[&n].clone();
+                } else {
+                    log::error!("配置匹配名字@{},但未找到相应的配置", n);
+                    println!("配置匹配名字@{},但未找到相应的配置", n);
+                }
+            }
             l.up_name = Some(self.up_name.clone());
             l.upstream.append(&mut self.upstream.clone());
             l.headers.append(&mut self.headers.clone());

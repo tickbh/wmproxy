@@ -20,7 +20,7 @@ use webparse::Url;
 use wenmeng::RateLimitLayer;
 use wenmeng::TimeoutLayer;
 
-use super::LimitReq;
+use super::{LimitReq, Matcher};
 
 #[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -65,6 +65,10 @@ pub struct CommonConfig {
     pub domain: Option<String>,
     #[serde_as(as = "Option<DisplayFromStr>")]
     pub proxy_url: Option<Url>,
+    
+    #[serde(default = "HashMap::new")]
+    #[serde_as(as = "HashMap<_, DisplayFromStr>")]
+    pub match_names: HashMap<String, Matcher>,
 }
 
 impl CommonConfig {
@@ -95,6 +99,8 @@ impl CommonConfig {
 
             domain: None,
             proxy_url: None,
+            
+            match_names: HashMap::new(),
         }
     }
 
@@ -141,12 +147,19 @@ impl CommonConfig {
         if self.deny_ip.is_none() {
             self.deny_ip = parent.deny_ip.clone();
         }
+        
+        for p in &parent.match_names {
+            if !self.match_names.contains_key(p.0) {
+                self.match_names.insert(p.0.clone(), p.1.clone());
+            }
+        }
     }
 
     pub fn pre_deal(&mut self) {
         if let Some(err) = &mut self.error_log {
             err.as_error();
         }
+        
     }
 
     pub fn get_rate_limit(&self) -> Option<RateLimitLayer> {

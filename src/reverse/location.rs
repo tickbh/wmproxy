@@ -110,7 +110,11 @@ impl LocationConfig {
 
     /// 当本地限制方法时,优先匹配方法,在进行路径的匹配
     pub fn is_match_rule(&self, path: &String, req: &RecvRequest) -> bool {
-        self.rule.is_match_rule(path, req)
+        match self.rule.is_match_rule(path, req) {
+            Err(_) => false,
+            Ok(b) => b,
+        }
+        
     }
 
     async fn deal_client(

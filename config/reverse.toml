@@ -72,7 +72,7 @@ try_paths = "{path}/ '/ro(\\w+)/(.*) {path} /ro$1/Cargo.toml' /root/README.md"
 # allow_ip = "127.0.0.1"
 
 [[http.server.location]]
-rule = "/ws"
+rule = "@ws"
 is_ws = true
 proxy_url = "http://ws"
 headers = ["+ aaa bbb"]

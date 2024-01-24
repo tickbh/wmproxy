@@ -13,7 +13,7 @@
 use std::{
     collections::HashSet,
     fmt::{self, Display},
-    str::FromStr,
+    str::FromStr, net::IpAddr,
 };
 
 use serde::{
@@ -21,7 +21,7 @@ use serde::{
 };
 use serde_with::{serde_as, DisplayFromStr};
 use webparse::{Method, Scheme, WebError};
-use wenmeng::RecvRequest;
+use wenmeng::{RecvRequest, ProtResult, ProtError};
 
 use crate::IpSets;
 
@@ -53,6 +53,15 @@ impl Matcher {
         }
     }
 
+    pub fn get_match_name(&self) -> Option<String> {
+        if let Some(p) = &self.path {
+            if p.starts_with("@") {
+                return Some(p.replace("@", ""));
+            }
+        }
+        None
+    } 
+
     pub fn get_path(&self) -> String {
         if let Some(p) = &self.path {
             if p.contains("*") {
@@ -69,33 +78,47 @@ impl Matcher {
 
     
     /// 当本地限制方法时,优先匹配方法,在进行路径的匹配
-    pub fn is_match_rule(&self, path: &String, req: &RecvRequest) -> bool {
+    pub fn is_match_rule(&self, path: &String, req: &RecvRequest) -> ProtResult<bool>  {
         if let Some(p) = &self.path {
             if path.find(&*p).is_none() {
-                return false;
-            }
-        }
-        if let Some(m) = &self.method {
-            if !m.0.contains(req.method()) {
-                return false;
+                return Ok(false);
             }
         }
 
-        true
-        // if self.method.is_some()
-        //     && !self
-        //         .method
-        //         .as_ref()
-        //         .unwrap()
-        //         .eq_ignore_ascii_case(method.as_str())
-        // {
-        //     return false;
-        // }
-        // if let Some(_) = path.find(&self.rule) {
-        //     return true;
-        // } else {
-        //     false
-        // }
+        if let Some(m) = &self.method {
+            if !m.0.contains(req.method()) {
+                return Ok(false);
+            }
+        }
+
+        if let Some(s) = &self.scheme {
+            if !s.0.contains(req.scheme()) {
+                return Ok(false);
+            }
+        }
+
+        if let Some(h) = &self.host {
+            match req.get_host() {
+                Some(host) if &host == h => {},
+                _ => return Ok(false),
+            }
+        }
+
+        if let Some(c) = &self.client_ip {
+            match req.headers().system_get("{client_ip}") {
+                Some(ip) => {
+                    let ip = ip
+                    .parse::<IpAddr>()
+                    .map_err(|_| ProtError::Extension("client ip error"))?;
+                    if !c.contains(&ip) {
+                        return Ok(false)
+                    }
+                },
+                None => return Ok(false),
+            }
+        }
+
+        Ok(true)
     }
 }
 
