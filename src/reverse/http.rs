@@ -249,7 +249,7 @@ impl HttpConfig {
             }
         }
         if l.is_none() {
-            return Ok(Response::status503()
+            return Ok(Response::status404()
                 .body("unknow location to deal")
                 .unwrap()
                 .into_type());
@@ -343,7 +343,7 @@ impl HttpConfig {
             }
         }
 
-        return Ok(Response::status503()
+        return Ok(Response::status404()
             .body("unknow location to deal")
             .unwrap()
             .into_type());

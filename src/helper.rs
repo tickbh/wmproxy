@@ -12,7 +12,7 @@
 
 use std::{
     cell::RefCell,
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     io,
     net::{ToSocketAddrs, SocketAddr},
     str::FromStr,
@@ -408,6 +408,21 @@ impl Helper {
             log::trace!("收到客户端建立连接{a} -> 未获取本地地址");
         }
         Ok((s, a))
+    }
+
+    pub fn get_static_str(s: &str) -> &'static str {
+        lazy_static! {
+            static ref STATIC_CACHES: Mutex<HashSet<&'static str>> = Mutex::new(HashSet::new());
+        };
+
+        let mut cache = STATIC_CACHES.lock().unwrap();
+        if cache.contains(s) {
+            *cache.get(s).unwrap()
+        } else {
+            let val = Box::new(s.to_string()).leak();
+            cache.insert(val);
+            val
+        }
     }
 
     // pub async fn udp_recv_from(socket: &UdpSocket, buf: &mut [u8]) -> io::Result<usize> {

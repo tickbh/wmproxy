@@ -11,8 +11,10 @@
 // Created Date: 2023/11/10 02:21:22
 
 mod file_server;
+mod static_response;
 
 pub use file_server::FileServer;
+pub use static_response::StaticResponse;
 
 fn calc_file_size(len: u64) -> String {
     if len < 1024 {

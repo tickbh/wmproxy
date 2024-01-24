@@ -57,7 +57,7 @@ headers = [
   "proxy x-forward-for {client_ip}",
   "+ last-modified 'from proxy'",
 ]
-limit_req = "aa zone=limit brust=1"
+limit_req = "zone=limit brust=1"
 
 # 按请求路径进行rule匹配，可匹配method，看具体的处理的内容如文件服务或者负载均衡
 [[http.server.location]]
@@ -77,10 +77,15 @@ is_ws = true
 proxy_url = "http://ws"
 headers = ["+ aaa bbb"]
 
+
 [[http.server.location]]
-rule = "/"
-proxy_url = "http://server"
-headers = ["+ aaa bbb"]
+rule = "/static"
+static_response = "I'm Ok {client_ip}"
+
+# [[http.server.location]]
+# rule = "/"
+# proxy_url = "http://server"
+# headers = ["+ aaa bbb"]
 
 # IP的四层协议处理
 [stream]

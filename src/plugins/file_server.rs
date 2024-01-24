@@ -10,7 +10,7 @@
 // -----
 // Created Date: 2023/11/10 02:21:22
 
-use chrono::{TimeZone, Utc, DateTime};
+use chrono::{DateTime, TimeZone, Utc};
 use serde_with::{serde_as, DisplayFromStr};
 use wenmeng::{Body, ProtResult, RecvRequest, RecvResponse};
 // use crate::{plugins::calc_file_size};
@@ -21,11 +21,11 @@ use std::path::Path;
 use std::time::SystemTime;
 use std::{collections::HashMap, io};
 use tokio::fs::File;
-use webparse::{BinaryMut, Buf, HeaderName, Request, Response, StatusCode, Url, Method};
+use webparse::{BinaryMut, Buf, HeaderName, Method, Response, StatusCode, Url};
 
 use crate::plugins::calc_file_size;
 use crate::reverse::CommonConfig;
-use crate::{ConfigDuration, ProxyResult};
+use crate::ConfigDuration;
 
 lazy_static! {
     static ref DEFAULT_MIMETYPE: HashMap<&'static str, &'static str> = {
@@ -268,11 +268,17 @@ impl FileServer {
         }
     }
 
-    pub async fn try_cache(&self, req: &mut RecvRequest, metadata: &Metadata) -> Option<RecvResponse> {
+    pub async fn try_cache(
+        &self,
+        req: &mut RecvRequest,
+        metadata: &Metadata,
+    ) -> Option<RecvResponse> {
         if let Some(value) = req.headers().get_str_value(&"If-None-Match") {
             if value == Self::calc_etag(metadata) {
                 let mut res = Response::builder().status(304).body(Body::empty()).unwrap();
-                let _ = self.after_file_response(req, &mut res, Some(metadata)).await;
+                let _ = self
+                    .after_file_response(req, &mut res, Some(metadata))
+                    .await;
                 return Some(res);
             }
         }
@@ -282,7 +288,9 @@ impl FileServer {
                 if let Ok(n) = last.duration_since(SystemTime::UNIX_EPOCH) {
                     if Self::calc_lastmodifed(&value) == n.as_secs() {
                         let mut res = Response::builder().status(304).body(Body::empty()).unwrap();
-                        let _ = self.after_file_response(req, &mut res, Some(metadata)).await;
+                        let _ = self
+                            .after_file_response(req, &mut res, Some(metadata))
+                            .await;
                         return Some(res);
                     }
                 }
@@ -346,19 +354,21 @@ impl FileServer {
         if self.disable_compress {
             res.headers_mut().insert(HeaderName::CONTENT_ENCODING, "");
         }
-        res.headers_mut().insert("Date", Self::to_rfc2822(Utc::now()));
+        res.headers_mut()
+            .insert("Date", Self::to_rfc2822(Utc::now()));
         if let Some(data) = metadata {
-
             let mut seconds = 0;
             if let Ok(last) = data.modified() {
                 if let Ok(n) = last.duration_since(SystemTime::UNIX_EPOCH) {
                     seconds = n.as_secs();
                     if let Some(u) = Utc.timestamp_opt(n.as_secs() as i64, 0).latest() {
-                        res.headers_mut().insert("Last-Modified", Self::to_rfc2822(u));
+                        res.headers_mut()
+                            .insert("Last-Modified", Self::to_rfc2822(u));
                     }
                 }
             }
-            res.headers_mut().insert(HeaderName::ETAG, Self::calc_etag(&data));
+            res.headers_mut()
+                .insert(HeaderName::ETAG, Self::calc_etag(&data));
 
             let accept_range = req.headers().get_str_value(&HeaderName::ACCEPT_RANGES);
 
@@ -401,10 +411,9 @@ impl FileServer {
             if req.method() == &Method::Head {
                 res.replace_body(Body::empty());
                 res.headers_mut().insert(HeaderName::ACCEPT_RANGES, "bytes");
-                res.headers_mut().insert(HeaderName::CONTENT_LENGTH, format!("{}", data.len()));
+                res.headers_mut()
+                    .insert(HeaderName::CONTENT_LENGTH, format!("{}", data.len()));
             }
-
-
         }
         Ok(())
     }

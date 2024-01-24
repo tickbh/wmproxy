@@ -18,7 +18,7 @@ use tokio::sync::mpsc::{Receiver, Sender};
 use webparse::{HeaderName, Method, Request, Response, Scheme, Url};
 use wenmeng::{Body, Client, ProtError, ProtResult};
 
-use crate::{ConfigHeader, FileServer, HealthCheck, Helper};
+use crate::{ConfigHeader, FileServer, HealthCheck, Helper, StaticResponse};
 
 use super::{common::CommonConfig, ReverseHelper, TryPathsConfig, UpstreamConfig};
 
@@ -27,6 +27,9 @@ use super::{common::CommonConfig, ReverseHelper, TryPathsConfig, UpstreamConfig}
 pub struct LocationConfig {
     pub rule: String,
     pub file_server: Option<FileServer>,
+    
+    #[serde_as(as = "Option<DisplayFromStr>")]
+    pub static_response: Option<StaticResponse>,
 
     #[serde_as(as = "Vec<DisplayFromStr>")]
     #[serde(default = "Vec::new")]
@@ -77,6 +80,7 @@ impl LocationConfig {
         Self {
             rule: "/".to_string(),
             file_server: None,
+            static_response: None,
             headers: vec![],
             method: None,
             up_name: None,
@@ -94,6 +98,7 @@ impl LocationConfig {
             up_name: self.up_name.clone(),
             is_ws: self.is_ws,
             file_server: None,
+            static_response: None,
             headers: vec![],
             try_paths: None,
             root: None,
@@ -199,6 +204,10 @@ impl LocationConfig {
         Helper::log_acess(&self.comm.log_format, &self.comm.access_log, &req);
         if let Some(file_server) = &self.file_server {
             let res = file_server.deal_request(req).await?;
+            return Ok((res, None, None));
+        }
+        if let Some(static_reponse) = &self.static_response {
+            let res = static_reponse.deal_request(req).await?;
             return Ok((res, None, None));
         }
         if let Some(reverse) = &self.comm.proxy_url {
