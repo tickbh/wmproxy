@@ -15,17 +15,18 @@ use std::{collections::HashMap, hash::Hash, net::SocketAddr};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
 use tokio::sync::mpsc::{Receiver, Sender};
-use webparse::{HeaderName, Method, Request, Response, Scheme, Url};
-use wenmeng::{Body, Client, ProtError, ProtResult};
+use webparse::{HeaderName, Request, Response, Scheme, Url};
+use wenmeng::{Body, Client, ProtError, ProtResult, RecvRequest};
 
 use crate::{ConfigHeader, FileServer, HealthCheck, Helper, StaticResponse};
 
-use super::{common::CommonConfig, ReverseHelper, TryPathsConfig, UpstreamConfig};
+use super::{common::CommonConfig, ReverseHelper, TryPathsConfig, UpstreamConfig, Matcher, string_or_struct};
 
 #[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LocationConfig {
-    pub rule: String,
+    #[serde(deserialize_with = "string_or_struct")]
+    pub rule: Matcher,
     pub file_server: Option<FileServer>,
     
     #[serde_as(as = "Option<DisplayFromStr>")]
@@ -56,7 +57,7 @@ pub struct LocationConfig {
 
 impl Hash for LocationConfig {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        state.write(self.rule.as_bytes());
+        state.write(format!("{}", self.rule).as_bytes());
         if let Some(up_name) = &self.up_name {
             state.write(up_name.as_bytes());
         }
@@ -78,7 +79,7 @@ impl Eq for LocationConfig {}
 impl LocationConfig {
     pub fn new() -> Self {
         Self {
-            rule: "/".to_string(),
+            rule: Matcher::new(),
             file_server: None,
             static_response: None,
             headers: vec![],
@@ -108,21 +109,8 @@ impl LocationConfig {
     }
 
     /// 当本地限制方法时,优先匹配方法,在进行路径的匹配
-    pub fn is_match_rule(&self, path: &String, method: &Method) -> bool {
-        if self.method.is_some()
-            && !self
-                .method
-                .as_ref()
-                .unwrap()
-                .eq_ignore_ascii_case(method.as_str())
-        {
-            return false;
-        }
-        if let Some(_) = path.find(&self.rule) {
-            return true;
-        } else {
-            false
-        }
+    pub fn is_match_rule(&self, path: &String, req: &RecvRequest) -> bool {
+        self.rule.is_match_rule(path, req)
     }
 
     async fn deal_client(

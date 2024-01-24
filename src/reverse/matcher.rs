@@ -13,26 +13,25 @@
 use std::{
     collections::HashSet,
     fmt::{self, Display},
-    marker::PhantomData,
     str::FromStr,
 };
 
 use serde::{
-    de::{self, MapAccess, Visitor},
-    Deserialize, Deserializer, Serialize,
+    Deserialize, Serialize,
 };
 use serde_with::{serde_as, DisplayFromStr};
 use webparse::{Method, Scheme, WebError};
+use wenmeng::RecvRequest;
 
 use crate::IpSets;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MatchMethod(pub HashSet<Method>);
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MatchScheme(pub HashSet<Scheme>);
 
 #[serde_as]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Matcher {
     path: Option<String>,
     #[serde_as(as = "Option<DisplayFromStr>")]
@@ -44,6 +43,60 @@ pub struct Matcher {
     method: Option<MatchMethod>,
     #[serde_as(as = "Option<DisplayFromStr>")]
     scheme: Option<MatchScheme>,
+}
+
+impl Matcher {
+    pub fn new() -> Self {
+        Self {
+            path: Some("*".to_string()),
+            ..Default::default()
+        }
+    }
+
+    pub fn get_path(&self) -> String {
+        if let Some(p) = &self.path {
+            if p.contains("*") {
+                let v = p.replace("*", "");
+                if v.len() != 0 {
+                    return v;
+                }
+            } else {
+                return p.clone();
+            }
+        }
+        "/".to_string()
+    }
+
+    
+    /// 当本地限制方法时,优先匹配方法,在进行路径的匹配
+    pub fn is_match_rule(&self, path: &String, req: &RecvRequest) -> bool {
+        if let Some(p) = &self.path {
+            if path.find(&*p).is_none() {
+                return false;
+            }
+        }
+        if let Some(m) = &self.method {
+            if !m.0.contains(req.method()) {
+                return false;
+            }
+        }
+
+        true
+        // if self.method.is_some()
+        //     && !self
+        //         .method
+        //         .as_ref()
+        //         .unwrap()
+        //         .eq_ignore_ascii_case(method.as_str())
+        // {
+        //     return false;
+        // }
+        // if let Some(_) = path.find(&self.rule) {
+        //     return true;
+        // } else {
+        //     false
+        // }
+    }
 }
 
 impl FromStr for MatchMethod {
@@ -113,5 +166,17 @@ impl FromStr for Matcher {
             path: Some(s.to_string()),
             ..Default::default()
         })
+    }
+}
+
+impl Display for Matcher {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Some(p) = &self.path {
+            f.write_str(&*p)?;
+        }
+        if let Some(p) = &self.host {
+            f.write_str(&*p)?;
+        }
+        Ok(())
     }
 }

@@ -85,7 +85,7 @@ impl ServerConfig {
                         file_server.root = self.root.clone();
                     }
                     if file_server.prefix.is_empty() {
-                        file_server.set_prefix(l.rule.clone());
+                        file_server.set_prefix(l.rule.get_path());
                     }
                     file_server.set_common(l.comm.clone());
                 }

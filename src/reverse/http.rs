@@ -242,7 +242,7 @@ impl HttpConfig {
             if deals.contains(&idx) {
                 continue;
             }
-            if server.location[idx].is_match_rule(&path, req.method()) {
+            if server.location[idx].is_match_rule(&path, req) {
                 l = Some(&server.location[idx]);
                 now = idx;
                 break;

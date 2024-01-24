@@ -40,7 +40,7 @@ impl ReverseHelper {
             if s.up_name == host || host.is_empty() || index == server_len - 1 {
                 let path = req.path().clone();
                 for idx in 0..s.location.len() {
-                    if s.location[idx].is_match_rule(&path, req.method()) {
+                    if s.location[idx].is_match_rule(&path, req) {
                         return Some(&s.location[idx]);
                     }
                 }
