@@ -111,11 +111,9 @@ async fn main() {
         let password = "wmproxy".to_string();
 
         let proxy = ProxyConfig::builder()
-            .bind_addr(addr)
+            .bind(addr)
             .username(Some(username.clone()))
             .password(Some(password.clone()))
-            .center(true)
-            .mode("server".to_string())
             .into_value()
             .unwrap();
 
@@ -124,10 +122,9 @@ async fn main() {
             .unwrap();
         
         let proxy = ProxyConfig::builder()
-            .bind_addr(addr)
+            .bind(addr)
             .username(Some(username.clone()))
             .password(Some(password.clone()))
-            .center(true)
             .server(Some(format!("{}", server_addr)))
             .into_value()
             .unwrap();

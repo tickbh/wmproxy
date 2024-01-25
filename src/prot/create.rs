@@ -24,14 +24,16 @@ use super::ProtFrameHeader;
 #[derive(Debug)]
 #[allow(dead_code)]
 pub struct ProtCreate {
+    server_id: u32,
     sock_map: u32,
     mode: u8,
     domain: Option<String>,
 }
 
 impl ProtCreate {
-    pub fn new(sock_map: u32, domain: Option<String>) -> Self {
+    pub fn new(server_id: u32,sock_map: u32, domain: Option<String>) -> Self {
         Self {
+            server_id,
             sock_map,
             mode: 0,
             domain,
@@ -49,6 +51,7 @@ impl ProtCreate {
             domain = Some(String::from_utf8_lossy(data).to_string());
         }
         Ok(ProtCreate {
+            server_id: header.server_id(),
             sock_map: header.sock_map(),
             mode: 0,
             domain,
@@ -56,7 +59,7 @@ impl ProtCreate {
     }
 
     pub fn encode<B: Buf + BufMut>(self, buf: &mut B) -> ProxyResult<usize> {
-        let mut head = ProtFrameHeader::new(ProtKind::Create, ProtFlag::zero(), self.sock_map);
+        let mut head = ProtFrameHeader::new(ProtKind::Create, ProtFlag::zero(), self.sock_map, self.server_id);
         let domain_len = self.domain.as_ref().map(|s| s.as_bytes().len() as u32).unwrap_or(0);
         head.length = 1 + domain_len;
         let mut size = 0;

@@ -14,13 +14,11 @@
 
 use std::process::id;
 use std::{
-    fmt::Display,
     fs::File,
     io::{self, Read, Write},
-    net::{AddrParseError, IpAddr, Ipv4Addr, SocketAddr},
+    net::{IpAddr, Ipv4Addr, SocketAddr},
     path::PathBuf,
     process::exit,
-    str::FromStr,
 };
 
 use bpaf::*;
@@ -29,37 +27,14 @@ use webparse::{Request, Url};
 use wenmeng::Client;
 
 use crate::reverse::StreamConfig;
-use crate::ConfigDuration;
 use crate::{
     option::proxy_config,
     reverse::{HttpConfig, LocationConfig, ServerConfig, UpstreamConfig},
     ConfigHeader, ConfigLog, ConfigOption, FileServer, ProxyConfig, ProxyResult,
 };
+use crate::{ConfigDuration, WrapAddr};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
-
-#[derive(Debug, Clone, Copy)]
-pub struct WrapAddr(pub SocketAddr);
-
-impl FromStr for WrapAddr {
-    type Err = AddrParseError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if s.starts_with(":") {
-            let addr = format!("127.0.0.1{s}").parse::<SocketAddr>()?;
-            Ok(WrapAddr(addr))
-        } else {
-            let addr = s.parse::<SocketAddr>()?;
-            Ok(WrapAddr(addr))
-        }
-    }
-}
-
-impl Display for WrapAddr {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("{}", self.0))
-    }
-}
 
 #[derive(Debug, Clone, Bpaf)]
 #[allow(dead_code)]

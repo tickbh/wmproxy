@@ -14,7 +14,7 @@ use std::{
     collections::{HashMap, HashSet},
     fs::File,
     io::{self, BufReader},
-    net::{IpAddr, Ipv4Addr, SocketAddr},
+    net::{IpAddr, SocketAddr},
     process,
     sync::Arc,
     time::Duration,
@@ -30,8 +30,7 @@ use tokio::net::TcpListener;
 use tokio_rustls::{rustls, TlsAcceptor};
 
 use crate::{
-    reverse::{HttpConfig, StreamConfig, UpstreamConfig},
-    CenterClient, Flag, Helper, MappingConfig, OneHealth, ProxyError, ProxyResult,
+    reverse::{HttpConfig, StreamConfig, UpstreamConfig}, CenterClient, Flag, Helper, MappingConfig, OneHealth, ProxyError, ProxyResult, WrapAddr
 };
 
 pub struct Builder {
@@ -53,12 +52,12 @@ impl Builder {
         })
     }
 
-    pub fn mode(self, mode: String) -> Builder {
-        self.and_then(|mut proxy| {
-            proxy.mode = mode;
-            Ok(proxy)
-        })
-    }
+    // pub fn mode(self, mode: String) -> Builder {
+    //     self.and_then(|mut proxy| {
+    //         proxy.mode = mode;
+    //         Ok(proxy)
+    //     })
+    // }
 
     pub fn add_flag(self, flag: Flag) -> Builder {
         self.and_then(|mut proxy| {
@@ -67,12 +66,20 @@ impl Builder {
         })
     }
 
-    pub fn bind_addr(self, addr: SocketAddr) -> Builder {
+    pub fn bind(self, addr: SocketAddr) -> Builder {
         self.and_then(|mut proxy| {
-            proxy.bind_addr = addr;
+            proxy.bind = Some(WrapAddr(addr));
             Ok(proxy)
         })
     }
+
+    pub fn center_addr(self, addr: SocketAddr) -> Builder {
+        self.and_then(|mut proxy| {
+            proxy.center_addr = Some(WrapAddr(addr));
+            Ok(proxy)
+        })
+    }
+    
 
     pub fn server(self, addr: Option<String>) -> Builder {
         self.and_then(|mut proxy| {
@@ -84,13 +91,6 @@ impl Builder {
     pub fn ts(self, is_tls: bool) -> Builder {
         self.and_then(|mut proxy| {
             proxy.ts = is_tls;
-            Ok(proxy)
-        })
-    }
-
-    pub fn center(self, center: bool) -> Builder {
-        self.and_then(|mut proxy| {
-            proxy.center = center;
             Ok(proxy)
         })
     }
@@ -197,33 +197,47 @@ fn default_bind_addr() -> SocketAddr {
     "127.0.0.1:8090".parse().unwrap()
 }
 
-fn default_bool_true() -> bool {
-    true
-}
-
 /// 代理类, 一个代理类启动一种类型的代理
 #[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize, Bpaf)]
 pub struct ProxyConfig {
+    /// 代理id
+    #[bpaf(
+        short('s'),
+        long
+    )]
+    #[serde(default)]
+    pub(crate) server_id: u32,
+
     /// 代理绑定端口地址
     #[bpaf(
-        fallback(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8090)),
-        display_fallback,
+        // fallback(Some(WrapAddr(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8090)))),
+        // display_fallback,
         short('b'),
         long
     )]
-    #[serde(default = "default_bind_addr")]
-    pub(crate) bind_addr: SocketAddr,
+    #[serde_as(as = "Option<DisplayFromStr>")]
+    pub(crate) bind: Option<WrapAddr>,
+    
+    /// 代理绑定端口地址
+    #[bpaf(
+        // fallback(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8090)),
+        // display_fallback,
+        short('c'),
+        long
+    )]
+    #[serde_as(as = "Option<DisplayFromStr>")]
+    pub(crate) center_addr: Option<WrapAddr>,
 
     /// 代理种类, 如http https socks5
     #[bpaf(fallback(Flag::default()))]
     #[serde_as(as = "DisplayFromStr")]
     #[serde(default)]
     pub(crate) flag: Flag,
-    /// 启动程序类型
-    #[bpaf(fallback("client".to_string()))]
-    #[serde(default)]
-    pub(crate) mode: String,
+    // /// 启动程序类型
+    // #[bpaf(fallback("client".to_string()))]
+    // #[serde(default)]
+    // pub(crate) mode: String,
 
     /// 连接代理服务端地址
     #[bpaf(short('S'), long("server"))]
@@ -249,9 +263,6 @@ pub struct ProxyConfig {
     /// 内网映射的证书key
     pub(crate) map_key: Option<String>,
 
-    /// 是否启用协议转发
-    #[serde(default = "default_bool_true")]
-    pub(crate) center: bool,
     /// 连接服务端是否启用tls
     #[serde(default)]
     pub(crate) ts: bool,
@@ -314,9 +325,11 @@ impl Default for ConfigOption {
 impl Default for ProxyConfig {
     fn default() -> Self {
         Self {
+            server_id: 0,
             flag: Flag::HTTP | Flag::HTTPS | Flag::SOCKS5,
-            mode: "client".to_string(),
-            bind_addr: default_bind_addr(),
+            // mode: "client".to_string(),
+            bind: Some(WrapAddr(default_bind_addr())),
+            center_addr: None,
             server: None,
             username: None,
             password: None,
@@ -328,7 +341,6 @@ impl Default for ProxyConfig {
             map_cert: None,
             map_key: None,
 
-            center: false,
             ts: false,
             tc: false,
             two_way_tls: false,
@@ -561,13 +573,13 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
         }
     }
 
-    pub fn is_client(&self) -> bool {
-        self.mode.eq_ignore_ascii_case("client")
-    }
+    // pub fn is_client(&self) -> bool {
+    //     self.mode.eq_ignore_ascii_case("client")
+    // }
 
-    pub fn is_server(&self) -> bool {
-        self.mode.eq_ignore_ascii_case("server")
-    }
+    // pub fn is_server(&self) -> bool {
+    //     self.mode.eq_ignore_ascii_case("server")
+    // }
 
     pub async fn bind(
         &self,
@@ -575,13 +587,13 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
         Option<TlsAcceptor>,
         Option<Arc<ClientConfig>>,
         Option<TcpListener>,
+        Option<TcpListener>,
         Option<CenterClient>,
     )> {
-        let addr = self.bind_addr.clone();
         let proxy_accept = self.get_tls_accept().await.ok();
         let client = self.get_tls_request().await.ok();
         let mut center_client = None;
-        if self.center {
+        if self.bind.is_some() {
             if let Some(server) = self.server.clone() {
                 let mut center = CenterClient::new(
                     self.clone(),
@@ -609,9 +621,19 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
                 center_client = Some(center);
             }
         }
-        log::info!("绑定代理：{:?}，提供代理功能。", addr);
-        let center_listener = Some(Helper::bind(addr).await?);
-        Ok((proxy_accept, client, center_listener, center_client))
+        let client_listener = if let Some(bind) = self.bind {
+            log::info!("绑定代理：{:?}，提供代理功能。", bind.0);
+            Some(Helper::bind(bind.0).await?)
+        } else {
+            None
+        };
+        let center_listener = if let Some(center) = self.center_addr {
+            log::info!("绑定代理：{:?}，提供中心代理功能。", center.0);
+            Some(Helper::bind(center.0).await?)
+        } else {
+            None
+        };
+        Ok((proxy_accept, client, client_listener, center_listener, center_client))
     }
 
     pub async fn bind_map(

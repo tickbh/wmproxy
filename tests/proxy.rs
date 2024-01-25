@@ -13,7 +13,7 @@ mod tests {
     static HTTP_URL: &str = "http://www.baidu.com";
     static HTTPS_URL: &str = "https://www.baidu.com";
 
-    async fn run_proxy(
+    async fn run_server_proxy(
         proxy: ProxyConfig,
     ) -> ProxyResult<(SocketAddr, Sender<()>)> {
         let option = ConfigOption::new_by_proxy(proxy);
@@ -21,6 +21,20 @@ mod tests {
         let mut proxy = WMCore::new(option);
         proxy.ready_serve().await.unwrap();
         let addr = proxy.center_listener.as_ref().unwrap().local_addr()?;
+        tokio::spawn(async move {
+            let _ = proxy.run_serve(receiver_close, None).await;
+        });
+        Ok((addr, sender_close))
+    }
+
+    async fn run_proxy(
+        proxy: ProxyConfig,
+    ) -> ProxyResult<(SocketAddr, Sender<()>)> {
+        let option = ConfigOption::new_by_proxy(proxy);
+        let (sender_close, receiver_close) = channel::<()>(1);
+        let mut proxy = WMCore::new(option);
+        proxy.ready_serve().await.unwrap();
+        let addr = proxy.client_listener.as_ref().unwrap().local_addr()?;
         tokio::spawn(async move {
             let _ = proxy.run_serve(receiver_close, None).await;
         });
@@ -92,7 +106,7 @@ mod tests {
     async fn test_no_auth() {
         let addr = "127.0.0.1:0".parse().unwrap();
         let proxy = ProxyConfig::builder()
-            .bind_addr(addr)
+            .bind(addr)
             .into_value()
             .unwrap();
 
@@ -109,7 +123,7 @@ mod tests {
         let username = "wmproxy".to_string();
         let password = "wmproxy".to_string();
         let proxy = ProxyConfig::builder()
-            .bind_addr(addr)
+            .bind(addr)
             .username(Some(username.clone()))
             .password(Some(password.clone()))
             .into_value()
@@ -137,23 +151,20 @@ mod tests {
         let password = "wmproxy".to_string();
 
         let proxy = ProxyConfig::builder()
-            .bind_addr(addr)
+            .center_addr(addr)
             .username(Some(username.clone()))
             .password(Some(password.clone()))
-            .center(true)
-            .mode("server".to_string())
             .into_value()
             .unwrap();
 
-        let (server_addr, _sender) = run_proxy(proxy)
+        let (server_addr, _sender) = run_server_proxy(proxy)
             .await
             .unwrap();
         
         let proxy = ProxyConfig::builder()
-            .bind_addr(addr)
+            .bind(addr)
             .username(Some(username.clone()))
             .password(Some(password.clone()))
-            .center(true)
             .server(Some(format!("{}", server_addr)))
             .into_value()
             .unwrap();

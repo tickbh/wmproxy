@@ -22,29 +22,31 @@ use super::{ProtFrameHeader, read_short_string, write_short_string};
 /// 旧的Socket连接关闭, 接收到则关闭掉当前的连接
 #[derive(Debug)]
 pub struct ProtClose {
+    server_id: u32,
     sock_map: u32,
     reason: String,
 }
 
 impl ProtClose {
-    pub fn new(sock_map: u32) -> ProtClose {
-        ProtClose { sock_map, reason: String::new() }
+    pub fn new(server_id: u32, sock_map: u32) -> ProtClose {
+        ProtClose { server_id, sock_map, reason: String::new() }
     }
 
-    pub fn new_by_reason(sock_map: u32, reason: String) -> ProtClose {
-        ProtClose { sock_map, reason }
+    pub fn new_by_reason(server_id: u32, sock_map: u32, reason: String) -> ProtClose {
+        ProtClose { server_id, sock_map, reason }
     }
 
     pub fn parse<T: Buf>(header: ProtFrameHeader, mut buf: T) -> ProxyResult<ProtClose> {
         let reason = read_short_string(&mut buf)?;
         Ok(ProtClose {
+            server_id: header.server_id(),
             sock_map: header.sock_map(),
             reason,
         })
     }
 
     pub fn encode<B: Buf + BufMut>(self, buf: &mut B) -> ProxyResult<usize> {
-        let mut head = ProtFrameHeader::new(ProtKind::Close, ProtFlag::zero(), self.sock_map);
+        let mut head = ProtFrameHeader::new(ProtKind::Close, ProtFlag::zero(), self.sock_map, self.server_id);
         head.length = self.reason.as_bytes().len() as u32 + 1;
         let mut size = 0;
         size += head.encode(buf)?;

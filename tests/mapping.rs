@@ -119,13 +119,11 @@ mod tests {
         let local_server_addr = run_server().await.unwrap();
         let addr = "127.0.0.1:0".parse().unwrap();
         let proxy = ProxyConfig::builder()
-            .bind_addr(addr)
+            .center_addr(addr)
             .map_http_bind(Some(addr))
             .map_https_bind(Some(addr))
             .map_tcp_bind(Some(addr))
             .map_proxy_bind(Some(addr))
-            .center(true)
-            .mode("server".to_string())
             .into_value()
             .unwrap();
 
@@ -161,10 +159,8 @@ mod tests {
         mapping_proxy.local_addr = Some(local_server_addr);
 
         let proxy = ProxyConfig::builder()
-            .bind_addr(addr)
+            .bind(addr)
             .server(Some(format!("{}", server_addr)))
-            .center(true)
-            .mode("client".to_string())
             .mapping(mapping)
             .mapping(mapping_tcp)
             .mapping(mapping_proxy)

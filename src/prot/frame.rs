@@ -11,6 +11,7 @@
 // Created Date: 2023/09/22 10:30:10
 
 
+use tokio_util::bytes::buf;
 use webparse::{Buf, http2::frame::{read_u24, encode_u24}, BufMut};
 
 use crate::{ProxyResult, MappingConfig};
@@ -28,6 +29,8 @@ pub struct ProtFrameHeader {
     flag: ProtFlag,
     /// 3个字节, socket在内存中相应的句柄, 客户端发起为单数, 服务端发起为双数
     sock_map: u32,
+    /// 服务器的id
+    server_id: u32,
 }
 
 #[derive(Debug)]
@@ -45,17 +48,22 @@ pub enum ProtFrame {
 }
 
 impl ProtFrameHeader {
-    pub const FRAME_HEADER_BYTES: usize = 8;
+    pub const FRAME_HEADER_BYTES: usize = 12;
 
-    pub fn new(kind: ProtKind, flag: ProtFlag, sock_map: u32) -> ProtFrameHeader {
+    pub fn new(kind: ProtKind, flag: ProtFlag, sock_map: u32, server_id: u32) -> ProtFrameHeader {
         ProtFrameHeader {
             length: 0,
             kind,
             flag,
             sock_map,
+            server_id,
         }
     }
     
+    pub fn server_id(&self) -> u32 {
+        self.server_id
+    }
+
     pub fn sock_map(&self) -> u32 {
         self.sock_map
     }
@@ -81,11 +89,13 @@ impl ProtFrameHeader {
         let kind = buffer.get_u8();
         let flag = buffer.get_u8();
         let sock_map = read_u24(buffer);
+        let server_id = buffer.get_u32();
         Ok(ProtFrameHeader {
             length,
             kind: ProtKind::new(kind),
             flag: ProtFlag::new(flag),
             sock_map,
+            server_id,
         })
     }
 
@@ -96,6 +106,7 @@ impl ProtFrameHeader {
         size += buffer.put_u8(self.kind.encode());
         size += buffer.put_u8(self.flag.bits());
         size += encode_u24(buffer, self.sock_map);
+        size += buffer.put_u32(self.server_id);
         Ok(size)
     }
 
@@ -133,8 +144,8 @@ impl ProtFrame {
         Ok(size)
     }
 
-    pub fn new_create(sock_map: u32, domain: Option<String>) -> Self {
-        Self::Create(ProtCreate::new(sock_map, domain))
+    pub fn new_create(server_id: u32, sock_map: u32, domain: Option<String>) -> Self {
+        Self::Create(ProtCreate::new(server_id, sock_map, domain))
     }
 
     pub fn new_close(sock_map: u32) -> Self {

@@ -27,15 +27,11 @@ use tokio::{
         Mutex,
     },
 };
-use tokio_rustls::{rustls, TlsAcceptor, TlsConnector};
+use tokio_rustls::{rustls, TlsAcceptor};
 
 
 use crate::{
-    option::ConfigOption,
-    proxy::ProxyServer,
-    reverse::{HttpConfig, ServerConfig, StreamConfig, StreamUdp},
-    ActiveHealth, CenterClient, CenterServer, HealthCheck, OneHealth,
-    ProxyResult, Helper,
+    option::ConfigOption, proxy::ProxyServer, reverse::{HttpConfig, ServerConfig, StreamConfig, StreamUdp}, ActiveHealth, CenterClient, CenterServer, CenterTrans, Helper, OneHealth, ProxyResult
 };
 
 pub struct WMCore {
@@ -45,6 +41,7 @@ pub struct WMCore {
     health_sender: Option<Sender<Vec<OneHealth>>>,
     pub proxy_accept: Option<TlsAcceptor>,
     pub proxy_client: Option<Arc<ClientConfig>>,
+    pub client_listener: Option<TcpListener>,
     pub center_listener: Option<TcpListener>,
 
     pub map_http_listener: Option<TcpListener>,
@@ -72,6 +69,7 @@ impl WMCore {
             health_sender: None,
             proxy_accept: None,
             proxy_client: None,
+            client_listener: None,
             center_listener: None,
 
             map_http_listener: None,
@@ -91,11 +89,36 @@ impl WMCore {
         }
     }
 
-    async fn deal_stream<T>(
+    /// 来自中心端的连接, 如果存在上级则无条件转发到上级
+    /// 如果不传在上级, 则构建中心服处理该请求
+    async fn deal_center_stream<T>(
         &mut self,
         inbound: T,
         _addr: SocketAddr,
         tls_client: Option<Arc<rustls::ClientConfig>>,
+    ) -> ProxyResult<()>
+    where
+        T: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static,
+    {
+        if let Some(option) = &mut self.option.proxy {
+            if let Some(server) = option.server.clone() {
+                let mut server = CenterTrans::new(server, option.domain.clone(), tls_client);
+                return server.serve(inbound).await;
+            } else {
+                let server = CenterServer::new(option.clone());
+                self.center_servers.push(server);
+                return self.center_servers.last_mut().unwrap().serve(inbound).await;
+            }
+        }
+        Ok(())
+    }
+
+    /// 处理客户端的请求, 仅可能有上级转发给上级
+    /// 没有上级直接处理当前代理数据
+    async fn deal_client_stream<T>(
+        &mut self,
+        inbound: T,
+        _addr: SocketAddr,
     ) -> ProxyResult<()>
     where
         T: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static,
@@ -105,33 +128,17 @@ impl WMCore {
             return client.deal_new_stream(inbound).await;
         }
         if let Some(option) = &mut self.option.proxy {
-            // 服务端开代理, 接收到客户端一律用协议处理
-            if option.center && option.is_server() {
-                let server = CenterServer::new(option.clone());
-                self.center_servers.push(server);
-                return self.center_servers.last_mut().unwrap().serve(inbound).await;
-            }
-
-            let flag = option.flag;
-            let domain = option.domain.clone();
-            if let Some(server) = option.server.clone() {
-                tokio::spawn(async move {
-                    // 转到上层服务器进行处理
-                    let _e = Self::transfer_server(domain, tls_client, inbound, server).await;
-                });
-            } else {
-                let proxy_server = ProxyServer::new(
-                    flag,
-                    option.username.clone(),
-                    option.password.clone(),
-                    option.udp_bind.clone(),
-                    None,
-                );
-                tokio::spawn(async move {
-                    // tcp的连接被移动到该协程中，我们只要专注的处理该stream即可
-                    let _ = proxy_server.deal_proxy(inbound).await;
-                });
-            }
+            let proxy_server = ProxyServer::new(
+                option.flag,
+                option.username.clone(),
+                option.password.clone(),
+                option.udp_bind.clone(),
+                None,
+            );
+            tokio::spawn(async move {
+                // tcp的连接被移动到该协程中，我们只要专注的处理该stream即可
+                let _ = proxy_server.deal_proxy(inbound).await;
+            });
         }
 
         Ok(())
@@ -201,6 +208,7 @@ impl WMCore {
             (
                 self.proxy_accept,
                 self.proxy_client,
+                self.client_listener,
                 self.center_listener,
                 self.center_client,
             ) = option.bind().await?;
@@ -249,21 +257,25 @@ impl WMCore {
         loop {
             tokio::select! {
                 Some((inbound, addr)) = Self::tcp_listen_work(&self.center_listener) => {
-                    log::trace!("代理收到客户端连接: {}->{}", addr, self.center_listener.as_ref().unwrap().local_addr()?);
+                    log::trace!("中心代理收到客户端连接: {}->{}", addr, self.center_listener.as_ref().unwrap().local_addr()?);
                     if let Some(a) = self.proxy_accept.clone() {
                         let inbound = a.accept(inbound).await;
                         // 获取的流跟正常内容一样读写, 在内部实现了自动加解密
                         match inbound {
                             Ok(inbound) => {
-                                let _ = self.deal_stream(inbound, addr, self.proxy_client.clone()).await;
+                                let _ = self.deal_center_stream(inbound, addr, self.proxy_client.clone()).await;
                             }
                             Err(e) => {
                                 log::warn!("接收来自下级代理的连接失败, 原因为: {:?}", e);
                             }
                         }
                     } else {
-                        let _ = self.deal_stream(inbound, addr, self.proxy_client.clone()).await;
+                        let _ = self.deal_center_stream(inbound, addr, self.proxy_client.clone()).await;
                     };
+                }
+                Some((inbound, addr)) = Self::tcp_listen_work(&self.client_listener) => {
+                    log::trace!("代理收到客户端连接: {}->{}", addr, self.center_listener.as_ref().unwrap().local_addr()?);
+                    let _ = self.deal_client_stream(inbound, addr).await;
                 }
                 Some((inbound, addr)) = Self::tcp_listen_work(&self.map_http_listener) => {
                     log::trace!("内网穿透:Http收到客户端连接: {}->{}", addr, self.map_http_listener.as_ref().unwrap().local_addr()?);
@@ -357,37 +369,8 @@ impl WMCore {
         Ok(())
     }
 
-    async fn transfer_server<T>(
-        domain: Option<String>,
-        tls_client: Option<Arc<rustls::ClientConfig>>,
-        mut inbound: T,
-        server: String,
-    ) -> ProxyResult<()>
-    where
-        T: AsyncRead + AsyncWrite + Unpin,
-    {
-        if tls_client.is_some() {
-            let connector = TlsConnector::from(tls_client.unwrap());
-            let stream = HealthCheck::connect(&server).await?;
-            // 这里的域名只为认证设置
-            let domain =
-                rustls::ServerName::try_from(&*domain.unwrap_or("soft.wm-proxy.com".to_string()))
-                    .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid dnsname"))?;
-
-            if let Ok(mut outbound) = connector.connect(domain, stream).await {
-                // connect 之后的流跟正常内容一样读写, 在内部实现了自动加解密
-                let _ = tokio::io::copy_bidirectional(&mut inbound, &mut outbound).await?;
-            } else {
-                // TODO 返回对应协议的错误
-            }
-        } else {
-            if let Ok(mut outbound) = HealthCheck::connect(&server).await {
-                let _ = tokio::io::copy_bidirectional(&mut inbound, &mut outbound).await?;
-            } else {
-                // TODO 返回对应协议的错误
-            }
-        }
-        Ok(())
+    pub fn clear_close_servers(&mut self) {
+        self.center_servers.retain(|s| !s.is_close());
     }
 
     pub async fn server_new_http(
@@ -395,6 +378,7 @@ impl WMCore {
         stream: TcpStream,
         addr: SocketAddr,
     ) -> ProxyResult<()> {
+        self.clear_close_servers();
         for server in &mut self.center_servers {
             if !server.is_close() {
                 return server.server_new_http(stream, addr).await;
@@ -410,6 +394,7 @@ impl WMCore {
         addr: SocketAddr,
         accept: TlsAcceptor,
     ) -> ProxyResult<()> {
+        self.clear_close_servers();
         for server in &mut self.center_servers {
             if !server.is_close() {
                 return server.server_new_https(stream, addr, accept).await;
@@ -424,6 +409,7 @@ impl WMCore {
         stream: TcpStream,
         _addr: SocketAddr,
     ) -> ProxyResult<()> {
+        self.clear_close_servers();
         for server in &mut self.center_servers {
             if !server.is_close() {
                 return server.server_new_tcp(stream).await;
@@ -438,6 +424,7 @@ impl WMCore {
         stream: TcpStream,
         _addr: SocketAddr,
     ) -> ProxyResult<()> {
+        self.clear_close_servers();
         for server in &mut self.center_servers {
             if !server.is_close() {
                 return server.server_new_prxoy(stream).await;
