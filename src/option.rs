@@ -706,11 +706,9 @@ impl ConfigOption {
         if let Some(http) = &mut self.http {
             http.after_load_option()?;
         }
-
         if let Some(stream) = &mut self.stream {
             stream.copy_to_child();
         }
-        println!("options = {:?}", self);
         Ok(())
     }
 

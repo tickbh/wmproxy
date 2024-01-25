@@ -33,7 +33,7 @@ where
     // 流有相应的AsyncRead + AsyncWrite + Unpin均可
     stream: T,
     // sock绑定的句柄
-    id: u32,
+    id: u64,
     // 读取的数据缓存，将转发成ProtFrame
     read: BinaryMut,
     // 写的数据缓存，直接写入到stream下，从ProtFrame转化而来
@@ -50,7 +50,7 @@ where
 {
     pub fn new(
         stream: T,
-        id: u32,
+        id: u64,
         in_sender: Sender<ProtFrame>,
         out_receiver: Receiver<ProtFrame>,
     ) -> Self {

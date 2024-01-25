@@ -1,11 +1,11 @@
 // Copyright 2022 - 2023 Wenmeng See the COPYRIGHT
 // file at the top-level directory of this distribution.
-// 
+//
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
-// 
+//
 // Author: tickbh
 // -----
 // Created Date: 2023/09/22 10:28:28
@@ -19,21 +19,19 @@ use crate::{
 
 use super::ProtFrameHeader;
 
-/// 新的Socket连接请求, 
+/// 新的Socket连接请求,
 /// 接收方创建一个虚拟链接来对应该Socket的读取写入
 #[derive(Debug)]
 #[allow(dead_code)]
 pub struct ProtCreate {
-    server_id: u32,
-    sock_map: u32,
+    sock_map: u64,
     mode: u8,
     domain: Option<String>,
 }
 
 impl ProtCreate {
-    pub fn new(server_id: u32,sock_map: u32, domain: Option<String>) -> Self {
+    pub fn new(sock_map: u64, domain: Option<String>) -> Self {
         Self {
-            server_id,
             sock_map,
             mode: 0,
             domain,
@@ -51,7 +49,6 @@ impl ProtCreate {
             domain = Some(String::from_utf8_lossy(data).to_string());
         }
         Ok(ProtCreate {
-            server_id: header.server_id(),
             sock_map: header.sock_map(),
             mode: 0,
             domain,
@@ -59,8 +56,16 @@ impl ProtCreate {
     }
 
     pub fn encode<B: Buf + BufMut>(self, buf: &mut B) -> ProxyResult<usize> {
-        let mut head = ProtFrameHeader::new(ProtKind::Create, ProtFlag::zero(), self.sock_map, self.server_id);
-        let domain_len = self.domain.as_ref().map(|s| s.as_bytes().len() as u32).unwrap_or(0);
+        let mut head = ProtFrameHeader::new(
+            ProtKind::Create,
+            ProtFlag::zero(),
+            self.sock_map,
+        );
+        let domain_len = self
+            .domain
+            .as_ref()
+            .map(|s| s.as_bytes().len() as u32)
+            .unwrap_or(0);
         head.length = 1 + domain_len;
         let mut size = 0;
         size += head.encode(buf)?;
@@ -71,7 +76,7 @@ impl ProtCreate {
         Ok(size)
     }
 
-    pub fn sock_map(&self) -> u32 {
+    pub fn sock_map(&self) -> u64 {
         self.sock_map
     }
 

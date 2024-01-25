@@ -217,6 +217,7 @@ mod tests {
             let mut result = BinaryMut::new();
             res.body_mut().read_all(&mut result).await;
 
+            println!("result = {:?}", result.chunk());
             assert_eq!(result.remaining(), HELLO_WORLD.as_bytes().len());
             assert_eq!(result.as_slice(), HELLO_WORLD.as_bytes());
             assert_eq!(res.version(), Version::Http2);

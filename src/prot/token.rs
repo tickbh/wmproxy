@@ -65,7 +65,7 @@ impl ProtToken {
         return true
     }
 
-    pub fn sock_map(&self) -> u32 {
+    pub fn sock_map(&self) -> u64 {
         0
     }
 }

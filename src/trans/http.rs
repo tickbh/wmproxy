@@ -42,7 +42,7 @@ impl HttpTrait for Operate {
 pub struct TransHttp {
     sender: Sender<ProtFrame>,
     sender_work: Sender<(ProtCreate, Sender<ProtFrame>)>,
-    sock_map: u32,
+    sock_map: u64,
     mappings: Arc<RwLock<Vec<MappingConfig>>>,
 }
 
@@ -51,7 +51,7 @@ struct HttpOper {
     pub sender: Sender<Request<Body>>,
     pub virtual_sender: Option<Sender<ProtFrame>>,
     pub sender_work: Sender<(ProtCreate, Sender<ProtFrame>)>,
-    pub sock_map: u32,
+    pub sock_map: u64,
     pub mappings: Arc<RwLock<Vec<MappingConfig>>>,
     pub http_map: Option<MappingConfig>,
 }
@@ -60,7 +60,7 @@ impl TransHttp {
     pub fn new(
         sender: Sender<ProtFrame>,
         sender_work: Sender<(ProtCreate, Sender<ProtFrame>)>,
-        sock_map: u32,
+        sock_map: u64,
         mappings: Arc<RwLock<Vec<MappingConfig>>>,
     ) -> Self {
         Self {

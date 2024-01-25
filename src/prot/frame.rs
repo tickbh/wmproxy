@@ -11,10 +11,9 @@
 // Created Date: 2023/09/22 10:30:10
 
 
-use tokio_util::bytes::buf;
 use webparse::{Buf, http2::frame::{read_u24, encode_u24}, BufMut};
 
-use crate::{ProxyResult, MappingConfig};
+use crate::{Helper, MappingConfig, ProxyResult};
 
 use super::{ProtCreate, ProtClose, ProtData, ProtFlag, ProtKind, ProtMapping, ProtToken};
 
@@ -27,10 +26,8 @@ pub struct ProtFrameHeader {
     kind: ProtKind,
     /// 包体的标识, 如是否为响应包等
     flag: ProtFlag,
-    /// 3个字节, socket在内存中相应的句柄, 客户端发起为单数, 服务端发起为双数
-    sock_map: u32,
-    /// 服务器的id
-    server_id: u32,
+    /// 前32位表示server_id, 后四位3个字节表示id, socket在内存中相应的句柄, 客户端发起为单数, 服务端发起为双数
+    sock_map: u64,
 }
 
 #[derive(Debug)]
@@ -50,21 +47,16 @@ pub enum ProtFrame {
 impl ProtFrameHeader {
     pub const FRAME_HEADER_BYTES: usize = 12;
 
-    pub fn new(kind: ProtKind, flag: ProtFlag, sock_map: u32, server_id: u32) -> ProtFrameHeader {
+    pub fn new(kind: ProtKind, flag: ProtFlag, sock_map: u64) -> ProtFrameHeader {
         ProtFrameHeader {
             length: 0,
             kind,
             flag,
             sock_map,
-            server_id,
         }
     }
-    
-    pub fn server_id(&self) -> u32 {
-        self.server_id
-    }
 
-    pub fn sock_map(&self) -> u32 {
+    pub fn sock_map(&self) -> u64 {
         self.sock_map
     }
 
@@ -94,8 +86,7 @@ impl ProtFrameHeader {
             length,
             kind: ProtKind::new(kind),
             flag: ProtFlag::new(flag),
-            sock_map,
-            server_id,
+            sock_map: Helper::calc_sock_map(server_id, sock_map),
         })
     }
 
@@ -105,8 +96,8 @@ impl ProtFrameHeader {
         size += encode_u24(buffer, self.length);
         size += buffer.put_u8(self.kind.encode());
         size += buffer.put_u8(self.flag.bits());
-        size += encode_u24(buffer, self.sock_map);
-        size += buffer.put_u32(self.server_id);
+        size += encode_u24(buffer, self.sock_map as u32);
+        size += buffer.put_u32((self.sock_map >> 32) as u32);
         Ok(size)
     }
 
@@ -144,23 +135,23 @@ impl ProtFrame {
         Ok(size)
     }
 
-    pub fn new_create(server_id: u32, sock_map: u32, domain: Option<String>) -> Self {
-        Self::Create(ProtCreate::new(server_id, sock_map, domain))
+    pub fn new_create(sock_map: u64, domain: Option<String>) -> Self {
+        Self::Create(ProtCreate::new(sock_map, domain))
     }
 
-    pub fn new_close(sock_map: u32) -> Self {
+    pub fn new_close(sock_map: u64) -> Self {
         Self::Close(ProtClose::new(sock_map))
     }
 
-    pub fn new_close_reason(sock_map: u32, reason: String) -> Self {
+    pub fn new_close_reason(sock_map: u64, reason: String) -> Self {
         Self::Close(ProtClose::new_by_reason(sock_map, reason))
     }
 
-    pub fn new_data(sock_map: u32, data: Vec<u8>) -> Self {
+    pub fn new_data(sock_map: u64, data: Vec<u8>) -> Self {
         Self::Data(ProtData::new(sock_map, data))
     }
 
-    pub fn new_mapping(sock_map: u32, mappings: Vec<MappingConfig>) -> Self {
+    pub fn new_mapping(sock_map: u64, mappings: Vec<MappingConfig>) -> Self {
         Self::Mapping(ProtMapping::new(sock_map, mappings))
     }
 
@@ -196,7 +187,7 @@ impl ProtFrame {
         }
     }
 
-    pub fn sock_map(&self) -> u32 {
+    pub fn sock_map(&self) -> u64 {
         match self {
             ProtFrame::Data(s) => s.sock_map(),
             ProtFrame::Create(s) => s.sock_map(),

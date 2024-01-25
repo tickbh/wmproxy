@@ -22,7 +22,7 @@ use crate::{ProtFrame, TransStream, ProxyError, ProtCreate, MappingConfig};
 pub struct TransTcp {
     sender: Sender<ProtFrame>,
     sender_work: Sender<(ProtCreate, Sender<ProtFrame>)>,
-    sock_map: u32,
+    sock_map: u64,
     mappings: Arc<RwLock<Vec<MappingConfig>>>,
 }
 
@@ -30,7 +30,7 @@ impl TransTcp {
     pub fn new(
         sender: Sender<ProtFrame>,
         sender_work: Sender<(ProtCreate, Sender<ProtFrame>)>,
-        sock_map: u32,
+        sock_map: u64,
         mappings: Arc<RwLock<Vec<MappingConfig>>>,
     ) -> Self {
         Self {

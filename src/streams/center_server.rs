@@ -83,10 +83,10 @@ impl CenterServer {
         self.sender.is_closed()
     }
 
-    pub fn calc_next_id(&mut self) -> u32 {
+    pub fn calc_next_id(&mut self) -> u64 {
         let id = self.next_id;
         self.next_id += 2;
-        id
+        Helper::calc_sock_map(self.option.server_id, id)
     }
 
     pub async fn inner_serve<T>(
@@ -100,7 +100,7 @@ impl CenterServer {
     where
         T: AsyncRead + AsyncWrite + Unpin,
     {
-        let mut map = HashMap::<u32, Sender<ProtFrame>>::new();
+        let mut map = HashMap::<u64, Sender<ProtFrame>>::new();
         let mut read_buf = BinaryMut::new();
         let mut write_buf = BinaryMut::new();
         let mut verify_succ = option.username.is_none() && option.password.is_none();

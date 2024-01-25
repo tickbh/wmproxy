@@ -77,7 +77,6 @@ async fn test_proxy(
     let mut res = match client.send_now(req.into_type()).await {
         Ok(res) => {
             if is_failed {
-                println!("status {:?}", res.status());
                 assert!(res.status() != 200);
                 return ;
             }

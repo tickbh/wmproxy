@@ -22,20 +22,18 @@ use super::ProtFrameHeader;
 /// Socket的数据消息包
 #[derive(Debug)]
 pub struct ProtData {
-    server_id: u32,
-    sock_map: u32,
+    sock_map: u64,
     data: Vec<u8>,
 }
 
 impl ProtData {
-    pub fn new(server_id: u32,sock_map: u32, data: Vec<u8>) -> ProtData {
-        Self { server_id, sock_map, data }
+    pub fn new(sock_map: u64, data: Vec<u8>) -> ProtData {
+        Self { sock_map, data }
     }
 
     pub fn parse<T: Buf>(header: ProtFrameHeader, mut buf: T) -> ProxyResult<ProtData> {
         log::trace!("代理中心: 解码Data数据长度={}", header.length);
         Ok(Self {
-            server_id: header.server_id(),
             sock_map: header.sock_map(),
             data: buf.advance_chunk(header.length as usize).to_vec(),
         })
@@ -43,7 +41,7 @@ impl ProtData {
 
     pub fn encode<B: Buf + BufMut>(mut self, buf: &mut B) -> ProxyResult<usize> {
         log::trace!("代理中心: 编码Data数据长度={}", self.data.len());
-        let mut head = ProtFrameHeader::new(ProtKind::Data, ProtFlag::zero(), self.sock_map, self.server_id);
+        let mut head = ProtFrameHeader::new(ProtKind::Data, ProtFlag::zero(), self.sock_map);
         head.length = self.data.len() as u32;
         let mut size = 0;
         size += head.encode(buf)?;
@@ -55,7 +53,7 @@ impl ProtData {
         &self.data
     }
 
-    pub fn sock_map(&self) -> u32 {
+    pub fn sock_map(&self) -> u64 {
         self.sock_map
     }
 }

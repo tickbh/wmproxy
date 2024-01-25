@@ -23,12 +23,12 @@ use super::{ProtFrameHeader, read_short_string, write_short_string};
 /// 接收方创建一个虚拟链接来对应该Socket的读取写入
 #[derive(Debug)]
 pub struct ProtMapping {
-    sock_map: u32,
+    sock_map: u64,
     pub mappings: Vec<MappingConfig>,
 }
 
 impl ProtMapping {
-    pub fn new(sock_map: u32, mappings: Vec<MappingConfig>) -> Self {
+    pub fn new(sock_map: u64, mappings: Vec<MappingConfig>) -> Self {
         Self {
             sock_map,
             mappings,
@@ -87,7 +87,7 @@ impl ProtMapping {
         Ok(size)
     }
 
-    pub fn sock_map(&self) -> u32 {
+    pub fn sock_map(&self) -> u64 {
         self.sock_map
     }
 

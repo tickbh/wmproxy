@@ -133,7 +133,7 @@ impl CenterClient {
     where
         T: AsyncRead + AsyncWrite + Unpin,
     {
-        let mut map = HashMap::<u32, Sender<ProtFrame>>::new();
+        let mut map = HashMap::<u64, Sender<ProtFrame>>::new();
         let mut read_buf = BinaryMut::new();
         let mut write_buf = BinaryMut::new();
         let (mut reader, mut writer) = split(stream);
@@ -362,10 +362,10 @@ impl CenterClient {
         Ok(())
     }
 
-    fn calc_next_id(&mut self) -> u32 {
+    fn calc_next_id(&mut self) -> u64 {
         let id = self.next_id;
         self.next_id += 2;
-        id
+        Helper::calc_sock_map(self.option.server_id, id)
     }
 
     pub async fn deal_new_stream<T>(&mut self, inbound: T) -> ProxyResult<()>

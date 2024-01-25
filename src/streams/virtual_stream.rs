@@ -27,7 +27,7 @@ use crate::{prot::ProtFrame};
 pub struct VirtualStream
 {
     // sock绑定的句柄
-    id: u32,
+    id: u64,
     // 收到数据通过sender发送给中心端
     sender: PollSender<ProtFrame>,
     // 收到中心端的写入请求，转成write
@@ -40,7 +40,7 @@ pub struct VirtualStream
 
 impl VirtualStream
 {
-    pub fn new(id: u32, sender: Sender<ProtFrame>, receiver: Receiver<ProtFrame>) -> Self {
+    pub fn new(id: u64, sender: Sender<ProtFrame>, receiver: Receiver<ProtFrame>) -> Self {
         Self {
             id,
             sender: PollSender::new(sender),

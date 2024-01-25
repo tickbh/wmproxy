@@ -425,6 +425,10 @@ impl Helper {
         }
     }
 
+    pub fn calc_sock_map(server_id: u32, sock_map: u32) -> u64 {
+        ((server_id as u64) << 32) + (sock_map as u64)
+    }
+
     // pub async fn udp_recv_from(socket: &UdpSocket, buf: &mut [u8]) -> io::Result<usize> {
     //     let (s, addr) = socket.recv_from(&mut buf).await?;
     //     unsafe {
