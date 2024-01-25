@@ -203,6 +203,8 @@ fn default_bind_addr() -> SocketAddr {
 pub struct ProxyConfig {
     /// 代理id
     #[bpaf(
+        fallback(0),
+        display_fallback,
         short('s'),
         long
     )]

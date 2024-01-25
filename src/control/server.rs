@@ -168,9 +168,11 @@ impl ControlServer {
             log::info!("控制端口绑定：{:?}，提供中控功能。", value.control);
             match TcpListener::bind(value.control).await {
                 Ok(tcp) =>tcp,
-                Err(e) => {
+                Err(_) => {
                     log::info!("控制端口绑定失败：{}，请配置不同端口。",value.control);
-                    return Err(e.into());
+                    let pending = std::future::pending();
+                    let () = pending.await;
+                    return Ok(());
                 }
             }
         };

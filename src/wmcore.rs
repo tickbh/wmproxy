@@ -274,7 +274,7 @@ impl WMCore {
                     };
                 }
                 Some((inbound, addr)) = Self::tcp_listen_work(&self.client_listener) => {
-                    log::trace!("代理收到客户端连接: {}->{}", addr, self.center_listener.as_ref().unwrap().local_addr()?);
+                    log::trace!("代理收到客户端连接: {}->{}", addr, self.client_listener.as_ref().unwrap().local_addr()?);
                     let _ = self.deal_client_stream(inbound, addr).await;
                 }
                 Some((inbound, addr)) = Self::tcp_listen_work(&self.map_http_listener) => {
