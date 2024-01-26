@@ -99,7 +99,7 @@ impl CenterClient {
             let stream = HealthCheck::connect(&server_addr).await?;
             // 这里的域名只为认证设置
             let domain =
-                rustls::ServerName::try_from(&*domain.unwrap_or("soft.wm-proxy.com".to_string()))
+                rustls::pki_types::ServerName::try_from(domain.unwrap_or("soft.wm-proxy.com".to_string()))
                     .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid dnsname"))?;
 
             let outbound = connector.connect(domain, stream).await?;
@@ -364,7 +364,7 @@ impl CenterClient {
 
     fn calc_next_id(&mut self) -> u64 {
         let id = self.next_id;
-        self.next_id += 2;
+        self.next_id = self.next_id.wrapping_add(2);
         Helper::calc_sock_map(self.option.server_id, id)
     }
 

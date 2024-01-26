@@ -21,9 +21,10 @@ use std::{
 use crate::{data::LimitReqData, Helper, ProxyResult};
 use async_trait::async_trait;
 use rustls::{
+    crypto::ring::sign::any_supported_type,
+    pki_types::{CertificateDer, PrivateKeyDer},
     server::ResolvesServerCertUsingSni,
-    sign::{self, CertifiedKey},
-    Certificate, PrivateKey,
+    sign::CertifiedKey,
 };
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
@@ -133,13 +134,13 @@ impl HttpConfig {
         }
     }
 
-    fn load_certs(path: &Option<String>) -> io::Result<Vec<Certificate>> {
+    fn load_certs(path: &Option<String>) -> io::Result<Vec<CertificateDer<'static>>> {
         if let Some(path) = path {
             match File::open(&path) {
                 Ok(file) => {
                     let mut reader = BufReader::new(file);
-                    let certs = rustls_pemfile::certs(&mut reader)?;
-                    Ok(certs.into_iter().map(Certificate).collect())
+                    let certs = rustls_pemfile::certs(&mut reader);
+                    Ok(certs.into_iter().collect::<Result<Vec<_>, _>>()?)
                 }
                 Err(e) => {
                     log::warn!("加载公钥{}出错，错误内容:{:?}", path, e);
@@ -151,12 +152,12 @@ impl HttpConfig {
         }
     }
 
-    fn load_keys(path: &Option<String>) -> io::Result<PrivateKey> {
+    fn load_keys(path: &Option<String>) -> io::Result<PrivateKeyDer<'static>> {
         let mut keys = if let Some(path) = path {
             match File::open(&path) {
                 Ok(file) => {
                     let mut reader = BufReader::new(file);
-                    rustls_pemfile::rsa_private_keys(&mut reader)?
+                    rustls_pemfile::rsa_private_keys(&mut reader).collect::<Result<Vec<_>, _>>()?
                 }
                 Err(e) => {
                     log::warn!("加载私钥{}出错，错误内容:{:?}", path, e);
@@ -172,7 +173,7 @@ impl HttpConfig {
                 io::ErrorKind::InvalidInput,
                 format!("No RSA private key found"),
             )),
-            1 => Ok(PrivateKey(keys.remove(0))),
+            1 => Ok(PrivateKeyDer::from(keys.remove(0))),
             _ => Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 format!("More than one RSA private key found"),
@@ -186,12 +187,12 @@ impl HttpConfig {
         let mut listeners = vec![];
         let mut tlss = vec![];
         let mut bind_port = HashSet::new();
-        let config = rustls::ServerConfig::builder().with_safe_defaults();
+        let config = rustls::ServerConfig::builder();
         let mut resolve = ResolvesServerCertUsingSni::new();
         for value in &self.server.clone() {
             let mut is_ssl = false;
             if value.cert.is_some() && value.key.is_some() {
-                let key = sign::any_supported_type(&Self::load_keys(&value.key)?)
+                let key = any_supported_type(&Self::load_keys(&value.key)?)
                     .map_err(|_| ProtError::Extension("unvaild key"))?;
                 let ck = CertifiedKey::new(Self::load_certs(&value.cert)?, key);
                 resolve.add(&value.up_name, ck).map_err(|e| {

@@ -1,6 +1,6 @@
 [package]
 name = "wmproxy"
-version = "0.2.5"
+version = "0.2.6"
 edition = "2021"
 authors = ["tickbh <tickdream125@hotmail.com>"]
 description = " http https proxy by rust"
@@ -16,15 +16,15 @@ log = "0.4.19"
 bitflags = "2.4"
 
 tokio-util = "0.7"
-rustls = { version = "0.21.7", default-features = false }
-webpki-roots = "0.25"
-rustls-pemfile = "1.0.3"
+rustls = { version = "0.22.2", default-features = false }
+webpki-roots = "0.26.0"
+rustls-pemfile = "2.0.0"
 webpki = { version = "0.22", features = ["alloc", "std"] }
-tokio-rustls = "0.24"
+tokio-rustls = "0.25.0"
 futures-core = { version = "0.3", default-features = false }
 futures = "0.3.28"
 
-env_logger = "0.10.0"
+env_logger = "0.11.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_with = "3.4.0"
 serde_yaml = "0.9"
@@ -39,7 +39,7 @@ log4rs = "1.2.0"
 chrono = "0.4.31"
 
 async-trait = "0.1.74"
-rbtree = "0.1.7"
+rbtree = "0.2.0"
 
 regex = "1.10.2"
 
@@ -53,15 +53,15 @@ bpaf = { version = "0.9.8", features = [
     "batteries",
     "autocomplete",
 ] }
-# webparse = { version = "0.2.4" }
-# wenmeng = { version = "0.2.5" }
+webparse = { version = "0.2.6" }
+wenmeng = { version = "0.2.6" }
 # wenmeng={git="https://github.com/tickbh/wenmeng.git"}
 [features]
 bright-color = ["bpaf/bright-color"]
 dull-color = ["bpaf/dull-color"]
 
-[dependencies.webparse]
-path = "../webparse"
+# [dependencies.webparse]
+# path = "../webparse"
 
-[dependencies.wenmeng]
-path = "../wenmeng"
+# [dependencies.wenmeng]
+# path = "../wenmeng"

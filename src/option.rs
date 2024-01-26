@@ -22,7 +22,7 @@ use std::{
 
 use bpaf::*;
 use log::LevelFilter;
-use rustls::{Certificate, ClientConfig, PrivateKey};
+use rustls::{pki_types::{CertificateDer, PrivateKeyDer}, ClientConfig};
 
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
@@ -30,7 +30,8 @@ use tokio::net::TcpListener;
 use tokio_rustls::{rustls, TlsAcceptor};
 
 use crate::{
-    reverse::{HttpConfig, StreamConfig, UpstreamConfig}, CenterClient, Flag, Helper, MappingConfig, OneHealth, ProxyError, ProxyResult, WrapAddr
+    reverse::{HttpConfig, StreamConfig, UpstreamConfig},
+    CenterClient, Flag, Helper, MappingConfig, OneHealth, ProxyError, ProxyResult, WrapAddr,
 };
 
 pub struct Builder {
@@ -79,7 +80,6 @@ impl Builder {
             Ok(proxy)
         })
     }
-    
 
     pub fn server(self, addr: Option<String>) -> Builder {
         self.and_then(|mut proxy| {
@@ -202,32 +202,17 @@ fn default_bind_addr() -> SocketAddr {
 #[derive(Debug, Clone, Serialize, Deserialize, Bpaf)]
 pub struct ProxyConfig {
     /// 代理id
-    #[bpaf(
-        fallback(0),
-        display_fallback,
-        short('s'),
-        long
-    )]
+    #[bpaf(fallback(0), display_fallback, short('s'), long)]
     #[serde(default)]
     pub(crate) server_id: u32,
 
     /// 代理绑定端口地址
-    #[bpaf(
-        // fallback(Some(WrapAddr(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8090)))),
-        // display_fallback,
-        short('b'),
-        long
-    )]
+    #[bpaf(short('b'), long)]
     #[serde_as(as = "Option<DisplayFromStr>")]
     pub(crate) bind: Option<WrapAddr>,
-    
-    /// 代理绑定端口地址
-    #[bpaf(
-        // fallback(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8090)),
-        // display_fallback,
-        short('c'),
-        long
-    )]
+
+    /// 中心代理绑定端口地址
+    #[bpaf(short('c'), long)]
     #[serde_as(as = "Option<DisplayFromStr>")]
     pub(crate) center_addr: Option<WrapAddr>,
 
@@ -236,10 +221,6 @@ pub struct ProxyConfig {
     #[serde_as(as = "DisplayFromStr")]
     #[serde(default)]
     pub(crate) flag: Flag,
-    // /// 启动程序类型
-    // #[bpaf(fallback("client".to_string()))]
-    // #[serde(default)]
-    // pub(crate) mode: String,
 
     /// 连接代理服务端地址
     #[bpaf(short('S'), long("server"))]
@@ -360,12 +341,12 @@ impl ProxyConfig {
         Builder::new()
     }
 
-    fn load_certs(path: &Option<String>) -> io::Result<Vec<Certificate>> {
+    fn load_certs(path: &Option<String>) -> io::Result<Vec<CertificateDer<'static>>> {
         if let Some(path) = path {
             let file = File::open(path)?;
             let mut reader = BufReader::new(file);
-            let certs = rustls_pemfile::certs(&mut reader)?;
-            Ok(certs.into_iter().map(Certificate).collect())
+            let certs = rustls_pemfile::certs(&mut reader);
+            Ok(certs.into_iter().collect::<Result<Vec<_>, _>>()?)
         } else {
             let cert = br"-----BEGIN CERTIFICATE-----
 MIIF+zCCBOOgAwIBAgIQCkkcvmucB5JXt9JAehuNqTANBgkqhkiG9w0BAQsFADBu
@@ -432,16 +413,16 @@ n2hcLrfZSbynEC/pSw/ET7H5nWwckjmAJ1l9fcnbqkU/pf6uMQmnfl0JQjJNSg==
 
             let cursor = io::Cursor::new(cert);
             let mut buf = BufReader::new(cursor);
-            let certs = rustls_pemfile::certs(&mut buf)?;
-            Ok(certs.into_iter().map(Certificate).collect())
+            let certs = rustls_pemfile::certs(&mut buf);
+            Ok(certs.into_iter().collect::<Result<Vec<_>, _>>()?)
         }
     }
 
-    fn load_keys(path: &Option<String>) -> io::Result<PrivateKey> {
+    fn load_keys(path: &Option<String>) -> io::Result<PrivateKeyDer<'static>> {
         let mut keys = if let Some(path) = path {
             let file = File::open(&path)?;
             let mut reader = BufReader::new(file);
-            rustls_pemfile::rsa_private_keys(&mut reader)?
+            rustls_pemfile::rsa_private_keys(&mut reader).collect::<Result<Vec<_>, _>>()?
         } else {
             let key = br"-----BEGIN RSA PRIVATE KEY-----
 MIIEpQIBAAKCAQEAw7gdhMEwp5al49V4b3DkwPWUa/Aiaxo5dk8+JWETaIfU8L9w
@@ -473,7 +454,7 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
             ";
             let cursor = io::Cursor::new(key);
             let mut buf = BufReader::new(cursor);
-            rustls_pemfile::rsa_private_keys(&mut buf)?
+            rustls_pemfile::rsa_private_keys(&mut buf).collect::<Result<Vec<_>, _>>()?
         };
 
         match keys.len() {
@@ -481,7 +462,7 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
                 io::ErrorKind::InvalidInput,
                 format!("No RSA private key found"),
             )),
-            1 => Ok(PrivateKey(keys.remove(0))),
+            1 => Ok(PrivateKeyDer::from(keys.remove(0))),
             _ => Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 format!("More than one RSA private key found"),
@@ -498,7 +479,6 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
         let key = Self::load_keys(&self.map_key)?;
 
         let config = rustls::ServerConfig::builder()
-            .with_safe_defaults()
             .with_no_client_auth()
             .with_single_cert(certs, key)
             .map_err(|err| io::Error::new(io::ErrorKind::InvalidInput, err))?;
@@ -518,18 +498,22 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
         let certs = Self::load_certs(&self.cert)?;
         let key = Self::load_keys(&self.key)?;
 
-        let config = rustls::ServerConfig::builder().with_safe_defaults();
+        let config = rustls::ServerConfig::builder();
         // 开始双向认证，需要客户端提供证书信息
         let config = if self.two_way_tls {
             let mut client_auth_roots = rustls::RootCertStore::empty();
-            for root in &certs {
-                client_auth_roots.add(&root).unwrap();
+            for root in certs.clone().into_iter() {
+                client_auth_roots.add(root).unwrap();
             }
+            let client_auth =
+                rustls::server::WebPkiClientVerifier::builder(client_auth_roots.into())
+                    .build()
+                    .map_err(|_| ProxyError::Extension("add cert error"))?;
 
-            let client_auth = rustls::server::AllowAnyAuthenticatedClient::new(client_auth_roots);
+            // let client_auth = rustls::server::AllowAnyAuthenticatedClient::new(client_auth_roots);
 
             config
-                .with_client_cert_verifier(client_auth.boxed())
+                .with_client_cert_verifier(client_auth)
                 .with_single_cert(certs, key)
                 .map_err(|err| io::Error::new(io::ErrorKind::InvalidInput, err))?
         } else {
@@ -551,19 +535,11 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
         let certs = Self::load_certs(&self.cert)?;
         let mut root_cert_store = rustls::RootCertStore::empty();
         // 信任通用的签名商
-        root_cert_store.add_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.iter().map(|ta| {
-            rustls::OwnedTrustAnchor::from_subject_spki_name_constraints(
-                ta.subject,
-                ta.spki,
-                ta.name_constraints,
-            )
-        }));
-        for cert in &certs {
+        root_cert_store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+        for cert in certs.clone().into_iter() {
             let _ = root_cert_store.add(cert);
         }
-        let config = rustls::ClientConfig::builder()
-            .with_safe_defaults()
-            .with_root_certificates(root_cert_store);
+        let config = rustls::ClientConfig::builder().with_root_certificates(root_cert_store);
 
         if self.two_way_tls {
             let key = Self::load_keys(&self.key)?;
@@ -635,7 +611,13 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
         } else {
             None
         };
-        Ok((proxy_accept, client, client_listener, center_listener, center_client))
+        Ok((
+            proxy_accept,
+            client,
+            client_listener,
+            center_listener,
+            center_client,
+        ))
     }
 
     pub async fn bind_map(

@@ -12,18 +12,13 @@
 
 use std::{io, sync::Arc};
 
-use tokio::{
-    io::{AsyncRead, AsyncWrite},
-};
+use tokio::io::{AsyncRead, AsyncWrite};
 
-use tokio_rustls::{TlsConnector};
-
+use tokio_rustls::TlsConnector;
 
 use wenmeng::MaybeHttpsStream;
 
-use crate::{
-    HealthCheck, ProxyResult,
-};
+use crate::{HealthCheck, ProxyResult};
 
 /// 中心服务端
 /// 接受中心客户端的连接，并且将信息处理或者转发
@@ -54,8 +49,8 @@ impl CenterTrans {
             let connector = TlsConnector::from(self.tls_client.clone().unwrap());
             let stream = HealthCheck::connect(&self.server).await?;
             // 这里的域名只为认证设置
-            let domain = rustls::ServerName::try_from(
-                &*self
+            let domain = rustls::pki_types::ServerName::try_from(
+                self
                     .domain
                     .clone()
                     .unwrap_or("soft.wm-proxy.com".to_string()),

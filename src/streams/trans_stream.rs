@@ -1,28 +1,29 @@
 // Copyright 2022 - 2023 Wenmeng See the COPYRIGHT
 // file at the top-level directory of this distribution.
-// 
+//
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
-// 
+//
 // Author: tickbh
 // -----
 // Created Date: 2023/09/25 10:08:56
 
 use std::{
+    collections::LinkedList,
+    io,
     pin::Pin,
-    task::{ready, Context, Poll}, io, collections::LinkedList,
+    task::{ready, Context, Poll},
 };
 
-
 use tokio::{
-    io::{AsyncRead, AsyncReadExt, AsyncWrite, ReadBuf, split, AsyncWriteExt},
+    io::{split, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf},
     sync::mpsc::{Receiver, Sender},
 };
 use webparse::{BinaryMut, Buf, BufMut};
 
-use crate::{ProtFrame};
+use crate::ProtFrame;
 
 /// 转发流量端
 /// 提供与中心端绑定的读出写入功能
@@ -68,7 +69,6 @@ where
         &mut self.read
     }
 
-    
     pub fn write_mut(&mut self) -> &mut BinaryMut {
         &mut self.read
     }
@@ -128,7 +128,7 @@ where
                         }
                         Ok(p) => {
                             p.send(link.pop_front().unwrap())
-                        }, 
+                        },
                     }
                 }
             }
@@ -158,8 +158,6 @@ where
         }
         Poll::Ready(Ok(n))
     }
-
-
 }
 
 impl<T> AsyncRead for TransStream<T>
@@ -210,4 +208,3 @@ where
         Pin::new(&mut self.stream).poll_shutdown(cx)
     }
 }
-

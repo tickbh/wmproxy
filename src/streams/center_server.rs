@@ -85,7 +85,7 @@ impl CenterServer {
 
     pub fn calc_next_id(&mut self) -> u64 {
         let id = self.next_id;
-        self.next_id += 2;
+        self.next_id = self.next_id.wrapping_add(2);
         Helper::calc_sock_map(self.option.server_id, id)
     }
 
