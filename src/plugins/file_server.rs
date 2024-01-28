@@ -40,6 +40,7 @@ lazy_static! {
         m.insert("zip", "application/zip");
         m.insert("json", "application/json");
         m.insert("yaml", "text/plain");
+        m.insert("yml", "text/plain");
         m.insert("toml", "text/plain");
         m.insert("mid", "audio/midi");
         m.insert("midi", "audio/midi");
