@@ -23,13 +23,14 @@ use serde_with::{serde_as, DisplayFromStr};
 use webparse::{Method, Scheme, WebError};
 use wenmeng::{RecvRequest, ProtResult, ProtError};
 
-use crate::IpSets;
+use crate::{Helper, IpSets};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MatchMethod(pub HashSet<Method>);
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MatchScheme(pub HashSet<Scheme>);
 
+/// location匹配，将根据该类的匹配信息进行是否匹配
 #[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Matcher {
@@ -76,12 +77,21 @@ impl Matcher {
         "/".to_string()
     }
 
-    
     /// 当本地限制方法时,优先匹配方法,在进行路径的匹配
     pub fn is_match_rule(&self, path: &String, req: &RecvRequest) -> ProtResult<bool>  {
         if let Some(p) = &self.path {
-            if path.find(&*p).is_none() {
-                return Ok(false);
+            let mut is_match = false;
+            if Helper::is_match(&path, p) {
+                is_match = true;
+            }
+            if !is_match {
+                if let Some(re) = Helper::try_cache_regex(&p) {
+                    if !re.is_match(path) {
+                        return Ok(false);
+                    }
+                } else {
+                    return Ok(false);
+                }
             }
         }
 

@@ -22,6 +22,7 @@ use crate::{ConfigHeader, FileServer, HealthCheck, Helper, StaticResponse};
 
 use super::{common::CommonConfig, ReverseHelper, TryPathsConfig, UpstreamConfig, Matcher, string_or_struct};
 
+/// 负载均衡中的location匹配，将匹配合适的处理逻辑
 #[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LocationConfig {

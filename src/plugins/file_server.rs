@@ -140,6 +140,9 @@ pub struct FileServer {
     pub disable_compress: bool,
     #[serde(default)]
     pub browse: bool,
+    /// 通过"Access-Control-Allow-Origin"标头启用 CORS
+    #[serde(default)]
+    pub cors: bool,
     #[serde(default = "CommonConfig::new")]
     pub comm: CommonConfig,
 }
@@ -188,6 +191,7 @@ impl FileServer {
             precompressed: vec![],
             disable_compress: false,
             browse: true,
+            cors: false,
             comm: CommonConfig::new(),
         };
         config.fix_default();
@@ -350,6 +354,16 @@ impl FileServer {
             res.headers_mut().insert(
                 HeaderName::CACHE_CONTROL,
                 format!("max-age={}", c.0.as_secs()),
+            );
+        }
+        if self.cors {
+            res.headers_mut().insert(
+                HeaderName::ACCESS_CONTROL_ALLOW_HEADERS,
+                "Origin, X-Requested-With, Content-Type, Accept, Range",
+            );
+            res.headers_mut().insert(
+                HeaderName::ACCESS_CONTROL_ALLOW_ORIGIN,
+                "*",
             );
         }
         if self.disable_compress {

@@ -14,7 +14,7 @@ use std::{
     cell::RefCell,
     collections::{HashMap, HashSet},
     io,
-    net::{ToSocketAddrs, SocketAddr},
+    net::{SocketAddr, ToSocketAddrs},
     str::FromStr,
     sync::{Arc, Mutex},
 };
@@ -32,7 +32,7 @@ use log4rs::{
 };
 use regex::Regex;
 use socket2::{Domain, Socket, Type};
-use tokio::net::{TcpListener, UdpSocket, TcpStream};
+use tokio::net::{TcpListener, TcpStream, UdpSocket};
 use webparse::{http2::frame::read_u24, BinaryMut, Buf, Request, Response, Serialize};
 use wenmeng::{Body, HeaderHelper};
 
@@ -60,7 +60,7 @@ impl Helper {
             return Ok(None);
         }
         read.advance(all_len);
-        
+
         let header = match ProtFrameHeader::parse_by_len(&mut copy, length) {
             Ok(v) => v,
             Err(err) => return Err(err),
@@ -181,7 +181,9 @@ impl Helper {
             root = root.appender("stdout");
         }
 
-        let log_config = log_config.build(root.build(option.default_level.unwrap_or(LevelFilter::Trace))).unwrap();
+        let log_config = log_config
+            .build(root.build(option.default_level.unwrap_or(LevelFilter::Trace)))
+            .unwrap();
         // 检查静态变量中是否存在handle可能在多线程中,需加锁
         if LOG4RS_HANDLE.lock().unwrap().is_some() {
             LOG4RS_HANDLE
@@ -219,7 +221,7 @@ impl Helper {
         lazy_static! {
             static ref RE: Regex = Regex::new(r#"([^\s'"]+)|"([^"]*)"|'([^']*)'"#).unwrap();
         };
-        
+
         let mut vals = vec![];
         for (_, [value]) in RE.captures_iter(key).map(|c| c.extract()) {
             vals.push(value);
@@ -240,15 +242,37 @@ impl Helper {
         ret
     }
 
+    /// may memory leak
+    pub fn try_cache_regex(origin: &str) -> Option<Regex> {
+        // 因为均是从配置中读取的数据, 在这里缓存正则表达示会在总量上受到配置的限制
+        lazy_static! {
+            static ref RE_CACHES: Mutex<HashMap<&'static str, Option<Regex>>> =
+                Mutex::new(HashMap::new());
+        };
+
+        if origin.len() == 0 {
+            return None;
+        }
+
+        if let Ok(mut guard) = RE_CACHES.lock() {
+            if let Some(re) = guard.get(origin) {
+                return re.clone();
+            } else {
+                if let Ok(re) = Regex::new(origin) {
+                    guard.insert(
+                        Box::leak(origin.to_string().into_boxed_str()),
+                        Some(re.clone()),
+                    );
+                    return Some(re);
+                }
+            }
+        }
+        return None;
+    }
+
     pub fn format_req_may_regex(req: &Request<Body>, formats: &str) -> String {
         let formats = formats.trim();
         if formats.contains(char::is_whitespace) {
-            // 因为均是从配置中读取的数据, 在这里缓存正则表达示会在总量上受到配置的限制
-            lazy_static! {
-                static ref RE_CACHES: Mutex<HashMap<&'static str, Regex>> =
-                    Mutex::new(HashMap::new());
-            };
-
             if formats.len() == 0 {
                 return String::new();
             }
@@ -258,19 +282,51 @@ impl Helper {
                 return String::new();
             }
 
-            if let Ok(mut guard) = RE_CACHES.lock() {
-                if let Some(re) = guard.get(&vals[0]) {
-                    return Self::inner_oper_regex(req, re, &vals[1..]);
-                } else {
-                    if let Ok(re) = Regex::new(vals[0]) {
-                        let ret = Self::inner_oper_regex(req, &re, &vals[1..]);
-                        guard.insert(Box::leak(vals[0].to_string().into_boxed_str()), re);
-                        return ret;
-                    }
-                }
+            if let Some(re) = Self::try_cache_regex(&vals[0]) {
+                return Self::inner_oper_regex(req, &re, &vals[1..]);
             }
         }
         Self::format_req(req, formats)
+    }
+
+    /// # Examples
+    ///
+    /// ```
+    /// use wmproxy::Helper;
+    ///
+    /// assert!(Helper::is_match("/aa", "*"));
+    /// assert!(Helper::is_match("/wmproxy", "*"));
+    /// assert!(Helper::is_match("/wmproxy/is_good", "/wmproxy*"));
+    /// assert!(Helper::is_match("/wmproxy/is_good", "/wmproxy*good"));
+    /// assert!(Helper::is_match("/wmproxy/is_good", "*wmproxy*good"));
+    /// assert!(Helper::is_match("/wmproxy/is_good", "/wmproxy/*is_good"));
+    /// ```
+    ///
+    pub fn is_match(src: &str, pattern: &str) -> bool {
+        let mut oper = src;
+        let vals = pattern.split("*").collect::<Vec<&str>>();
+        for i in 0..vals.len() {
+            if i == 0 {
+                if let Some(val) = oper.strip_prefix(vals[i]) {
+                    oper = val;
+                } else {
+                    return false;
+                }
+            } else if i == vals.len() - 1 {
+                if let Some(val) = oper.strip_suffix(vals[i]) {
+                    oper = val;
+                } else {
+                    return false;
+                }
+            } else {
+                if let Some(idx) = oper.find(vals[i]) {
+                    oper = &oper[idx + vals[i].len() .. ]
+                } else {
+                    return false;
+                }
+            }
+        }
+        true
     }
 
     /// 记录HTTP的访问数据并将其格式化
@@ -399,7 +455,6 @@ impl Helper {
         }
     }
 
-    
     pub async fn tcp_accept(listener: &TcpListener) -> io::Result<(TcpStream, SocketAddr)> {
         let (s, a) = listener.accept().await?;
         if let Ok(l) = listener.local_addr() {
@@ -439,9 +494,9 @@ impl Helper {
 
 #[cfg(test)]
 mod tests {
+    use crate::Helper;
     use webparse::Request;
     use wenmeng::Body;
-    use crate::Helper;
 
     fn build_request() -> Request<Body> {
         Request::builder()
@@ -452,14 +507,13 @@ mod tests {
             .into_type()
     }
 
-
     #[test]
     fn do_test_reg() {
         let req = &build_request();
         let format = r" /test/(.*) {path} /formal/$1 ";
         let val = Helper::format_req_may_regex(req, format);
         assert_eq!(val, "/formal/root");
-        
+
         let format = r" /te(\w+)/(.*) {path} /formal/$1/$2 ";
         let val = Helper::format_req_may_regex(req, format);
         assert_eq!(val, "/formal/st/root");
@@ -468,6 +522,4 @@ mod tests {
         let val = Helper::format_req_may_regex(req, format);
         assert_eq!(val, "http://127.0.0.1/formal/st/root?query=1&a=b");
     }
-
-
 }

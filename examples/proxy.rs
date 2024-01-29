@@ -101,7 +101,12 @@ async fn test_proxy(
 #[tokio::main]
 async fn main() {
 
-    
+    let src = "wmproxy is good";
+    let first = &src[..7];
+    let second = &src[3..8];
+    let end = &src[8..];
+    assert!(wmproxy::Helper::is_match("/wmproxy/is_good", "*wmproxy*good"));
+
     let addr  = "localhost:123".parse::<SocketAddr>();
     println!("addr = {:?}", addr);
 

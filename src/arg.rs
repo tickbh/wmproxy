@@ -133,6 +133,12 @@ struct FileServerConfig {
     /// 设置robots.txt返回
     #[bpaf(short, long)]
     pub(crate) ext_mimetype: Vec<String>,
+    /// 通过"Access-Control-Allow-Origin"标头启用 CORS
+    #[bpaf(long, fallback(false))]
+    pub(crate) cors: bool,
+    /// 头部信息修改如 "proxy x-forward-for {client_ip}"
+    #[bpaf(short('H'), long)]
+    pub(crate) header: Vec<ConfigHeader>,
     /// 访问日志放的位置如"logs/access.log trace"
     #[bpaf(long)]
     pub(crate) access_log: Option<String>,
@@ -444,7 +450,8 @@ pub async fn parse_env() -> ProxyResult<ConfigOption> {
             let mut file_server = FileServer::new(file.root, "".to_string());
             file_server.robots = file.robots;
             file_server.cache_time = file.cache_time;
-
+            file_server.cors = file.cors;
+            location.headers = file.header;
             location.file_server = Some(file_server);
             if let Some(access) = file.access_log {
                 http.comm.access_log = Some(ConfigLog::new(
