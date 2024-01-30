@@ -464,7 +464,10 @@ impl FileServer {
             root = CURRENT_DIR.clone();
         }
         let root_path = Path::new(&root);
-        let href = "/".to_string() + path.strip_prefix(&self.prefix).unwrap();
+        let mut href = path.strip_prefix(&self.prefix).unwrap().to_string();
+        if !href.starts_with("/") {
+            href = "/".to_string() + &href;
+        }
         let real_path = root.clone() + &href;
         let mut real_path = Path::new(&real_path).to_owned();
         // 必须保证不会跑出root设置的目录之外，如故意访问`../`之类的

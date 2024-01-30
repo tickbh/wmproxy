@@ -112,7 +112,7 @@
                     "kind": "bin"
                 }
             },
-            "args": ["file-server", "-l", ":8869", "--access-log", "logs/cctv.log trace"],
+            "args": ["file-server", "-l", ":8869", "--access-log", "logs/cctv.log trace", "--cors"],
             "cwd": "${workspaceFolder}"
         },
         {
