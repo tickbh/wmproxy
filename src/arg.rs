@@ -49,11 +49,18 @@ struct Shared {
     pub(crate) disable_stdout: bool,
     /// 禁用控制微端
     pub(crate) disable_control: bool,
+    /// 后台运行
+    pub(crate) daemon: bool,
+    /// 守护程序运行，正常退出结束
+    pub(crate) forever: bool,
     /// 是否显示更多日志
     #[bpaf(short, long)]
     pub(crate) verbose: bool,
     /// 设置默认等级
     pub(crate) default_level: Option<LevelFilter>,
+    /// 写入进程id文件
+    #[bpaf(long, fallback("wmproxy.pid".to_string()))]
+    pub(crate) pidfile: String,
 }
 
 #[derive(Debug, Clone, Bpaf)]
@@ -62,10 +69,6 @@ struct RunConfig {
     /// 配置文件路径
     #[bpaf(short, long)]
     pub(crate) config: String,
-
-    /// 写入进程id文件
-    #[bpaf(long)]
-    pub(crate) pidfile: Option<String>,
 }
 
 #[derive(Debug, Clone, Bpaf)]
@@ -82,10 +85,6 @@ struct StopConfig {
     /// 配置文件路径
     #[bpaf(short, long)]
     pub(crate) config: Option<String>,
-
-    /// 写入进程id文件
-    #[bpaf(short, long)]
-    pub(crate) pidfile: Option<String>,
 
     /// 控制微端地址
     #[bpaf(short, long)]
@@ -209,7 +208,6 @@ struct VersionConfig {}
 enum Command {
     Proxy(ProxyConfig),
     Run(RunConfig),
-    Start(RunConfig),
     Stop(StopConfig),
     Reload(ReloadConfig),
     Check(CheckConfig),
@@ -226,11 +224,6 @@ fn parse_command() -> impl Parser<(Command, Shared)> {
         .command("run")
         .help("启动命令");
 
-    let start = run_config().map(Command::Start);
-    let start = construct!(start, shared())
-        .to_options()
-        .command("start")
-        .help("启动命令, 但在后台运行");
 
     let stop = stop_config().map(Command::Stop);
     let stop = construct!(stop, shared())
@@ -282,7 +275,6 @@ fn parse_command() -> impl Parser<(Command, Shared)> {
     construct!([
         action,
         run,
-        start,
         stop,
         reload,
         check,
@@ -336,10 +328,50 @@ fn kill_process_by_id(id: String) -> Option<i32> {
 
 pub async fn parse_env() -> ProxyResult<ConfigOption> {
     let (command, shared) = parse_command().run();
+    if shared.daemon && shared.forever {
+        println!("daemon与forever不能同时被设置");
+        exit(0);
+    }
+    if shared.daemon {
+        let args = std::env::args().filter(|s| s != "--daemon").collect::<Vec<String>>();
+        let mut command = std::process::Command::new(&args[0]);
+        for value in &args[1..] {
+            command.arg(&*value);
+        }
+        command.spawn().expect("failed to start wmproxy");
+        exit(0);
+    } else if shared.forever {
+        let args = std::env::args().filter(|s| s != "--forever").collect::<Vec<String>>();
+        loop {
+            let mut command = std::process::Command::new(&args[0]);
+            for value in &args[1..] {
+                command.arg(&*value);
+            }
+            let mut child = command.spawn().expect("failed to start wmproxy");
+            match child.wait() {
+                Ok(ex) => {
+                    if ex.success() {
+                        exit(0);
+                    }
+                    log::error!("子进程异常退出：{}", ex);
+                },
+                Err(e) => log::error!("子进程异常退出：{:?}", e),
+            }
+        }
+    }
+    // let args = std::env::args().collect::<Vec<String>>();
+    // let mut command = std::process::Command::new(&args[0]);
+    // command.arg("run");
+    // for value in &args[2..] {
+    //     command.arg(&*value);
+    // }
+    // command.spawn().expect("failed to start wmproxy");
+    // exit(0);
     let mut option = ConfigOption::default();
     option.default_level = shared.default_level;
     option.disable_control = shared.disable_control;
     option.disable_stdout = shared.disable_stdout;
+    option.pidfile = shared.pidfile.clone();
     option.control = shared.control.0;
     if shared.verbose {
         option.default_level = Some(LevelFilter::Trace);
@@ -366,37 +398,21 @@ pub async fn parse_env() -> ProxyResult<ConfigOption> {
                 option.default_level = Some(LevelFilter::Trace);
             }
             option.after_load_option()?;
-            if let Some(pid) = config.pidfile {
-                let mut file = File::create(pid)?;
-                file.write_all(&format!("{}", id()).as_bytes())?;
-            }
             return Ok(option);
         }
-        Command::Start(_) => {
-            let args = std::env::args().collect::<Vec<String>>();
-            let mut command = std::process::Command::new(&args[0]);
-            command.arg("run");
-            for value in &args[2..] {
-                command.arg(&*value);
-            }
-            command.spawn().expect("failed to start wmproxy");
-            exit(0);
-        }
         Command::Stop(config) => {
-            if let Some(pid) = config.pidfile {
-                let mut file = File::open(pid)?;
-                let mut content = String::new();
-                file.read_to_string(&mut content)?;
-                exit(kill_process_by_id(content).unwrap_or(0));
-            }
             let url = if let Some(config) = config.config {
                 let option = read_config_from_path(&config)?;
                 format!("http://{}", option.control)
             } else if let Some(url) = config.url {
                 url
             } else {
-                println!("必须传入参数pidfile或者config或者url之一");
-                exit(0);
+                let mut file = File::open(shared.pidfile)?;
+                let mut content = String::new();
+                file.read_to_string(&mut content)?;
+                exit(kill_process_by_id(content).unwrap_or(0));
+                // println!("必须传入参数pidfile或者config或者url之一");
+                // exit(0);
             };
 
             let mut url = Url::parse(url.into_bytes())?;

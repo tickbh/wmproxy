@@ -269,6 +269,9 @@ pub fn default_control_port() -> SocketAddr {
     "127.0.0.1:8837".parse().unwrap()
 }
 
+pub fn default_pidfile() -> String {
+    "wmproxy.pid".to_string()
+}
 #[serde_as]
 /// 代理类, 一个代理类启动一种类型的代理
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -287,6 +290,8 @@ pub struct ConfigOption {
     pub(crate) disable_stdout: bool,
     #[serde(default)]
     pub(crate) disable_control: bool,
+    #[serde(default="default_pidfile")]
+    pub pidfile: String,
     #[serde_as(as = "Option<DisplayFromStr>")]
     pub(crate) default_level: Option<LevelFilter>,
 }
@@ -301,6 +306,7 @@ impl Default for ConfigOption {
             disable_stdout: Default::default(),
             disable_control: Default::default(),
             default_level: None,
+            pidfile: default_pidfile(),
         }
     }
 }

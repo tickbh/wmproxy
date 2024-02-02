@@ -11,12 +11,7 @@
 // Created Date: 2023/09/26 10:43:25
 
 use std::{
-    cell::RefCell,
-    collections::{HashMap, HashSet},
-    io,
-    net::{SocketAddr, ToSocketAddrs},
-    str::FromStr,
-    sync::{Arc, Mutex},
+    cell::RefCell, collections::{HashMap, HashSet}, fs::{remove_file, File}, io::{self, Read, Write}, net::{SocketAddr, ToSocketAddrs}, path::Path, process::id, str::FromStr, sync::{Arc, Mutex}
 };
 
 use crate::{
@@ -135,6 +130,26 @@ impl Helper {
                 "could not resolve to any address",
             )
         }))
+    }
+
+    
+    /// 创建pid文件
+    pub fn try_create_pidfile(pidfile: &String) -> ProxyResult<()> {
+        let mut file = File::create(&pidfile)?;
+        file.write_all(&format!("{}", id()).as_bytes())?;
+        Ok(())
+    }
+
+    /// 创建pid文件
+    pub fn try_remove_pidfile(pidfile: &String) -> ProxyResult<bool> {
+        let mut file = File::open(&pidfile)?;
+        let mut content = String::new();
+        file.read_to_string(&mut content)?;
+        if content == format!("{}", id()) {
+            remove_file(&pidfile)?;
+            return Ok(true);
+        }
+        Ok(false)
     }
 
     /// 尝试初始化, 如果已初始化则重新加载
