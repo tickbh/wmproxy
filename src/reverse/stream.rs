@@ -1,11 +1,11 @@
 // Copyright 2022 - 2023 Wenmeng See the COPYRIGHT
 // file at the top-level directory of this distribution.
-// 
+//
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
-// 
+//
 // Author: tickbh
 // -----
 // Created Date: 2023/10/18 02:32:27
@@ -16,27 +16,26 @@ use std::{
     net::SocketAddr,
     sync::Arc,
     task::{ready, Poll},
-    time::{Instant, Duration},
+    time::{Duration, Instant},
 };
-
 
 use futures_core::Stream;
 
 use serde::{Deserialize, Serialize};
 use tokio::{
-    io::{copy_bidirectional, AsyncRead, AsyncWrite, ReadBuf, Interest},
+    io::{copy_bidirectional, AsyncRead, AsyncWrite, Interest, ReadBuf},
     net::{TcpListener, UdpSocket},
     sync::{
         mpsc::{channel, Receiver, Sender},
         Mutex,
-    }, time::sleep,
+    },
+    time::sleep,
 };
 use tokio_util::sync::PollSender;
 use webparse::{BinaryMut, Buf, BufMut};
-use wenmeng::{plugins::{StreamToWs, WsToStream}};
+use wenmeng::plugins::{StreamToWs, WsToStream};
 
-
-use crate::{HealthCheck, Helper, ProxyResult, ProxyError};
+use crate::{HealthCheck, Helper, ProxyError, ProxyResult};
 
 use super::{ServerConfig, UpstreamConfig};
 
@@ -70,19 +69,21 @@ impl StreamConfig {
         let mut udp_listeners = vec![];
         let mut bind_port = HashSet::new();
         for value in &self.server.clone() {
-            if bind_port.contains(&value.bind_addr.port()) {
-                continue;
-            }
-            bind_port.insert(value.bind_addr.port());
-            if value.bind_mode == "udp" {
-                log::info!("负载均衡,stream：{:?}，提供stream中的udp转发功能。", value.bind_addr);
-                let listener = Helper::bind_upd(value.bind_addr).await?;
-                udp_listeners.push(StreamUdp::new(listener, value.clone()));
-            } else {
-                log::info!("负载均衡,stream：{:?}，提供stream中的tcp转发功能。", value.bind_addr);
+            for v in &value.bind_addr.0 {
+                if bind_port.contains(&v.port()) {
+                    continue;
+                }
+                bind_port.insert(v.port());
+                if value.bind_mode == "udp" {
+                    log::info!("负载均衡,stream：{:?}，提供stream中的udp转发功能。", v);
+                    let listener = Helper::bind_upd(v).await?;
+                    udp_listeners.push(StreamUdp::new(listener, value.clone()));
+                } else {
+                    log::info!("负载均衡,stream：{:?}，提供stream中的tcp转发功能。", v);
 
-                let listener = Helper::bind(value.bind_addr).await?;
-                listeners.push(listener);
+                    let listener = Helper::bind(v).await?;
+                    listeners.push(listener);
+                }
             }
         }
 
@@ -100,8 +101,7 @@ impl StreamConfig {
     {
         let value = data.lock().await;
         for (_, s) in value.server.iter().enumerate() {
-            if s.bind_addr.port() == local_addr.port() {
-                
+            if s.bind_addr.contains(local_addr.port()) {
                 let (addr, domain) = s.get_addr_domain()?;
                 if addr.is_none() {
                     return Err(ProxyError::Extension("unknow addr"));
@@ -278,10 +278,26 @@ impl StreamUdp {
         if self.server.comm.client_timeout.is_some() {
             timeout = self.server.comm.client_timeout.clone().unwrap().0;
         }
-        self.remote_sockets.insert(addr, InnerUdp { sender: PollSender::new(sender), last_time: Instant::now(), timeout } );
+        self.remote_sockets.insert(
+            addr,
+            InnerUdp {
+                sender: PollSender::new(sender),
+                last_time: Instant::now(),
+                timeout,
+            },
+        );
         let mut sender_clone = self.sender.clone();
         tokio::spawn(async move {
-            if let Err(e) = Self::deal_udp_bind(&mut sender_clone, receiver, data, addr, remote_addr, timeout).await {
+            if let Err(e) = Self::deal_udp_bind(
+                &mut sender_clone,
+                receiver,
+                data,
+                addr,
+                remote_addr,
+                timeout,
+            )
+            .await
+            {
                 log::info!("处理UDP信息发生错误，退出:{:?}", e);
             }
             let _ = sender_clone.send((vec![], addr)).await;

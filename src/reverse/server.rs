@@ -34,6 +34,9 @@ pub struct ServerConfig {
 
     #[serde_as(as = "DisplayFromStr")]
     pub bind_addr: WrapVecAddr,
+
+    #[serde_as(as = "DisplayFromStr")]
+    pub bind_ssl: WrapVecAddr,
     
     #[serde(default = "default_up_name")]
     pub up_name: String,
@@ -61,6 +64,23 @@ impl ServerConfig {
     pub fn new(bind_addr: WrapVecAddr) -> Self {
         ServerConfig {
             bind_addr,
+            bind_ssl: WrapVecAddr::empty(),
+            up_name: default_up_name(),
+            root: None,
+            cert: None,
+            key: None,
+            bind_mode: default_bind_mode(),
+            headers: vec![],
+            location: vec![],
+            upstream: vec![],
+            comm: CommonConfig::new(),
+        }
+    }
+
+    pub fn new_ssl(bind_ssl: WrapVecAddr) -> Self {
+        ServerConfig {
+            bind_addr: WrapVecAddr::empty(),
+            bind_ssl,
             up_name: default_up_name(),
             root: None,
             cert: None,

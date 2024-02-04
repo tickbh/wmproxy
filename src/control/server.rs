@@ -1,24 +1,28 @@
 // Copyright 2022 - 2023 Wenmeng See the COPYRIGHT
 // file at the top-level directory of this distribution.
-// 
+//
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
-// 
+//
 // Author: tickbh
 // -----
 // Created Date: 2023/10/25 03:36:36
 
-
-
 use std::sync::Arc;
 
+use crate::{arg, ConfigOption, Helper, ProxyResult, WMCore};
 use async_trait::async_trait;
-use tokio::{sync::{mpsc::{Sender, channel, Receiver}, Mutex}, net::TcpListener};
-use webparse::{Request, Response, HeaderName};
-use wenmeng::{Server, Body, ProtResult, HttpTrait, RecvRequest, RecvResponse};
-use crate::{ConfigOption, WMCore, ProxyResult, Helper, arg};
+use tokio::{
+    net::TcpListener,
+    sync::{
+        mpsc::{channel, Receiver, Sender},
+        Mutex,
+    },
+};
+use webparse::{HeaderName, Request, Response};
+use wenmeng::{Body, HttpTrait, ProtResult, RecvRequest, RecvResponse, Server};
 
 /// 控制端，可以对配置进行热更新
 pub struct ControlServer {
@@ -73,7 +77,7 @@ impl ControlServer {
         Ok(())
     }
 
-    async fn inner_start_server(&mut self, option: ConfigOption) -> ProxyResult<()>  {
+    async fn inner_start_server(&mut self, option: ConfigOption) -> ProxyResult<()> {
         let sender = self.control_sender_close.clone();
         let (sender_no_listen, receiver_no_listen) = channel::<()>(1);
         let sender_close = self.server_sender_close.take();
@@ -92,54 +96,47 @@ impl ControlServer {
         Ok(())
     }
 
-    async fn inner_operate(req: &mut Request<Body>, data: &mut Arc<Mutex<ControlServer>>) -> ProtResult<Response<Body>> {
+    async fn inner_operate(
+        req: &mut Request<Body>,
+        data: &mut Arc<Mutex<ControlServer>>,
+    ) -> ProtResult<Response<Body>> {
         let mut value = data.lock().await;
         match &**req.path() {
             "/reload" => {
                 // 将重新启动服务器
                 let _ = value.do_restart_serve().await;
                 return Ok(Response::text()
-                .body("重新加载配置成功")
-                .unwrap()
-                .into_type());
+                    .body("重新加载配置成功")
+                    .unwrap()
+                    .into_type());
             }
             "/stop" => {
                 // 通知控制端关闭，控制端阻塞主线程，如果控制端退出后进程退出
                 if let Some(sender) = &value.server_sender_close {
                     let _ = sender.send(()).await;
                 }
-                return Ok(Response::text()
-                .body("关闭进程成功")
-                .unwrap()
-                .into_type());
+                return Ok(Response::text().body("关闭进程成功").unwrap().into_type());
             }
             "/now" => {
                 if let Ok(data) = serde_json::to_string_pretty(&value.option) {
                     return Ok(Response::text()
-                    .header(HeaderName::CONTENT_TYPE, "application/json; charset=utf-8")
-                    .body(data)
-                    .unwrap()
-                    .into_type());
+                        .header(HeaderName::CONTENT_TYPE, "application/json; charset=utf-8")
+                        .body(data)
+                        .unwrap()
+                        .into_type());
                 }
             }
-            _ => {
-
-            }
+            _ => {}
         };
-        if req.path() == "/reload" {
-        }
+        if req.path() == "/reload" {}
 
         if req.path() == "/stop" {
             // 通知控制端关闭，控制端阻塞主线程，如果控制端退出后进程退出
             if let Some(sender) = &value.server_sender_close {
                 let _ = sender.send(()).await;
             }
-            return Ok(Response::text()
-            .body("关闭进程成功")
-            .unwrap()
-            .into_type());
+            return Ok(Response::text().body("关闭进程成功").unwrap().into_type());
         }
-
 
         return Ok(Response::status503()
             .body("服务器内部无服务")
@@ -156,20 +153,20 @@ impl ControlServer {
             None
         }
     }
-    
+
     pub async fn start_control(control: Arc<Mutex<ControlServer>>) -> ProxyResult<()> {
         let listener = {
-            let value = &control.lock().await.option;
-            if value.disable_control {
-                let pending = std::future::pending();
-                let () = pending.await;
-                return Ok(())
+            let value = &mut control.lock().await;
+            if value.option.disable_control {
+                let mut receiver = value.control_receiver_close.take();
+                let _ = Self::receiver_await(&mut receiver).await;
+                return Ok(());
             }
-            log::info!("控制端口绑定：{:?}，提供中控功能。", value.control);
-            match TcpListener::bind(value.control).await {
-                Ok(tcp) =>tcp,
+            log::info!("控制端口绑定：{:?}，提供中控功能。", value.option.control);
+            match TcpListener::bind(value.option.control).await {
+                Ok(tcp) => tcp,
                 Err(_) => {
-                    log::info!("控制端口绑定失败：{}，请配置不同端口。",value.control);
+                    log::info!("控制端口绑定失败：{}，请配置不同端口。", value.option.control);
                     let pending = std::future::pending();
                     let () = pending.await;
                     return Ok(());
@@ -182,7 +179,7 @@ impl ControlServer {
                 let value = &mut control.lock().await;
                 value.control_receiver_close.take()
             };
-            
+
             tokio::select! {
                 Ok((conn, addr)) = listener.accept() => {
                     log::info!("控制端口请求：{:?}，开始处理。", addr);

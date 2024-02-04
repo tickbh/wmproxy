@@ -194,23 +194,40 @@ impl HttpConfig {
             if value.cert.is_some() && value.key.is_some() {
                 let key = any_supported_type(&Self::load_keys(&value.key)?)
                     .map_err(|_| ProtError::Extension("unvaild key"))?;
-                let ck = CertifiedKey::new(Self::load_certs(&value.cert)?, key);
-                resolve.add(&value.up_name, ck).map_err(|e| {
+                let cert = Self::load_certs(&value.cert)?;
+                let ck = CertifiedKey::new(cert, key);
+                
+                let name = value.comm.domain.clone().unwrap_or(value.up_name.clone());
+                resolve.add(&name, ck).map_err(|e| {
                     log::warn!("添加证书时失败:{:?}", e);
                     ProtError::Extension("key error")
                 })?;
                 is_ssl = true;
             }
-
-            if bind_port.contains(&value.bind_addr.port()) {
-                continue;
+            for v in &value.bind_addr.0 {
+                if bind_port.contains(&v.port()) {
+                    continue;
+                }
+                bind_port.insert(v.port());
+                log::info!("HTTP服务：{:?}，提供http处理及转发功能。", v);
+                let listener = Helper::bind(v).await?;
+                listeners.push(listener);
+                tlss.push(false);
             }
-            bind_port.insert(value.bind_addr.port());
 
-            log::info!("HTTP服务：{:?}，提供http处理及转发功能。", value.bind_addr);
-            let listener = Helper::bind(value.bind_addr).await?;
-            listeners.push(listener);
-            tlss.push(is_ssl);
+            for v in &value.bind_ssl.0 {
+                if bind_port.contains(&v.port()) {
+                    continue;
+                }
+                bind_port.insert(v.port());
+                if !is_ssl {
+                    return Err(crate::ProxyError::Extension("配置SSL端口但未配置证书"))
+                }
+                log::info!("HTTPs服务：{:?}，提供https处理及转发功能。", v);
+                let listener = Helper::bind(v).await?;
+                listeners.push(listener);
+                tlss.push(is_ssl);
+            }
         }
 
         let mut config = config

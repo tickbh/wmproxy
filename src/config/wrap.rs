@@ -16,8 +16,6 @@ use std::{
     str::FromStr,
 };
 
-use wenmeng::ProtError;
-
 fn parse_socker_addr(s: &str) -> Result<SocketAddr, AddrParseError> {
     if s.starts_with(":") {
         let addr = format!("127.0.0.1{s}").parse::<SocketAddr>()?;
@@ -57,16 +55,16 @@ impl FromStr for WrapVecAddr {
                 .collect::<Vec<&str>>();
             let start = parse_socker_addr(vals[0])?;
             if vals.len() != 2 {
-                return Ok(WrapVecAddr(vec![start]))
+                return Ok(WrapVecAddr(vec![start]));
             } else {
                 let end = parse_socker_addr(vals[1])?;
                 let mut results = vec![];
-                for port in start.port() ..= end.port() {
+                for port in start.port()..=end.port() {
                     let mut addr = start.clone();
                     addr.set_port(port);
                     results.push(addr);
                 }
-                return Ok(WrapVecAddr(results))
+                return Ok(WrapVecAddr(results));
             }
         } else {
             let vals = s
@@ -89,5 +87,24 @@ impl Display for WrapVecAddr {
             values.push(format!("{}", a));
         }
         f.write_str(&values.join(","))
+    }
+}
+
+impl WrapVecAddr {
+    pub fn empty() -> Self {
+        WrapVecAddr(vec![])
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+    
+    pub fn contains(&self, port: u16) -> bool {
+        for v in &self.0 {
+            if v.port() == port {
+                return true;
+            }
+        }
+        false
     }
 }

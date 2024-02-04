@@ -117,6 +117,10 @@ struct FileServerConfig {
     #[bpaf(long)]
     /// 监听地址
     pub(crate) listen_ssl: Option<WrapVecAddr>,
+    /// ssl证书cert
+    pub cert: Option<String>,
+    /// ssl证书key
+    pub key: Option<String>,
     /// 域名地址
     #[bpaf(short, long)]
     pub(crate) domain: Option<String>,
@@ -153,10 +157,10 @@ struct ReverseProxyConfig {
     #[bpaf(
         short,
         long,
-        fallback(WrapAddr(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 80))),
+        fallback(WrapVecAddr(vec![SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8869)])),
         display_fallback
     )]
-    pub(crate) from: WrapAddr,
+    pub(crate) from: WrapVecAddr,
     /// 负载均衡映射地址
     #[bpaf(short, long)]
     pub(crate) to: WrapAddr,
@@ -181,10 +185,10 @@ struct WsProxyConfig {
     #[bpaf(
         short,
         long,
-        fallback(WrapAddr(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 80))),
+        fallback(WrapVecAddr(vec![SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8869)])),
         display_fallback
     )]
-    pub(crate) from: WrapAddr,
+    pub(crate) from: WrapVecAddr,
     /// 负载均衡映射地址
     #[bpaf(short, long)]
     pub(crate) to: WrapAddr,
@@ -467,7 +471,22 @@ pub async fn parse_env() -> ProxyResult<ConfigOption> {
         }
         Command::FileServer(file) => {
             let mut http = HttpConfig::new();
-            let mut server = ServerConfig::new(file.listen.0);
+            let mut server = ServerConfig::new(file.listen.clone());
+            if file.listen_ssl.is_some() {
+                server.bind_ssl = file.listen_ssl.unwrap();
+                if file.cert.is_none() || file.key.is_none() {
+                    println!("配置ssl监听但未配置证书");
+                    exit(0);
+                }
+                if file.domain.is_none() {
+                    println!("配置ssl监听未配置域名");
+                    exit(0);
+                }
+                server.cert = file.cert;
+                server.key = file.key;
+                server.comm.domain = file.domain;
+            }
+            
             let mut location = LocationConfig::new();
             let mut file_server = FileServer::new(file.root, "".to_string());
             file_server.robots = file.robots;
@@ -493,7 +512,7 @@ pub async fn parse_env() -> ProxyResult<ConfigOption> {
         }
         Command::WsProxy(ws) => {
             let mut stream = StreamConfig::new();
-            let mut server = ServerConfig::new(ws.from.0);
+            let mut server = ServerConfig::new(ws.from.clone());
             let up_name = "server".to_string();
             let upstream = UpstreamConfig::new_single(up_name.clone(), ws.to.0);
             server.up_name = up_name.to_string();
@@ -521,7 +540,7 @@ pub async fn parse_env() -> ProxyResult<ConfigOption> {
         }
         Command::ReverseProxy(reverse) => {
             let mut http = HttpConfig::new();
-            let mut server = ServerConfig::new(reverse.from.0);
+            let mut server = ServerConfig::new(reverse.from.clone());
             let mut location = LocationConfig::new();
             let up_name = "server".to_string();
             let upstream = UpstreamConfig::new_single(up_name.clone(), reverse.to.0);

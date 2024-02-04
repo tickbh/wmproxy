@@ -299,7 +299,7 @@ impl WMCore {
                         log::trace!("反向代理:{}收到客户端连接: {}->{}", if self.http_tlss[index] { "https" } else { "http" }, addr,self.http_listeners[index].local_addr()?);
                         let mut local_servers = vec![];
                         for s in &self.http_servers {
-                            if (*s).bind_addr.port() != local_port {
+                            if !(*s).bind_addr.contains(local_port) && !(*s).bind_ssl.contains(local_port) {
                                 continue;
                             }
                             local_servers.push(s.clone());
