@@ -39,6 +39,7 @@ lazy_static! {
         m.insert("swf", "application/x-shockwave-flash");
         m.insert("zip", "application/zip");
         m.insert("json", "application/json");
+        m.insert("js", "application/javascript");
         m.insert("yaml", "text/plain");
         m.insert("yml", "text/plain");
         m.insert("toml", "text/plain");
