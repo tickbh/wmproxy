@@ -478,10 +478,10 @@ pub async fn parse_env() -> ProxyResult<ConfigOption> {
                     println!("配置ssl监听但未配置证书");
                     exit(0);
                 }
-                if file.domain.is_none() {
-                    println!("配置ssl监听未配置域名");
-                    exit(0);
-                }
+                // if file.domain.is_none() {
+                //     println!("配置ssl监听未配置域名");
+                //     exit(0);
+                // }
                 server.cert = file.cert;
                 server.key = file.key;
                 server.comm.domain = file.domain;

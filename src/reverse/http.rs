@@ -189,19 +189,27 @@ impl HttpConfig {
         let mut bind_port = HashSet::new();
         let config = rustls::ServerConfig::builder();
         let mut resolve = ResolvesServerCertUsingSni::new();
+        let mut one_key = None;
+        let mut one_cert = None;
+        let is_single = self.server.len() == 1;
         for value in &self.server.clone() {
             let mut is_ssl = false;
             if value.cert.is_some() && value.key.is_some() {
-                let key = any_supported_type(&Self::load_keys(&value.key)?)
-                    .map_err(|_| ProtError::Extension("unvaild key"))?;
+                let key = Self::load_keys(&value.key)?;
                 let cert = Self::load_certs(&value.cert)?;
-                let ck = CertifiedKey::new(cert, key);
-                
-                let name = value.comm.domain.clone().unwrap_or(value.up_name.clone());
-                resolve.add(&name, ck).map_err(|e| {
-                    log::warn!("添加证书时失败:{:?}", e);
-                    ProtError::Extension("key error")
-                })?;
+                if is_single {
+                    one_key = Some(key.clone_key());
+                    one_cert = Some(cert.clone());
+                } else {
+                    let singed_key = any_supported_type(&key)
+                    .map_err(|_| ProtError::Extension("unvaild key"))?;
+                    let ck = CertifiedKey::new(cert, singed_key);
+                    let name = value.comm.domain.clone().unwrap_or(value.up_name.clone());
+                    resolve.add(&name, ck).map_err(|e| {
+                        log::warn!("添加证书时失败:{:?}", e);
+                        ProtError::Extension("key error")
+                    })?;
+                }
                 is_ssl = true;
             }
             for v in &value.bind_addr.0 {
@@ -230,9 +238,18 @@ impl HttpConfig {
             }
         }
 
-        let mut config = config
+        let mut config = if is_single {
+            config
             .with_no_client_auth()
-            .with_cert_resolver(Arc::new(resolve));
+            .with_single_cert(one_cert.unwrap(), one_key.unwrap()).map_err(|e| {
+                log::warn!("添加证书时失败:{:?}", e);
+                ProtError::Extension("key error")
+            })?
+        } else {
+            config
+            .with_no_client_auth()
+            .with_cert_resolver(Arc::new(resolve))
+        };
         config.alpn_protocols.push("h2".as_bytes().to_vec());
         config.alpn_protocols.push("http/1.1".as_bytes().to_vec());
         Ok((Some(TlsAcceptor::from(Arc::new(config))), tlss, listeners))
