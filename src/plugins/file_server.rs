@@ -17,7 +17,7 @@ use wenmeng::{Body, ProtResult, RecvRequest, RecvResponse};
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use std::fs::Metadata;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 use std::{collections::HashMap, io};
 use tokio::fs::File;
@@ -128,6 +128,8 @@ pub struct FileServer {
     pub cache_time: Option<ConfigDuration>,
     #[serde_as(as = "Option<DisplayFromStr>")]
     pub robots: Option<String>,
+    #[serde_as(as = "Option<DisplayFromStr>")]
+    pub path404: Option<String>,
     #[serde(default = "default_hide")]
     pub hide: Vec<String>,
     #[serde(default = "default_index")]
@@ -186,6 +188,7 @@ impl FileServer {
             ext_mimetype: HashMap::new(),
             cache_time: None,
             robots: None,
+            path404: None,
             index: default_index(),
             status: 404,
             precompressed: vec![],
@@ -231,12 +234,19 @@ impl FileServer {
         false
     }
 
-    fn ret_error_msg(&self, msg: &'static str) -> Response<Body> {
+    async fn ret_error_msg(&self, req: &mut RecvRequest, msg: &'static str) -> Response<Body> {
+        if self.status == 404 && self.path404.is_some() {
+            let real_path = Path::new(self.path404.as_ref().unwrap()).to_owned();
+            match self.build_response_by_file(req, real_path).await {
+                Ok(Some(r)) => return r,
+                _ => {},
+            }
+        }
         Response::builder()
-            .status(self.status)
-            .body(msg)
-            .unwrap()
-            .into_type()
+        .status(self.status)
+        .body(msg)
+        .unwrap()
+        .into_type()
     }
 
     pub fn get_mimetype(&self, extension: &String) -> String {
@@ -271,6 +281,88 @@ impl FileServer {
         } else {
             return 0;
         }
+    }
+
+    pub async fn build_response_by_file(&self, req: &mut RecvRequest, real_path: PathBuf) -> ProtResult<Option<RecvResponse>> {
+        // 获取后缀
+        let extension = if let Some(s) = real_path.extension() {
+            s.to_string_lossy().to_string()
+        } else {
+            String::new()
+        };
+
+        let application = self.get_mimetype(&extension);
+        //查找是否有合适的预压缩文件
+        if let Some(accept) = req.headers().get_option_value(&HeaderName::ACCEPT_ENCODING) {
+            for pre in &self.precompressed {
+                // 得客户端发送支持该格式
+                if !accept.contains(pre.as_bytes()) {
+                    continue;
+                }
+                let mut new = real_path.clone();
+                new.as_mut_os_string().push(".");
+                match &**pre {
+                    "gzip" => new.as_mut_os_string().push("gz"),
+                    "br" => new.as_mut_os_string().push("br"),
+                    _ => continue,
+                };
+                // 如果预压缩文件存在
+                if new.exists() {
+                    let file = File::open(new).await?;
+                    let metadata = file.metadata().await?;
+                    if let Some(r) = self.try_cache(req, &metadata).await {
+                        return Ok(Some(r));
+                    }
+                    let data_size = metadata.len();
+                    let mut recv = Body::new_file(file, data_size);
+                    // recv.set_rate_limit(RateLimitLayer::new(10240, Duration::from_millis(100)));
+                    match &**pre {
+                        "gzip" => recv.set_compress_origin_gzip(),
+                        "br" => recv.set_compress_brotli(),
+                        _ => unreachable!(),
+                    }
+                    let builder = Response::builder()
+                        .version(req.version().clone())
+                        .status(200);
+                    let mut response = builder
+                        .header(HeaderName::CONTENT_ENCODING, pre.to_string())
+                        .header(
+                            HeaderName::CONTENT_TYPE,
+                            format!("{}; charset=utf-8", application),
+                        )
+                        .header(HeaderName::TRANSFER_ENCODING, "chunked")
+                        .body(recv)
+                        .map_err(|_err| io::Error::new(io::ErrorKind::Other, ""))?;
+                    self.after_file_response(req, &mut response, Some(&metadata))
+                        .await?;
+                    return Ok(Some(response));
+                }
+            }
+        }
+
+        if !real_path.exists() {
+            return Ok(None);
+        }
+
+        let file = File::open(real_path).await?;
+        let metadata = file.metadata().await?;
+        if let Some(r) = self.try_cache(req, &metadata).await {
+            return Ok(Some(r));
+        }
+        let data_size = metadata.len();
+        let recv = Body::new_file(file, data_size);
+        let builder = Response::builder().version(req.version().clone());
+        let mut response = builder
+            .header(
+                HeaderName::CONTENT_TYPE,
+                format!("{}; charset=utf-8", application),
+            )
+            .header(HeaderName::TRANSFER_ENCODING, "chunked")
+            .body(recv)
+            .map_err(|_err| io::Error::new(io::ErrorKind::Other, ""))?;
+        self.after_file_response(req, &mut response, Some(&metadata))
+            .await?;
+        return Ok(Some(response));
     }
 
     pub async fn try_cache(
@@ -452,7 +544,7 @@ impl FileServer {
         }
         // 无效前缀，无法处理
         if !path.starts_with(&self.prefix) {
-            return Ok(self.ret_error_msg("unknow path"));
+            return Ok(self.ret_error_msg(req, "unknow path").await);
         }
         if path.contains("%") {
             if let Ok(p) = Url::url_decode(&path) {
@@ -472,7 +564,7 @@ impl FileServer {
         let mut real_path = Path::new(&real_path).to_owned();
         // 必须保证不会跑出root设置的目录之外，如故意访问`../`之类的
         if !real_path.starts_with(root_path) || self.is_hide_path(root_path.as_ref()) {
-            return Ok(self.ret_error_msg("can't view parent file"));
+            return Ok(self.ret_error_msg(req, "can't view parent file").await);
         }
 
         // 访问路径是目录，尝试是否有index的文件，如果有还是以文件访问
@@ -489,7 +581,7 @@ impl FileServer {
         // 访问为目录，如果启用目录访问，则返回当前的文件夹的内容
         if real_path.is_dir() {
             if !self.browse {
-                return Ok(self.ret_error_msg("can't view parent file"));
+                return Ok(self.ret_error_msg(req, "can't view parent file").await);
             }
             let mut binary = BinaryMut::new();
             binary.put_slice(HEAD_HTML_PRE.as_bytes());
@@ -574,87 +666,13 @@ impl FileServer {
         } else {
             // 访问为文件，判断当前的后缀，返回合适的mimetype，如果有合适的预压缩文件，也及时返回
             if self.is_hide_path(path.as_ref()) {
-                return Ok(self.ret_error_msg("can't view file"));
-            }
-            // 获取后缀
-            let extension = if let Some(s) = real_path.extension() {
-                s.to_string_lossy().to_string()
-            } else {
-                String::new()
-            };
-
-            let application = self.get_mimetype(&extension);
-            //查找是否有合适的预压缩文件
-            if let Some(accept) = req.headers().get_option_value(&HeaderName::ACCEPT_ENCODING) {
-                for pre in &self.precompressed {
-                    // 得客户端发送支持该格式
-                    if !accept.contains(pre.as_bytes()) {
-                        continue;
-                    }
-                    let mut new = real_path.clone();
-                    new.as_mut_os_string().push(".");
-                    match &**pre {
-                        "gzip" => new.as_mut_os_string().push("gz"),
-                        "br" => new.as_mut_os_string().push("br"),
-                        _ => continue,
-                    };
-                    // 如果预压缩文件存在
-                    if new.exists() {
-                        let file = File::open(new).await?;
-                        let metadata = file.metadata().await?;
-                        if let Some(r) = self.try_cache(req, &metadata).await {
-                            return Ok(r);
-                        }
-                        let data_size = metadata.len();
-                        let mut recv = Body::new_file(file, data_size);
-                        // recv.set_rate_limit(RateLimitLayer::new(10240, Duration::from_millis(100)));
-                        match &**pre {
-                            "gzip" => recv.set_compress_origin_gzip(),
-                            "br" => recv.set_compress_brotli(),
-                            _ => unreachable!(),
-                        }
-                        let builder = Response::builder()
-                            .version(req.version().clone())
-                            .status(200);
-                        let mut response = builder
-                            .header(HeaderName::CONTENT_ENCODING, pre.to_string())
-                            .header(
-                                HeaderName::CONTENT_TYPE,
-                                format!("{}; charset=utf-8", application),
-                            )
-                            .header(HeaderName::TRANSFER_ENCODING, "chunked")
-                            .body(recv)
-                            .map_err(|_err| io::Error::new(io::ErrorKind::Other, ""))?;
-                        self.after_file_response(req, &mut response, Some(&metadata))
-                            .await?;
-                        return Ok(response);
-                    }
-                }
+                return Ok(self.ret_error_msg(req, "can't view file").await);
             }
 
-            if !real_path.exists() {
-                return Ok(self.ret_error_msg("can't view file"));
+            match self.build_response_by_file(req, real_path).await? {
+               Some(r) => return Ok(r),
+               None =>  return Ok(self.ret_error_msg(req, "can't view file").await)
             }
-
-            let file = File::open(real_path).await?;
-            let metadata = file.metadata().await?;
-            if let Some(r) = self.try_cache(req, &metadata).await {
-                return Ok(r);
-            }
-            let data_size = metadata.len();
-            let recv = Body::new_file(file, data_size);
-            let builder = Response::builder().version(req.version().clone());
-            let mut response = builder
-                .header(
-                    HeaderName::CONTENT_TYPE,
-                    format!("{}; charset=utf-8", application),
-                )
-                .header(HeaderName::TRANSFER_ENCODING, "chunked")
-                .body(recv)
-                .map_err(|_err| io::Error::new(io::ErrorKind::Other, ""))?;
-            self.after_file_response(req, &mut response, Some(&metadata))
-                .await?;
-            return Ok(response);
         }
     }
 }

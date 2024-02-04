@@ -17,7 +17,7 @@ use serde_with::{serde_as, DisplayFromStr};
 use wenmeng::ProtResult;
 
 
-use crate::ConfigHeader;
+use crate::{ConfigHeader, WrapVecAddr};
 
 use super::{LocationConfig, UpstreamConfig, common::CommonConfig, ReverseHelper};
 
@@ -31,7 +31,9 @@ fn default_up_name() -> String {
 #[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServerConfig {
-    pub bind_addr: SocketAddr,
+
+    #[serde_as(as = "DisplayFromStr")]
+    pub bind_addr: WrapVecAddr,
     
     #[serde(default = "default_up_name")]
     pub up_name: String,
@@ -56,7 +58,7 @@ pub struct ServerConfig {
 }
 
 impl ServerConfig {
-    pub fn new(bind_addr: SocketAddr) -> Self {
+    pub fn new(bind_addr: WrapVecAddr) -> Self {
         ServerConfig {
             bind_addr,
             up_name: default_up_name(),

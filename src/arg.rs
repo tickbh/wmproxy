@@ -10,12 +10,9 @@
 // -----
 // Created Date: 2024/01/16 10:59:37
 
-// use std::net::SocketAddr;
-
-use std::process::id;
 use std::{
     fs::File,
-    io::{self, Read, Write},
+    io::{self, Read},
     net::{IpAddr, Ipv4Addr, SocketAddr},
     path::PathBuf,
     process::exit,
@@ -26,12 +23,12 @@ use log::{Level, LevelFilter};
 use webparse::{Request, Url};
 use wenmeng::Client;
 
-use crate::reverse::StreamConfig;
 use crate::{
     option::proxy_config,
     reverse::{HttpConfig, LocationConfig, ServerConfig, UpstreamConfig},
     ConfigHeader, ConfigLog, ConfigOption, FileServer, ProxyConfig, ProxyResult,
 };
+use crate::{reverse::StreamConfig, WrapVecAddr};
 use crate::{ConfigDuration, WrapAddr};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -112,11 +109,14 @@ struct FileServerConfig {
     #[bpaf(
         short,
         long,
-        fallback(WrapAddr(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 80))),
+        fallback(WrapVecAddr(vec![SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8869)])),
         display_fallback
     )]
     /// 监听地址
-    pub(crate) listen: WrapAddr,
+    pub(crate) listen: WrapVecAddr,
+    #[bpaf(long)]
+    /// 监听地址
+    pub(crate) listen_ssl: Option<WrapVecAddr>,
     /// 域名地址
     #[bpaf(short, long)]
     pub(crate) domain: Option<String>,
@@ -126,6 +126,9 @@ struct FileServerConfig {
     /// 设置robots.txt返回
     #[bpaf(long)]
     pub(crate) robots: Option<String>,
+    /// 设置404文件返回
+    #[bpaf(long)]
+    pub(crate) path404: Option<String>,
     /// 设置robots.txt返回
     #[bpaf(short, long)]
     pub(crate) cache_time: Option<ConfigDuration>,
@@ -223,7 +226,6 @@ fn parse_command() -> impl Parser<(Command, Shared)> {
         .to_options()
         .command("run")
         .help("启动命令");
-
 
     let stop = stop_config().map(Command::Stop);
     let stop = construct!(stop, shared())
@@ -333,7 +335,9 @@ pub async fn parse_env() -> ProxyResult<ConfigOption> {
         exit(0);
     }
     if shared.daemon {
-        let args = std::env::args().filter(|s| s != "--daemon").collect::<Vec<String>>();
+        let args = std::env::args()
+            .filter(|s| s != "--daemon")
+            .collect::<Vec<String>>();
         let mut command = std::process::Command::new(&args[0]);
         for value in &args[1..] {
             command.arg(&*value);
@@ -341,7 +345,9 @@ pub async fn parse_env() -> ProxyResult<ConfigOption> {
         command.spawn().expect("failed to start wmproxy");
         exit(0);
     } else if shared.forever {
-        let args = std::env::args().filter(|s| s != "--forever").collect::<Vec<String>>();
+        let args = std::env::args()
+            .filter(|s| s != "--forever")
+            .collect::<Vec<String>>();
         loop {
             let mut command = std::process::Command::new(&args[0]);
             for value in &args[1..] {
@@ -354,7 +360,7 @@ pub async fn parse_env() -> ProxyResult<ConfigOption> {
                         exit(0);
                     }
                     log::error!("子进程异常退出：{}", ex);
-                },
+                }
                 Err(e) => log::error!("子进程异常退出：{:?}", e),
             }
         }
@@ -467,6 +473,7 @@ pub async fn parse_env() -> ProxyResult<ConfigOption> {
             file_server.robots = file.robots;
             file_server.cache_time = file.cache_time;
             file_server.cors = file.cors;
+            file_server.path404 = file.path404;
             location.headers = file.header;
             location.file_server = Some(file_server);
             if let Some(access) = file.access_log {
