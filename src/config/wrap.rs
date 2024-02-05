@@ -11,18 +11,30 @@
 // Created Date: 2024/01/25 02:13:35
 
 use std::{
-    fmt::Display,
-    net::{AddrParseError, SocketAddr},
-    str::FromStr,
+    fmt::Display, net::{AddrParseError, IpAddr, Ipv4Addr, SocketAddr}, str::FromStr
 };
 
-fn parse_socker_addr(s: &str) -> Result<SocketAddr, AddrParseError> {
+use local_ip_address::{local_ip, local_ipv6};
+
+fn parse_socker_addr(s: &str) -> Result<Vec<SocketAddr>, AddrParseError> {
     if s.starts_with(":") {
-        let addr = format!("127.0.0.1{s}").parse::<SocketAddr>()?;
-        Ok(addr)
+        let port = s.trim_start_matches(':');
+        let mut results = vec![];
+        if let Ok(port) = port.parse::<u16>() {
+            if let Ok(v) = local_ip() {
+                results.push(SocketAddr::new(v, port));
+            }
+            if let Ok(v) = local_ipv6() {
+                results.push(SocketAddr::new(v, port));
+            }
+            results.push(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port));
+        } else {
+            results.push(format!("127.0.0.1{s}").parse::<SocketAddr>()?);
+        }
+        Ok(results)
     } else {
         let addr = s.parse::<SocketAddr>()?;
-        Ok(addr)
+        Ok(vec![addr])
     }
 }
 #[derive(Debug, Clone, Copy)]
@@ -32,7 +44,7 @@ impl FromStr for WrapAddr {
     type Err = AddrParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(WrapAddr(parse_socker_addr(s)?))
+        Ok(WrapAddr(parse_socker_addr(s)?[0]))
     }
 }
 
@@ -55,14 +67,16 @@ impl FromStr for WrapVecAddr {
                 .collect::<Vec<&str>>();
             let start = parse_socker_addr(vals[0])?;
             if vals.len() != 2 {
-                return Ok(WrapVecAddr(vec![start]));
+                return Ok(WrapVecAddr(start));
             } else {
                 let end = parse_socker_addr(vals[1])?;
                 let mut results = vec![];
-                for port in start.port()..=end.port() {
-                    let mut addr = start.clone();
-                    addr.set_port(port);
-                    results.push(addr);
+                for port in start[0].port()..=end[1].port() {
+                    for idx in &start {
+                        let mut addr = idx.clone();
+                        addr.set_port(port);
+                        results.push(addr);
+                    }
                 }
                 return Ok(WrapVecAddr(results));
             }
@@ -73,7 +87,7 @@ impl FromStr for WrapVecAddr {
                 .collect::<Vec<&str>>();
             let mut results = vec![];
             for s in vals {
-                results.push(parse_socker_addr(s)?);
+                results.extend(parse_socker_addr(s)?);
             }
             Ok(WrapVecAddr(results))
         }

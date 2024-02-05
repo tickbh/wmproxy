@@ -1,5 +1,8 @@
+use async_std::net;
 use bpaf::{short, Bpaf, Parser};
-use std::path::PathBuf;
+use std::{fmt::Debug, path::PathBuf};
+use console::{style, Style};
+use local_ip_address::{list_afinet_netifas, local_ip};
 
 #[derive(Debug, Clone, Bpaf)]
 #[bpaf(options, version)]
@@ -39,5 +42,17 @@ fn positive(input: &u32) -> bool {
 }
 
 fn main() {
-    println!("{:#?}", opts().run());
+    println!("This is {} neat", style("quite").cyan());
+    // Style::new().blink().fmt("https://www.baidu.com")
+
+    println!("This is {} neat", Style::new().green().blink().apply_to("https://www.baidu.com"));
+
+    let network_interfaces = list_afinet_netifas().unwrap();
+    for net in network_interfaces {
+        println!("This is my local IP address: {:?} {:?}", net.0, net.1);
+    }
+    let my_local_ip = local_ip().unwrap();
+    println!("This is my local IP address: {:?}", my_local_ip);
+    // println!("{:#?}", opts().run());
+    
 }

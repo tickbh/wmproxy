@@ -55,6 +55,8 @@ bpaf = { version = "0.9.8", features = [
 ] }
 webparse = { version = "0.2.6" }
 wenmeng = { version = "0.2.6" }
+console = "0.15.8"
+local-ip-address = "0.5.7"
 # wenmeng={git="https://github.com/tickbh/wenmeng.git"}
 [features]
 bright-color = ["bpaf/bright-color"]

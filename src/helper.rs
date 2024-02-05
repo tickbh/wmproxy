@@ -11,7 +11,14 @@
 // Created Date: 2023/09/26 10:43:25
 
 use std::{
-    cell::RefCell, collections::{HashMap, HashSet}, fs::{remove_file, File}, io::{self, Read, Write}, net::{SocketAddr, ToSocketAddrs}, process::id, str::FromStr, sync::{Arc, Mutex}
+    cell::RefCell,
+    collections::{HashMap, HashSet},
+    fs::{remove_file, File},
+    io::{self, Read, Write},
+    net::{SocketAddr, ToSocketAddrs},
+    process::id,
+    str::FromStr,
+    sync::{Arc, Mutex},
 };
 
 use crate::{
@@ -83,7 +90,15 @@ impl Helper {
         let addrs = addr.to_socket_addrs()?;
         let mut last_err = None;
         for addr in addrs {
-            let socket = Socket::new(Domain::IPV4, Type::STREAM, None)?;
+            let socket = Socket::new(
+                if addr.is_ipv4() {
+                    Domain::IPV4
+                } else {
+                    Domain::IPV6
+                },
+                Type::STREAM,
+                None,
+            )?;
             socket.set_nonblocking(true)?;
             let _ = socket.set_only_v6(false);
             socket.set_reuse_address(true)?;
@@ -132,7 +147,6 @@ impl Helper {
         }))
     }
 
-    
     /// 创建pid文件
     pub fn try_create_pidfile(pidfile: &String) -> ProxyResult<()> {
         let mut file = File::create(&pidfile)?;
@@ -335,7 +349,7 @@ impl Helper {
                 }
             } else {
                 if let Some(idx) = oper.find(vals[i]) {
-                    oper = &oper[idx + vals[i].len() .. ]
+                    oper = &oper[idx + vals[i].len()..]
                 } else {
                     return false;
                 }

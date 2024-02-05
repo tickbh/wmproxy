@@ -20,6 +20,7 @@ use std::{
 
 use crate::{data::LimitReqData, Helper, ProxyResult};
 use async_trait::async_trait;
+use console::Style;
 use rustls::{
     crypto::ring::sign::any_supported_type,
     pki_types::{CertificateDer, PrivateKeyDer},
@@ -186,7 +187,7 @@ impl HttpConfig {
     ) -> ProxyResult<(Option<TlsAcceptor>, Vec<bool>, Vec<TcpListener>)> {
         let mut listeners = vec![];
         let mut tlss = vec![];
-        let mut bind_port = HashSet::new();
+        let mut bind_addr_set = HashSet::new();
         let config = rustls::ServerConfig::builder();
         let mut resolve = ResolvesServerCertUsingSni::new();
         let mut one_key = None;
@@ -202,7 +203,7 @@ impl HttpConfig {
                     one_cert = Some(cert.clone());
                 } else {
                     let singed_key = any_supported_type(&key)
-                    .map_err(|_| ProtError::Extension("unvaild key"))?;
+                        .map_err(|_| ProtError::Extension("unvaild key"))?;
                     let ck = CertifiedKey::new(cert, singed_key);
                     let name = value.comm.domain.clone().unwrap_or(value.up_name.clone());
                     resolve.add(&name, ck).map_err(|e| {
@@ -213,42 +214,45 @@ impl HttpConfig {
                 is_ssl = true;
             }
             for v in &value.bind_addr.0 {
-                if bind_port.contains(&v.port()) {
+                if bind_addr_set.contains(&v) {
                     continue;
                 }
-                bind_port.insert(v.port());
-                log::info!("HTTP服务：{:?}，提供http处理及转发功能。", v);
+                bind_addr_set.insert(v);
+                let url = format!("http://{}", v);
+                log::info!("HTTP服务：{}，提供http处理及转发功能。", Style::new().blink().green().apply_to(url));
                 let listener = Helper::bind(v).await?;
                 listeners.push(listener);
                 tlss.push(false);
             }
 
             for v in &value.bind_ssl.0 {
-                if bind_port.contains(&v.port()) {
+                if bind_addr_set.contains(&v) {
                     continue;
                 }
-                bind_port.insert(v.port());
+                bind_addr_set.insert(v);
                 if !is_ssl {
-                    return Err(crate::ProxyError::Extension("配置SSL端口但未配置证书"))
+                    return Err(crate::ProxyError::Extension("配置SSL端口但未配置证书"));
                 }
-                log::info!("HTTPs服务：{:?}，提供https处理及转发功能。", v);
+                let url = format!("https://{}", v);
+                log::info!("HTTPs服务：{}，提供https处理及转发功能。", Style::new().blink().green().apply_to(url));
                 let listener = Helper::bind(v).await?;
                 listeners.push(listener);
                 tlss.push(is_ssl);
             }
         }
 
-        let mut config = if is_single {
+        let mut config = if is_single && one_cert.is_some() && one_key.is_some() {
             config
-            .with_no_client_auth()
-            .with_single_cert(one_cert.unwrap(), one_key.unwrap()).map_err(|e| {
-                log::warn!("添加证书时失败:{:?}", e);
-                ProtError::Extension("key error")
-            })?
+                .with_no_client_auth()
+                .with_single_cert(one_cert.unwrap(), one_key.unwrap())
+                .map_err(|e| {
+                    log::warn!("添加证书时失败:{:?}", e);
+                    ProtError::Extension("key error")
+                })?
         } else {
             config
-            .with_no_client_auth()
-            .with_cert_resolver(Arc::new(resolve))
+                .with_no_client_auth()
+                .with_cert_resolver(Arc::new(resolve))
         };
         config.alpn_protocols.push("h2".as_bytes().to_vec());
         config.alpn_protocols.push("http/1.1".as_bytes().to_vec());
