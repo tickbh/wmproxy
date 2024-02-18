@@ -37,6 +37,8 @@ fn parse_socker_addr(s: &str) -> Result<Vec<SocketAddr>, AddrParseError> {
         Ok(vec![addr])
     }
 }
+
+/// 地址类包装
 #[derive(Debug, Clone, Copy)]
 pub struct WrapAddr(pub SocketAddr);
 

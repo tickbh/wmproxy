@@ -18,6 +18,7 @@ use tokio::{io::{copy_bidirectional, AsyncRead, AsyncReadExt, AsyncWrite, ReadBu
 use webparse::{BinaryMut, BufMut, Method, Response};
 use wenmeng::{HttpTrait, RecvRequest, ProtResult, RecvResponse, Server, Client, ClientOption, ProtError, MaybeHttpsStream, Body};
 
+/// HTTP代理类处理流程
 pub struct ProxyHttp {}
 
 /// http代理类处理类

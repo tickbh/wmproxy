@@ -19,6 +19,7 @@ use wenmeng::{RecvRequest, ProtResult, RecvResponse};
 
 use crate::{Helper, ProxyError};
 
+/// HTTP静态数据返回
 #[serde_as]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct StaticResponse {

@@ -24,6 +24,7 @@ use tokio::{
 };
 use webparse::{BinaryMut, Buf, BufMut};
 
+/// socks5代理类处理流程
 pub struct ProxySocks5 {
     username: Option<String>,
     password: Option<String>,

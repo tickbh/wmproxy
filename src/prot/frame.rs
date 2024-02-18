@@ -17,7 +17,7 @@ use crate::{Helper, MappingConfig, ProxyResult};
 
 use super::{ProtCreate, ProtClose, ProtData, ProtFlag, ProtKind, ProtMapping, ProtToken};
 
-
+/// 协议相关头信息
 #[derive(Debug)]
 pub struct ProtFrameHeader {
     /// 包体的长度, 3个字节, 最大为16m
@@ -30,6 +30,7 @@ pub struct ProtFrameHeader {
     sock_map: u64,
 }
 
+/// 协议相关之具体协议
 #[derive(Debug)]
 pub enum ProtFrame {
     /// 收到新的Socket连接

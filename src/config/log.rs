@@ -15,6 +15,7 @@ use std::{fmt::Display, str::FromStr};
 
 use crate::ProxyError;
 
+/// 日志相关配置
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConfigLog {
     pub name: String,

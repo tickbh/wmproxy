@@ -46,7 +46,7 @@ lazy_static! {
     /// 用静态变量存储log4rs的Handle
     static ref LOG4RS_HANDLE: Mutex<Option<log4rs::Handle>> = Mutex::new(None);
 }
-
+/// 帮助类相关
 pub struct Helper;
 
 impl Helper {

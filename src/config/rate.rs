@@ -15,6 +15,7 @@ use wenmeng::Rate;
 
 use crate::{ConfigSize, ConfigDuration};
 
+/// 速率相关配置
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConfigRate(pub Rate);
 

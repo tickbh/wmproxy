@@ -12,7 +12,7 @@
 
 use std::{
     io::{self},
-    net::{SocketAddr},
+    net::SocketAddr,
     sync::Arc,
 };
 
@@ -29,11 +29,14 @@ use tokio::{
 };
 use tokio_rustls::{rustls, TlsAcceptor};
 
-
 use crate::{
-    option::ConfigOption, proxy::ProxyServer, reverse::{HttpConfig, ServerConfig, StreamConfig, StreamUdp}, ActiveHealth, CenterClient, CenterServer, CenterTrans, Helper, OneHealth, ProxyResult
+    option::ConfigOption,
+    proxy::ProxyServer,
+    reverse::{HttpConfig, ServerConfig, StreamConfig, StreamUdp},
+    ActiveHealth, CenterClient, CenterServer, CenterTrans, Helper, OneHealth, ProxyResult,
 };
 
+/// 核心处理类
 pub struct WMCore {
     pub option: ConfigOption,
     pub center_client: Option<CenterClient>,
@@ -115,11 +118,7 @@ impl WMCore {
 
     /// 处理客户端的请求, 仅可能有上级转发给上级
     /// 没有上级直接处理当前代理数据
-    async fn deal_client_stream<T>(
-        &mut self,
-        inbound: T,
-        _addr: SocketAddr,
-    ) -> ProxyResult<()>
+    async fn deal_client_stream<T>(&mut self, inbound: T, _addr: SocketAddr) -> ProxyResult<()>
     where
         T: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static,
     {
@@ -161,8 +160,12 @@ impl WMCore {
         listens: &mut Vec<TcpListener>,
     ) -> (io::Result<(TcpStream, SocketAddr)>, usize) {
         if !listens.is_empty() {
-            let (conn, index, _) =
-                select_all(listens.iter_mut().map(|listener| Helper::tcp_accept(listener).boxed())).await;
+            let (conn, index, _) = select_all(
+                listens
+                    .iter_mut()
+                    .map(|listener| Helper::tcp_accept(listener).boxed()),
+            )
+            .await;
             (conn, index)
         } else {
             let pend = std::future::pending();

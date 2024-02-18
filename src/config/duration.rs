@@ -13,7 +13,7 @@
 use std::{time::Duration, str::FromStr, io, fmt::Display};
 
 
-
+/// 配置时长,从字符串转成时长
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConfigDuration(pub Duration);
 

@@ -13,6 +13,7 @@
 use std::{fmt::Display, str::FromStr, io, collections::HashMap};
 use lazy_static::lazy_static;
 
+/// 配置转化成大小相关
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConfigSize(pub u64);
 

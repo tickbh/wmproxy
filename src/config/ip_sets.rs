@@ -12,6 +12,7 @@
 
 use std::{net::IpAddr, str::FromStr, io, fmt::Display};
 
+/// IP单网关,包含子网掩码信息
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IpGate {
     pub ip: IpAddr,
@@ -68,7 +69,7 @@ impl Display for IpGate {
     }
 }
 
-
+/// IP合集相关
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IpSets {
     pub ips: Vec<IpGate>,

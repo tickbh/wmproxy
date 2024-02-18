@@ -32,7 +32,7 @@ pub use self::wrap::*;
 use serde::{Serializer, Deserializer, de::{Visitor, Error, self}};
 use serde_with::{SerializeAs, DeserializeAs};
 
-pub struct DisplayFromStrOrNumber;
+pub(crate) struct DisplayFromStrOrNumber;
 
 impl<T> SerializeAs<T> for DisplayFromStrOrNumber
 where

@@ -67,6 +67,7 @@ impl FromStr for HeaderOper {
     }
 }
 
+/// 反向代理头相关处理配置
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConfigHeader {
     pub oper: HeaderOper,

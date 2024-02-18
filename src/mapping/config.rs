@@ -22,6 +22,7 @@ fn default_domain() -> String {
 }
 
 
+/// 内网映射相关配置
 #[serde_as]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct MappingConfig {
