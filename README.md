@@ -3,7 +3,7 @@
 [![rustc 1.70.0](https://img.shields.io/badge/rust-1.70%2B-orange.svg)](https://img.shields.io/badge/rust-1.70%2B-orange.svg)
 [![Released API docs](https://docs.rs/wmproxy/badge.svg)](https://docs.rs/wmproxy)
 
-`wmproxy`已用`Rust`实现`http/https`代理, `socks5`代理, 反向代理, 负载均衡, 静态文件服务器，`websocket`代理，四层TCP/UDP转发，内网穿透等，会将实现过程分享出来，感兴趣的可以一起造个轮子
+`wmproxy`已用`Rust`实现`http/https`代理, `socks5`代理, 反向代理, 负载均衡, 静态文件服务器，`websocket`代理，四层TCP/UDP转发，内网穿透等
 
 ## 📦 安装 & 🏃 使用
 
@@ -23,7 +23,7 @@ cargo install --path .
 
 ```docker
 docker pull dreamwhat/wmproxy
-docker run -p 82:82 -p 8090:8090 -p 127.0.0.1:8837:8837 --name proxy_bash dreamwhat/wmproxy /bin/./wmproxy proxy -b 0.0.0.0:8090
+docker run -p 8090:8090 --name proxy_bash dreamwhat/wmproxy /bin/./wmproxy proxy -b 0.0.0.0:8090
 ```
 
 ### 使用
