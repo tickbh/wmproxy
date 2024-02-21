@@ -54,7 +54,7 @@ pub struct WMCore {
     pub map_accept: Option<TlsAcceptor>,
 
     pub http_servers: Vec<Arc<ServerConfig>>,
-    pub http_accepts: Vec<WrapTlsAccepter>,
+    pub http_accepts: Vec<Option<WrapTlsAccepter>>,
     pub http_tlss: Vec<bool>,
     pub http_listeners: Vec<TcpListener>,
 
@@ -227,13 +227,6 @@ impl WMCore {
             ) = option.bind_map().await?;
         }
 
-        self.http_servers = self
-            .option
-            .http
-            .clone()
-            .unwrap_or(HttpConfig::new())
-            .convert_server_config();
-
         self.stream_config = Some(Arc::new(Mutex::new(
             self.option.stream.clone().unwrap_or(StreamConfig::new()),
         )));
@@ -241,6 +234,13 @@ impl WMCore {
         if let Some(http) = &mut self.option.http {
             (self.http_accepts, self.http_tlss, self.http_listeners) = http.bind().await?;
         }
+
+        self.http_servers = self
+            .option
+            .http
+            .clone()
+            .unwrap_or(HttpConfig::new())
+            .convert_server_config();
 
         if let Some(stream) = &mut self.option.stream {
             (self.stream_listeners, self.stream_udp_listeners) = stream.bind().await?;
@@ -308,18 +308,20 @@ impl WMCore {
                             local_servers.push(s.clone());
                         }
                         if self.http_tlss[index] {
-                            let tls_accept = self.http_accepts[index].clone();
+                            let tls_accept = self.http_accepts[index].clone().unwrap();
                             tokio::spawn(async move {
-                                if let Ok(stream) = tls_accept.accept(conn).await {
-                                    let data = stream.get_ref();
-                                    let up_name = data.1.server_name().clone().map(|s| s.to_string());
-                                    for s in &local_servers {
-                                        if up_name.is_some() && &s.up_name == up_name.as_ref().unwrap() {
-                                            let _ = HttpConfig::process(vec![s.clone()], stream, addr).await;
-                                            return;
+                                if let Ok(accept) = tls_accept.accept(conn) {
+                                    if let Ok(stream) = accept.await {
+                                        let data = stream.get_ref();
+                                        let up_name = data.1.server_name().clone().map(|s| s.to_string());
+                                        for s in &local_servers {
+                                            if up_name.is_some() && &s.up_name == up_name.as_ref().unwrap() {
+                                                let _ = HttpConfig::process(vec![s.clone()], stream, addr).await;
+                                                return;
+                                            }
                                         }
+                                        let _ = HttpConfig::process(local_servers, stream, addr).await;
                                     }
-                                    let _ = HttpConfig::process(local_servers, stream, addr).await;
                                 }
                             });
                         } else {

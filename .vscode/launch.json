@@ -56,7 +56,7 @@
                     "kind": "bin"
                 }
             },
-            "args": ["-c", "config/reverse.yaml"],
+            "args": ["run", "-c", "config/reverse.toml"],
             "cwd": "${workspaceFolder}"
         },
         {

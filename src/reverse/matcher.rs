@@ -81,6 +81,7 @@ impl Matcher {
     pub fn is_match_rule(&self, path: &String, req: &RecvRequest) -> ProtResult<bool>  {
         if let Some(p) = &self.path {
             let mut is_match = false;
+            println!("path = {path} p === {p}");
             if Helper::is_match(&path, p) {
                 is_match = true;
             }

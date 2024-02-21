@@ -1,25 +1,27 @@
 // Copyright 2022 - 2023 Wenmeng See the COPYRIGHT
 // file at the top-level directory of this distribution.
-// 
+//
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
-// 
+//
 // Author: tickbh
 // -----
 // Created Date: 2023/10/18 02:32:15
 
-use std::{collections::HashMap, net::{SocketAddr, ToSocketAddrs}};
+use std::{
+    collections::HashMap,
+    net::{SocketAddr, ToSocketAddrs},
+};
 
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
 use wenmeng::ProtResult;
 
-
 use crate::{ConfigHeader, WrapVecAddr};
 
-use super::{LocationConfig, UpstreamConfig, common::CommonConfig, ReverseHelper};
+use super::{common::CommonConfig, LocationConfig, ReverseHelper, UpstreamConfig};
 
 fn default_bind_mode() -> String {
     "tcp".to_string()
@@ -31,13 +33,14 @@ fn default_up_name() -> String {
 #[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServerConfig {
-
+    #[serde(default = "WrapVecAddr::empty")]
     #[serde_as(as = "DisplayFromStr")]
     pub bind_addr: WrapVecAddr,
 
+    #[serde(default = "WrapVecAddr::empty")]
     #[serde_as(as = "DisplayFromStr")]
     pub bind_ssl: WrapVecAddr,
-    
+
     #[serde(default = "default_up_name")]
     pub up_name: String,
     pub root: Option<String>,
@@ -46,7 +49,7 @@ pub struct ServerConfig {
 
     #[serde(default = "default_bind_mode")]
     pub bind_mode: String,
-    
+
     #[serde_as(as = "Vec<DisplayFromStr>")]
     #[serde(default = "Vec::new")]
     pub headers: Vec<ConfigHeader>,
@@ -123,8 +126,7 @@ impl ServerConfig {
         }
     }
 
-    
-    pub fn get_log_names(&self, names: &mut HashMap<String, String>)  {
+    pub fn get_log_names(&self, names: &mut HashMap<String, String>) {
         self.comm.get_log_names(names);
         for l in &self.location {
             l.get_log_names(names);
@@ -152,7 +154,9 @@ impl ServerConfig {
             if let Some(domain) = &self.comm.proxy_url.as_ref().unwrap().domain {
                 addr = ReverseHelper::get_upstream_addr(&self.upstream, &domain);
                 if addr.is_some() && self.comm.proxy_url.as_ref().unwrap().port.is_some() {
-                    addr.as_mut().unwrap().set_port(self.comm.proxy_url.as_ref().unwrap().port.unwrap());
+                    addr.as_mut()
+                        .unwrap()
+                        .set_port(self.comm.proxy_url.as_ref().unwrap().port.unwrap());
                 }
             }
             if addr.is_none() {
@@ -161,7 +165,9 @@ impl ServerConfig {
                 }
             }
         }
-
+        if domain.is_none() {
+            domain = Some(self.up_name.clone());
+        }
         if addr.is_none() {
             addr = ReverseHelper::get_upstream_addr(&self.upstream, &self.up_name)
         }

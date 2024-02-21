@@ -18,7 +18,7 @@ use std::{
     sync::Arc,
 };
 
-use crate::{data::LimitReqData, Helper, ProxyResult};
+use crate::{data::LimitReqData, FileServer, Helper, ProxyResult};
 use async_trait::async_trait;
 use console::Style;
 use rustls::{
@@ -261,12 +261,12 @@ impl HttpConfig {
     
     pub async fn bind(
         &mut self,
-    ) -> ProxyResult<(Vec<WrapTlsAccepter>, Vec<bool>, Vec<TcpListener>)> {
+    ) -> ProxyResult<(Vec<Option<WrapTlsAccepter>>, Vec<bool>, Vec<TcpListener>)> {
         let mut listeners = vec![];
         let mut tlss = vec![];
         let mut bind_addr_set = HashSet::new();
         let mut accepters = vec![];
-        for value in &self.server.clone() {
+        for value in &mut self.server {
             for v in &value.bind_addr.0 {
                 if bind_addr_set.contains(&v) {
                     continue;
@@ -277,6 +277,7 @@ impl HttpConfig {
                 let listener = Helper::bind(v).await?;
                 listeners.push(listener);
                 tlss.push(false);
+                accepters.push(None);
             }
 
             let mut has_acme = false;
@@ -290,10 +291,14 @@ impl HttpConfig {
                 let listener = Helper::bind(v).await?;
                 listeners.push(listener);
                 if value.cert.is_some() && value.key.is_some() {
-                    accepters.push(WrapTlsAccepter::new_cert(&value.cert, &value.key)?);
+                    accepters.push(Some(WrapTlsAccepter::new_cert(&value.cert, &value.key)?));
                 } else {
                     has_acme = true;
-                    accepters.push(WrapTlsAccepter::new(value.up_name.clone()));
+                    let (_, domain) = value.get_addr_domain()?;
+                    if domain.is_none() {
+                        return Err(crate::ProxyError::Extension("未配置域名且未配置证书"));
+                    }
+                    accepters.push(Some(WrapTlsAccepter::new(domain.unwrap())));
                     let mut has_http = false;
                     for v in &value.bind_addr.0 {
                         if v.port() == 80 {
@@ -308,7 +313,10 @@ impl HttpConfig {
             }
 
             if has_acme {
-                
+                let mut location = LocationConfig::new();
+                let file_server = FileServer::new(".well-known/acme-challenge".to_string(), "/.well-known/acme-challenge".to_string());
+                location.file_server = Some(file_server);
+                value.location.insert(0, location);
             }
         }
         Ok((accepters, tlss, listeners))

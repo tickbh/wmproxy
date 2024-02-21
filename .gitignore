@@ -6,3 +6,4 @@ Cargo.lock
 /logs/*.log
 wmproxy.md
 hurl*
+.well-known
