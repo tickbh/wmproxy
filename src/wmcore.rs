@@ -308,6 +308,7 @@ impl WMCore {
                             local_servers.push(s.clone());
                         }
                         if self.http_tlss[index] {
+                            self.http_accepts[index].as_mut().unwrap().update_last();
                             let tls_accept = self.http_accepts[index].clone().unwrap();
                             tokio::spawn(async move {
                                 if let Ok(accept) = tls_accept.accept(conn) {

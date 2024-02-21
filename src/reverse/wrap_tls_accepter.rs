@@ -3,6 +3,7 @@ use acme_lib::persist::FilePersist;
 use acme_lib::{Directory, DirectoryUrl, Error};
 use std::io::Write;
 use std::path::Path;
+use std::time::Instant;
 use std::{
     fs::File,
     io::{self, BufReader},
@@ -18,6 +19,7 @@ use tokio_rustls::{Accept, TlsAcceptor};
 
 #[derive(Clone)]
 pub struct WrapTlsAccepter {
+    pub last: Instant,
     pub domain: Option<String>,
     pub accepter: Option<TlsAcceptor>,
 }
@@ -72,9 +74,14 @@ impl WrapTlsAccepter {
 
     pub fn new(domain: String) -> WrapTlsAccepter {
         WrapTlsAccepter {
+            last: Instant::now(),
             domain: Some(domain),
             accepter: None,
         }
+    }
+
+    pub fn update_last(&mut self) {
+        self.last = Instant::now();
     }
 
     pub fn is_wait_acme(&self) -> bool {
@@ -95,6 +102,7 @@ impl WrapTlsAccepter {
         config.alpn_protocols.push("h2".as_bytes().to_vec());
         config.alpn_protocols.push("http/1.1".as_bytes().to_vec());
         Ok(WrapTlsAccepter {
+            last: Instant::now(),
             domain: None,
             accepter: Some(TlsAcceptor::from(Arc::new(config))),
         })
@@ -195,7 +203,7 @@ impl WrapTlsAccepter {
             // Update the state against the ACME API.
             ord_new.refresh()?;
 
-            return Ok(());
+            // return Ok(());
         };
 
         // Ownership is proven. Create a private key for
