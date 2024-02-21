@@ -21,6 +21,7 @@ mod stream;
 mod try_paths;
 mod upstream;
 mod ws;
+mod wrap_tls_accepter;
 
 pub use common::CommonConfig;
 pub use http::HttpConfig;
@@ -32,6 +33,7 @@ pub use server::ServerConfig;
 pub use stream::{StreamConfig, StreamUdp};
 pub use try_paths::TryPathsConfig;
 pub use upstream::UpstreamConfig;
+pub use wrap_tls_accepter::WrapTlsAccepter;
 
 use std::{
     fmt::{self},

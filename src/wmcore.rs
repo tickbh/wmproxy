@@ -32,7 +32,7 @@ use tokio_rustls::{rustls, TlsAcceptor};
 use crate::{
     option::ConfigOption,
     proxy::ProxyServer,
-    reverse::{HttpConfig, ServerConfig, StreamConfig, StreamUdp},
+    reverse::{HttpConfig, ServerConfig, StreamConfig, StreamUdp, WrapTlsAccepter},
     ActiveHealth, CenterClient, CenterServer, CenterTrans, Helper, OneHealth, ProxyResult,
 };
 
@@ -54,7 +54,7 @@ pub struct WMCore {
     pub map_accept: Option<TlsAcceptor>,
 
     pub http_servers: Vec<Arc<ServerConfig>>,
-    pub http_accept: Option<TlsAcceptor>,
+    pub http_accepts: Vec<WrapTlsAccepter>,
     pub http_tlss: Vec<bool>,
     pub http_listeners: Vec<TcpListener>,
 
@@ -82,7 +82,7 @@ impl WMCore {
             map_accept: None,
 
             http_servers: vec![],
-            http_accept: None,
+            http_accepts: vec![],
             http_tlss: vec![],
             http_listeners: vec![],
 
@@ -239,7 +239,7 @@ impl WMCore {
         )));
 
         if let Some(http) = &mut self.option.http {
-            (self.http_accept, self.http_tlss, self.http_listeners) = http.bind().await?;
+            (self.http_accepts, self.http_tlss, self.http_listeners) = http.bind().await?;
         }
 
         if let Some(stream) = &mut self.option.stream {
@@ -308,7 +308,7 @@ impl WMCore {
                             local_servers.push(s.clone());
                         }
                         if self.http_tlss[index] {
-                            let tls_accept = self.http_accept.clone().unwrap();
+                            let tls_accept = self.http_accepts[index].clone();
                             tokio::spawn(async move {
                                 if let Ok(stream) = tls_accept.accept(conn).await {
                                     let data = stream.get_ref();
