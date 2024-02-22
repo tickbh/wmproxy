@@ -12,8 +12,6 @@
 
 use std::{
     collections::{HashMap, HashSet},
-    fs::File,
-    io::{self, BufReader},
     net::{IpAddr, SocketAddr},
     sync::Arc,
 };
@@ -21,12 +19,6 @@ use std::{
 use crate::{data::LimitReqData, FileServer, Helper, ProxyResult};
 use async_trait::async_trait;
 use console::Style;
-use rustls::{
-    crypto::ring::sign::any_supported_type,
-    pki_types::{CertificateDer, PrivateKeyDer},
-    server::ResolvesServerCertUsingSni,
-    sign::CertifiedKey,
-};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
 use tokio::{
@@ -34,7 +26,6 @@ use tokio::{
     net::TcpListener,
     sync::mpsc::{Receiver, Sender},
 };
-use tokio_rustls::TlsAcceptor;
 use webparse::{Request, Response};
 use wenmeng::{
     Body, HttpTrait, Middleware, ProtError, ProtResult, RecvRequest, RecvResponse, Server,
@@ -135,130 +126,6 @@ impl HttpConfig {
         }
     }
 
-    fn load_certs(path: &Option<String>) -> io::Result<Vec<CertificateDer<'static>>> {
-        if let Some(path) = path {
-            match File::open(&path) {
-                Ok(file) => {
-                    let mut reader = BufReader::new(file);
-                    let certs = rustls_pemfile::certs(&mut reader);
-                    Ok(certs.into_iter().collect::<Result<Vec<_>, _>>()?)
-                }
-                Err(e) => {
-                    log::warn!("加载公钥{}出错，错误内容:{:?}", path, e);
-                    return Err(e);
-                }
-            }
-        } else {
-            Err(io::Error::new(io::ErrorKind::Other, "unknow certs"))
-        }
-    }
-
-    fn load_keys(path: &Option<String>) -> io::Result<PrivateKeyDer<'static>> {
-        let mut keys = if let Some(path) = path {
-            match File::open(&path) {
-                Ok(file) => {
-                    let mut reader = BufReader::new(file);
-                    rustls_pemfile::rsa_private_keys(&mut reader).collect::<Result<Vec<_>, _>>()?
-                }
-                Err(e) => {
-                    log::warn!("加载私钥{}出错，错误内容:{:?}", path, e);
-                    return Err(e);
-                }
-            }
-        } else {
-            return Err(io::Error::new(io::ErrorKind::Other, "unknow keys"));
-        };
-
-        match keys.len() {
-            0 => Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                format!("No RSA private key found"),
-            )),
-            1 => Ok(PrivateKeyDer::from(keys.remove(0))),
-            _ => Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                format!("More than one RSA private key found"),
-            )),
-        }
-    }
-
-    // pub async fn bind(
-    //     &mut self,
-    // ) -> ProxyResult<(Vec<WrapTlsAccepter>, Vec<bool>, Vec<TcpListener>)> {
-    //     let mut listeners = vec![];
-    //     let mut tlss = vec![];
-    //     let mut bind_addr_set = HashSet::new();
-    //     let config = rustls::ServerConfig::builder();
-    //     let mut resolve = ResolvesServerCertUsingSni::new();
-    //     let mut one_key = None;
-    //     let mut one_cert = None;
-    //     let is_single = self.server.len() == 1;
-    //     for value in &self.server.clone() {
-    //         let mut is_ssl = false;
-    //         if value.cert.is_some() && value.key.is_some() {
-    //             let key = Self::load_keys(&value.key)?;
-    //             let cert = Self::load_certs(&value.cert)?;
-    //             if is_single {
-    //                 one_key = Some(key.clone_key());
-    //                 one_cert = Some(cert.clone());
-    //             } else {
-    //                 let singed_key = any_supported_type(&key)
-    //                     .map_err(|_| ProtError::Extension("unvaild key"))?;
-    //                 let ck = CertifiedKey::new(cert, singed_key);
-    //                 let name = value.comm.domain.clone().unwrap_or(value.up_name.clone());
-    //                 resolve.add(&name, ck).map_err(|e| {
-    //                     log::warn!("添加证书时失败:{:?}", e);
-    //                     ProtError::Extension("ssl key error")
-    //                 })?;
-    //             }
-    //             is_ssl = true;
-    //         }
-    //         for v in &value.bind_addr.0 {
-    //             if bind_addr_set.contains(&v) {
-    //                 continue;
-    //             }
-    //             bind_addr_set.insert(v);
-    //             let url = format!("http://{}", v);
-    //             log::info!("HTTP服务：{}，提供http处理及转发功能。", Style::new().blink().green().apply_to(url));
-    //             let listener = Helper::bind(v).await?;
-    //             listeners.push(listener);
-    //             tlss.push(false);
-    //         }
-
-    //         for v in &value.bind_ssl.0 {
-    //             if bind_addr_set.contains(&v) {
-    //                 continue;
-    //             }
-    //             bind_addr_set.insert(v);
-    //             if !is_ssl {
-    //                 return Err(crate::ProxyError::Extension("配置SSL端口但未配置证书"));
-    //             }
-    //             let url = format!("https://{}", v);
-    //             log::info!("HTTPs服务：{}，提供https处理及转发功能。", Style::new().blink().green().apply_to(url));
-    //             let listener = Helper::bind(v).await?;
-    //             listeners.push(listener);
-    //             tlss.push(is_ssl);
-    //         }
-    //     }
-
-    //     let mut config = if is_single && one_cert.is_some() && one_key.is_some() {
-    //         config
-    //             .with_no_client_auth()
-    //             .with_single_cert(one_cert.unwrap(), one_key.unwrap())
-    //             .map_err(|e| {
-    //                 log::warn!("添加证书时失败:{:?}", e);
-    //                 ProtError::Extension("key error")
-    //             })?
-    //     } else {
-    //         config
-    //             .with_no_client_auth()
-    //             .with_cert_resolver(Arc::new(resolve))
-    //     };
-    //     config.alpn_protocols.push("h2".as_bytes().to_vec());
-    //     config.alpn_protocols.push("http/1.1".as_bytes().to_vec());
-    //     Ok((Some(TlsAcceptor::from(Arc::new(config))), tlss, listeners))
-    // }
-    
     pub async fn bind(
         &mut self,
     ) -> ProxyResult<(Vec<Option<WrapTlsAccepter>>, Vec<bool>, Vec<TcpListener>)> {
@@ -273,7 +140,10 @@ impl HttpConfig {
                 }
                 bind_addr_set.insert(v);
                 let url = format!("http://{}", v);
-                log::info!("HTTP服务：{}，提供http处理及转发功能。", Style::new().blink().green().apply_to(url));
+                log::info!(
+                    "HTTP服务：{}，提供http处理及转发功能。",
+                    Style::new().blink().green().apply_to(url)
+                );
                 let listener = Helper::bind(v).await?;
                 listeners.push(listener);
                 tlss.push(false);
@@ -287,7 +157,10 @@ impl HttpConfig {
                 }
                 bind_addr_set.insert(v);
                 let url = format!("https://{}", v);
-                log::info!("HTTPs服务：{}，提供https处理及转发功能。", Style::new().blink().green().apply_to(url));
+                log::info!(
+                    "HTTPs服务：{}，提供https处理及转发功能。",
+                    Style::new().blink().green().apply_to(url)
+                );
                 let listener = Helper::bind(v).await?;
                 listeners.push(listener);
                 if value.cert.is_some() && value.key.is_some() {
@@ -314,7 +187,10 @@ impl HttpConfig {
 
             if has_acme {
                 let mut location = LocationConfig::new();
-                let file_server = FileServer::new(".well-known/acme-challenge".to_string(), "/.well-known/acme-challenge".to_string());
+                let file_server = FileServer::new(
+                    ".well-known/acme-challenge".to_string(),
+                    "/.well-known/acme-challenge".to_string(),
+                );
                 location.file_server = Some(file_server);
                 value.location.insert(0, location);
             }

@@ -1,8 +1,7 @@
-use acme_lib::create_p384_key;
-use acme_lib::persist::FilePersist;
+use acme_lib::create_rsa_key;
+use acme_lib::persist::MemoryPersist;
 use acme_lib::{Directory, DirectoryUrl, Error};
 use std::collections::HashMap;
-use std::io::Write;
 use std::path::Path;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -53,11 +52,29 @@ impl WrapTlsAccepter {
     }
 
     fn load_keys(path: &Option<String>) -> io::Result<PrivateKeyDer<'static>> {
-        let mut keys = if let Some(path) = path {
+        if let Some(path) = path {
             match File::open(&path) {
                 Ok(file) => {
-                    let mut reader = BufReader::new(file);
-                    rustls_pemfile::rsa_private_keys(&mut reader).collect::<Result<Vec<_>, _>>()?
+                    {
+                        let mut reader = BufReader::new(&file);
+                        let mut keys = rustls_pemfile::pkcs8_private_keys(&mut reader)
+                            .collect::<Result<Vec<_>, _>>()?;
+                        if keys.len() == 1 {
+                            return Ok(PrivateKeyDer::from(keys.remove(0)));
+                        }
+                    }
+                    {
+                        let mut reader = BufReader::new(&file);
+                        let mut keys = rustls_pemfile::rsa_private_keys(&mut reader)
+                            .collect::<Result<Vec<_>, _>>()?;
+                        if keys.len() == 1 {
+                            return Ok(PrivateKeyDer::from(keys.remove(0)));
+                        }
+                    }
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        format!("No pkcs8 or rsa private key found"),
+                    ));
                 }
                 Err(e) => {
                     log::warn!("加载私钥{}出错，错误内容:{:?}", path, e);
@@ -67,18 +84,6 @@ impl WrapTlsAccepter {
         } else {
             return Err(io::Error::new(io::ErrorKind::Other, "unknow keys"));
         };
-
-        match keys.len() {
-            0 => Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                format!("No RSA private key found"),
-            )),
-            1 => Ok(PrivateKeyDer::from(keys.remove(0))),
-            _ => Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                format!("More than one RSA private key found"),
-            )),
-        }
     }
 
     pub fn new(domain: String) -> WrapTlsAccepter {
@@ -92,11 +97,15 @@ impl WrapTlsAccepter {
     }
 
     pub fn try_load_cert(&mut self) -> bool {
-        if let Ok(accept) = Self::load_ssl(&self.get_cert_path(), &self.get_key_path()) {
-            self.accepter = Some(accept);
-            true
-        } else {
-            false
+        match Self::load_ssl(&self.get_cert_path(), &self.get_key_path()) {
+            Ok(accepter) => {
+                self.accepter = Some(accepter);
+                true
+            }
+            Err(e) => {
+                println!("load ssl error ={:?}", e);
+                false
+            }
         }
     }
 
@@ -117,7 +126,10 @@ impl WrapTlsAccepter {
     }
 
     pub fn update_last(&mut self) {
-        self.last = Instant::now();
+        if self.last.elapsed() > Duration::from_secs(5) {
+            self.try_load_cert();
+            self.last = Instant::now();
+        }
     }
 
     pub fn is_wait_acme(&self) -> bool {
@@ -125,6 +137,8 @@ impl WrapTlsAccepter {
     }
 
     pub fn load_ssl(cert: &Option<String>, key: &Option<String>) -> io::Result<TlsAcceptor> {
+        println!("cert = {:?}", cert);
+        println!("key = {:?}", key);
         let one_key = Self::load_keys(&key)?;
         let one_cert = Self::load_certs(&cert)?;
         let config = rustls::ServerConfig::builder();
@@ -167,7 +181,7 @@ impl WrapTlsAccepter {
         } else {
             self.request_cert()
                 .map_err(|_| io::Error::new(io::ErrorKind::Other, "load https error"))?;
-            unreachable!()
+            Err(io::Error::new(io::ErrorKind::Other, "try next https error"))
         }
     }
 
@@ -180,7 +194,7 @@ impl WrapTlsAccepter {
                 .lock()
                 .map_err(|_| io::Error::new(io::ErrorKind::Other, "Fail get Lock"))?;
             if let Some(last) = obj.get(self.domain.as_ref().unwrap()) {
-                if last.elapsed() < Duration::from_secs(15) {
+                if last.elapsed() < Duration::from_secs(30) {
                     return Err(io::Error::new(io::ErrorKind::Other, "等待上次请求结束").into());
                 }
             }
@@ -195,7 +209,7 @@ impl WrapTlsAccepter {
         }
 
         // Save/load keys and certificates to current dir.
-        let persist = FilePersist::new(path);
+        let persist = MemoryPersist::new();
 
         // Create a directory entrypoint.
         let dir = Directory::from_url(persist, url)?;
@@ -218,7 +232,8 @@ impl WrapTlsAccepter {
                 break ord_csr;
             }
 
-            if start.elapsed() > Duration::from_secs(15) {
+            if start.elapsed() > Duration::from_secs(30) {
+                println!("获取证书超时");
                 return Ok(());
             }
 
@@ -259,7 +274,7 @@ impl WrapTlsAccepter {
             // confirm ownership of the domain, or fail due to the
             // not finding the proof. To see the change, we poll
             // the API with 5000 milliseconds wait between.
-            chall.validate(3000)?;
+            chall.validate(5000)?;
 
             // Update the state against the ACME API.
             ord_new.refresh()?;
@@ -270,7 +285,7 @@ impl WrapTlsAccepter {
         // Ownership is proven. Create a private key for
         // the certificate. These are provided for convenience, you
         // can provide your own keypair instead if you want.
-        let pkey_pri = create_p384_key();
+        let pkey_pri = create_rsa_key(2048);
 
         // Submit the CSR. This causes the ACME provider to enter a
         // state of "processing" that must be polled until the
@@ -281,11 +296,21 @@ impl WrapTlsAccepter {
         // Now download the certificate. Also stores the cert in
         // the persistence.
         let cert = ord_cert.download_and_save_cert()?;
+        println!(
+            "cert = {}, key = {}",
+            cert.certificate(),
+            cert.private_key()
+        );
+        println!(
+            "cert = {:?}, key = {:?}",
+            &self.get_cert_path(),
+            &self.get_cert_path()
+        );
         Helper::write_to_file(
             &self.get_cert_path().unwrap(),
             cert.certificate().as_bytes(),
         )?;
-        Helper::write_to_file(&self.get_key_path().unwrap(), cert.certificate().as_bytes())?;
+        Helper::write_to_file(&self.get_key_path().unwrap(), cert.private_key().as_bytes())?;
         Ok(())
     }
 }
