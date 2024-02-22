@@ -1,21 +1,30 @@
 use acme_lib::create_p384_key;
 use acme_lib::persist::FilePersist;
 use acme_lib::{Directory, DirectoryUrl, Error};
+use std::collections::HashMap;
 use std::io::Write;
 use std::path::Path;
-use std::time::Instant;
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
 use std::{
     fs::File,
     io::{self, BufReader},
     sync::Arc,
 };
 
+use lazy_static::lazy_static;
 use rustls::{
     pki_types::{CertificateDer, PrivateKeyDer},
     ServerConnection,
 };
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio_rustls::{Accept, TlsAcceptor};
+
+use crate::Helper;
+
+lazy_static! {
+    static ref CACHE_REQUEST: Mutex<HashMap<String, Instant>> = Mutex::new(HashMap::new());
+}
 
 #[derive(Clone)]
 pub struct WrapTlsAccepter {
@@ -73,10 +82,37 @@ impl WrapTlsAccepter {
     }
 
     pub fn new(domain: String) -> WrapTlsAccepter {
-        WrapTlsAccepter {
+        let mut wrap = WrapTlsAccepter {
             last: Instant::now(),
             domain: Some(domain),
             accepter: None,
+        };
+        wrap.try_load_cert();
+        wrap
+    }
+
+    pub fn try_load_cert(&mut self) -> bool {
+        if let Ok(accept) = Self::load_ssl(&self.get_cert_path(), &self.get_key_path()) {
+            self.accepter = Some(accept);
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn get_cert_path(&self) -> Option<String> {
+        if let Some(domain) = &self.domain {
+            Some(format!(".well-known/{}.pem", domain))
+        } else {
+            None
+        }
+    }
+
+    pub fn get_key_path(&self) -> Option<String> {
+        if let Some(domain) = &self.domain {
+            Some(format!(".well-known/{}.key", domain))
+        } else {
+            None
         }
     }
 
@@ -88,7 +124,7 @@ impl WrapTlsAccepter {
         self.accepter.is_none()
     }
 
-    pub fn new_cert(cert: &Option<String>, key: &Option<String>) -> io::Result<WrapTlsAccepter> {
+    pub fn load_ssl(cert: &Option<String>, key: &Option<String>) -> io::Result<TlsAcceptor> {
         let one_key = Self::load_keys(&key)?;
         let one_cert = Self::load_certs(&cert)?;
         let config = rustls::ServerConfig::builder();
@@ -101,10 +137,15 @@ impl WrapTlsAccepter {
             })?;
         config.alpn_protocols.push("h2".as_bytes().to_vec());
         config.alpn_protocols.push("http/1.1".as_bytes().to_vec());
+        Ok(TlsAcceptor::from(Arc::new(config)))
+    }
+
+    pub fn new_cert(cert: &Option<String>, key: &Option<String>) -> io::Result<WrapTlsAccepter> {
+        let config = Self::load_ssl(cert, key)?;
         Ok(WrapTlsAccepter {
             last: Instant::now(),
             domain: None,
-            accepter: Some(TlsAcceptor::from(Arc::new(config))),
+            accepter: Some(config),
         })
     }
 
@@ -124,12 +165,28 @@ impl WrapTlsAccepter {
         if let Some(a) = &self.accepter {
             Ok(a.accept_with(stream, f))
         } else {
-            self.request_cert().map_err(|_| io::Error::new(io::ErrorKind::Other, "load https error"))?;
+            self.request_cert()
+                .map_err(|_| io::Error::new(io::ErrorKind::Other, "load https error"))?;
             unreachable!()
         }
     }
 
     fn request_cert(&self) -> Result<(), Error> {
+        if self.domain.is_none() {
+            return Err(io::Error::new(io::ErrorKind::Other, "未知域名").into());
+        }
+        {
+            let mut obj = CACHE_REQUEST
+                .lock()
+                .map_err(|_| io::Error::new(io::ErrorKind::Other, "Fail get Lock"))?;
+            if let Some(last) = obj.get(self.domain.as_ref().unwrap()) {
+                if last.elapsed() < Duration::from_secs(15) {
+                    return Err(io::Error::new(io::ErrorKind::Other, "等待上次请求结束").into());
+                }
+            }
+            obj.insert(self.domain.clone().unwrap(), Instant::now());
+        };
+
         // Use DirectoryUrl::LetsEncrypStaging for dev/testing.
         let url = DirectoryUrl::LetsEncrypt;
         let path = Path::new(".well-known/acme-challenge");
@@ -151,6 +208,7 @@ impl WrapTlsAccepter {
         // Order a new TLS certificate for a domain.
         let mut ord_new = acc.new_order(&self.domain.clone().unwrap_or_default(), &[])?;
 
+        let start = Instant::now();
         // If the ownership of the domain(s) have already been
         // authorized in a previous order, you might be able to
         // skip validation. The ACME API provider decides.
@@ -158,6 +216,10 @@ impl WrapTlsAccepter {
             // are we done?
             if let Some(ord_csr) = ord_new.confirm_validations() {
                 break ord_csr;
+            }
+
+            if start.elapsed() > Duration::from_secs(15) {
+                return Ok(());
             }
 
             // Get the possible authorizations (for a single domain
@@ -183,8 +245,7 @@ impl WrapTlsAccepter {
             // The proof is the contents of the file
             let proof = chall.http_proof();
 
-            let mut file = File::create(&path)?;
-            file.write_all(proof.as_bytes())?;
+            Helper::write_to_file(&path, proof.as_bytes())?;
 
             // Here you must do "something" to place
             // the file/contents in the correct place.
@@ -198,7 +259,7 @@ impl WrapTlsAccepter {
             // confirm ownership of the domain, or fail due to the
             // not finding the proof. To see the change, we poll
             // the API with 5000 milliseconds wait between.
-            chall.validate(1000)?;
+            chall.validate(3000)?;
 
             // Update the state against the ACME API.
             ord_new.refresh()?;
@@ -220,7 +281,11 @@ impl WrapTlsAccepter {
         // Now download the certificate. Also stores the cert in
         // the persistence.
         let cert = ord_cert.download_and_save_cert()?;
-
+        Helper::write_to_file(
+            &self.get_cert_path().unwrap(),
+            cert.certificate().as_bytes(),
+        )?;
+        Helper::write_to_file(&self.get_key_path().unwrap(), cert.certificate().as_bytes())?;
         Ok(())
     }
 }

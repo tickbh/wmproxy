@@ -513,6 +513,12 @@ impl Helper {
         ((server_id as u64) << 32) + (sock_map as u64)
     }
 
+    pub fn write_to_file(path: &String, content: &[u8]) -> io::Result<()> {
+        let mut file = File::create(&path)?;
+        file.write_all(content)?;
+        Ok(())
+    }
+
     // pub async fn udp_recv_from(socket: &UdpSocket, buf: &mut [u8]) -> io::Result<usize> {
     //     let (s, addr) = socket.recv_from(&mut buf).await?;
     //     unsafe {
