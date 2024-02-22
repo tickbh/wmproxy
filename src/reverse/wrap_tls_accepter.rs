@@ -4,6 +4,7 @@ use acme_lib::{Directory, DirectoryUrl, Error};
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Mutex;
+use std::thread;
 use std::time::{Duration, Instant};
 use std::{
     fs::File,
@@ -179,13 +180,13 @@ impl WrapTlsAccepter {
         if let Some(a) = &self.accepter {
             Ok(a.accept_with(stream, f))
         } else {
-            self.request_cert()
+            self.check_and_request_cert()
                 .map_err(|_| io::Error::new(io::ErrorKind::Other, "load https error"))?;
             Err(io::Error::new(io::ErrorKind::Other, "try next https error"))
         }
     }
 
-    fn request_cert(&self) -> Result<(), Error> {
+    fn check_and_request_cert(&self)  -> Result<(), Error> {
         if self.domain.is_none() {
             return Err(io::Error::new(io::ErrorKind::Other, "未知域名").into());
         }
@@ -201,6 +202,14 @@ impl WrapTlsAccepter {
             obj.insert(self.domain.clone().unwrap(), Instant::now());
         };
 
+        let obj = self.clone();
+        thread::spawn(move || {
+            let _ = obj.request_cert();
+        });
+        Ok(())
+    }
+
+    fn request_cert(&self) -> Result<(), Error> {
         // Use DirectoryUrl::LetsEncrypStaging for dev/testing.
         let url = DirectoryUrl::LetsEncrypt;
         let path = Path::new(".well-known/acme-challenge");
