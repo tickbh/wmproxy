@@ -210,100 +210,74 @@ impl WrapTlsAccepter {
     }
 
     fn request_cert(&self) -> Result<(), Error> {
-        // Use DirectoryUrl::LetsEncrypStaging for dev/testing.
+        // 使用let's encrypt签发证书
         let url = DirectoryUrl::LetsEncrypt;
         let path = Path::new(".well-known/acme-challenge");
         if !path.exists() {
             let _ = std::fs::create_dir_all(path);
         }
 
-        // Save/load keys and certificates to current dir.
+        // 使用内存的存储结构，存储自己做处理
         let persist = MemoryPersist::new();
 
-        // Create a directory entrypoint.
+        // 创建目录节点
         let dir = Directory::from_url(persist, url)?;
 
-        // Reads the private account key from persistence, or
-        // creates a new one before accessing the API to establish
-        // that it's there.
+        // 设置请求的email信息
         let acc = dir.account("wmproxy@wmproxy.net")?;
 
-        // Order a new TLS certificate for a domain.
+        // 请求签发的域名
         let mut ord_new = acc.new_order(&self.domain.clone().unwrap_or_default(), &[])?;
 
         let start = Instant::now();
-        // If the ownership of the domain(s) have already been
-        // authorized in a previous order, you might be able to
-        // skip validation. The ACME API provider decides.
+        // 以下域名的鉴权，需要等待let's encrypt确认信息
         let ord_csr = loop {
-            // are we done?
+            // 成功签发，跳出循环
             if let Some(ord_csr) = ord_new.confirm_validations() {
                 break ord_csr;
             }
 
+            // 超时30秒，认为失败了
             if start.elapsed() > Duration::from_secs(30) {
                 println!("获取证书超时");
                 return Ok(());
             }
 
-            // Get the possible authorizations (for a single domain
-            // this will only be one element).
+            // 获取鉴权方式
             let auths = ord_new.authorizations()?;
 
-            // For HTTP, the challenge is a text file that needs to
-            // be placed in your web server's root:
+            // 以下是HTTP的请求方法，本质上是请求token的url，然后返回正确的值
+            // 此处我们用的是临时服务器
             //
             // /var/www/.well-known/acme-challenge/<token>
-            //
-            // The important thing is that it's accessible over the
-            // web for the domain(s) you are trying to get a
-            // certificate for:
             //
             // http://mydomain.io/.well-known/acme-challenge/<token>
             let chall = auths[0].http_challenge();
 
-            // The token is the filename.
+            // 将token存储在目录下
             let token = chall.http_token();
             let path = format!(".well-known/acme-challenge/{}", token);
 
-            // The proof is the contents of the file
+            // 获取token的内容
             let proof = chall.http_proof();
 
             Helper::write_to_file(&path, proof.as_bytes())?;
 
-            // Here you must do "something" to place
-            // the file/contents in the correct place.
-            // update_my_web_server(&path, &proof);
-
-            // After the file is accessible from the web, the calls
-            // this to tell the ACME API to start checking the
-            // existence of the proof.
-            //
-            // The order at ACME will change status to either
-            // confirm ownership of the domain, or fail due to the
-            // not finding the proof. To see the change, we poll
-            // the API with 5000 milliseconds wait between.
+            // 等待acme检测时间，以ms计
             chall.validate(5000)?;
 
-            // Update the state against the ACME API.
+            // 再尝试刷新acme请求
             ord_new.refresh()?;
 
-            // return Ok(());
         };
 
-        // Ownership is proven. Create a private key for
-        // the certificate. These are provided for convenience, you
-        // can provide your own keypair instead if you want.
+        // 创建rsa的密钥对
         let pkey_pri = create_rsa_key(2048);
 
-        // Submit the CSR. This causes the ACME provider to enter a
-        // state of "processing" that must be polled until the
-        // certificate is either issued or rejected. Again we poll
-        // for the status change.
+        // 提交CSR获取最终的签名
         let ord_cert = ord_csr.finalize_pkey(pkey_pri, 5000)?;
 
-        // Now download the certificate. Also stores the cert in
-        // the persistence.
+        // 下载签名及证书，此时下载下来的为pkcs#8证书格式
         let cert = ord_cert.download_and_save_cert()?;
         Helper::write_to_file(
             &self.get_cert_path().unwrap(),

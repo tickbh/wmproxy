@@ -11,9 +11,7 @@
 // Created Date: 2023/10/18 02:32:23
 
 use std::{
-    collections::{HashMap, HashSet},
-    net::{IpAddr, SocketAddr},
-    sync::Arc,
+    collections::{HashMap, HashSet}, net::{IpAddr, SocketAddr}, str::FromStr, sync::Arc
 };
 
 use crate::{data::LimitReqData, FileServer, Helper, ProxyResult};
@@ -32,8 +30,7 @@ use wenmeng::{
 };
 
 use super::{
-    common::CommonConfig, limit_req::LimitReqZone, ws::ServerWsOperate, LimitReqMiddleware,
-    LocationConfig, ServerConfig, UpstreamConfig, WrapTlsAccepter,
+    common::CommonConfig, limit_req::LimitReqZone, ws::ServerWsOperate, LimitReqMiddleware, LocationConfig, Matcher, ServerConfig, UpstreamConfig, WrapTlsAccepter
 };
 use async_recursion::async_recursion;
 
@@ -191,6 +188,7 @@ impl HttpConfig {
                     ".well-known/acme-challenge".to_string(),
                     "/.well-known/acme-challenge".to_string(),
                 );
+                location.rule = Matcher::from_str("/.well-known/acme-challenge/").expect("matcher error");
                 location.file_server = Some(file_server);
                 value.location.insert(0, location);
             }
