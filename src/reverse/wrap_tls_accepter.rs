@@ -191,15 +191,15 @@ impl WrapTlsAccepter {
             return Err(io::Error::new(io::ErrorKind::Other, "未知域名").into());
         }
         {
-            let mut obj = CACHE_REQUEST
+            let mut map = CACHE_REQUEST
                 .lock()
                 .map_err(|_| io::Error::new(io::ErrorKind::Other, "Fail get Lock"))?;
-            if let Some(last) = obj.get(self.domain.as_ref().unwrap()) {
+            if let Some(last) = map.get(self.domain.as_ref().unwrap()) {
                 if last.elapsed() < Duration::from_secs(30) {
                     return Err(io::Error::new(io::ErrorKind::Other, "等待上次请求结束").into());
                 }
             }
-            obj.insert(self.domain.clone().unwrap(), Instant::now());
+            map.insert(self.domain.clone().unwrap(), Instant::now());
         };
 
         let obj = self.clone();
@@ -305,16 +305,6 @@ impl WrapTlsAccepter {
         // Now download the certificate. Also stores the cert in
         // the persistence.
         let cert = ord_cert.download_and_save_cert()?;
-        println!(
-            "cert = {}, key = {}",
-            cert.certificate(),
-            cert.private_key()
-        );
-        println!(
-            "cert = {:?}, key = {:?}",
-            &self.get_cert_path(),
-            &self.get_cert_path()
-        );
         Helper::write_to_file(
             &self.get_cert_path().unwrap(),
             cert.certificate().as_bytes(),
