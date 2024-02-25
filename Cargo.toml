@@ -57,6 +57,7 @@ webparse = { version = "0.2.6" }
 wenmeng = { version = "0.2.6" }
 console = "0.15.8"
 local-ip-address = "0.5.7"
+x509-certificate="0.23.1"
 # wenmeng={git="https://github.com/tickbh/wenmeng.git"}
 [features]
 bright-color = ["bpaf/bright-color"]

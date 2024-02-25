@@ -1,7 +1,10 @@
 use acme_lib::create_rsa_key;
 use acme_lib::persist::MemoryPersist;
 use acme_lib::{Directory, DirectoryUrl, Error};
+use chrono::{DateTime, Utc};
+use x509_certificate::X509Certificate;
 use std::collections::HashMap;
+use std::io::Read;
 use std::path::Path;
 use std::sync::Mutex;
 use std::thread;
@@ -24,6 +27,12 @@ use crate::Helper;
 
 lazy_static! {
     static ref CACHE_REQUEST: Mutex<HashMap<String, Instant>> = Mutex::new(HashMap::new());
+
+    // 初始申请新证书延时
+    static ref REQUEST_NEW_DELAY: Duration = Duration::from_secs(30);
+
+    // 过期证书更新延时
+    static ref REQUEST_UPDATE_DELAY: Duration = Duration::from_secs(300);
 }
 
 #[derive(Clone)]
@@ -31,16 +40,21 @@ pub struct WrapTlsAccepter {
     pub last: Instant,
     pub domain: Option<String>,
     pub accepter: Option<TlsAcceptor>,
+    pub expired: Option<DateTime<Utc>>,
+    pub is_acme: bool,
 }
 
 impl WrapTlsAccepter {
-    fn load_certs(path: &Option<String>) -> io::Result<Vec<CertificateDer<'static>>> {
+    fn load_certs(path: &Option<String>) -> io::Result<(DateTime<Utc>, Vec<CertificateDer<'static>>)> {
         if let Some(path) = path {
             match File::open(&path) {
-                Ok(file) => {
-                    let mut reader = BufReader::new(file);
+                Ok(mut file) => {
+                    let mut content = String::new();
+                    file.read_to_string(&mut content)?;
+                    let mut reader = BufReader::new(content.as_bytes());
                     let certs = rustls_pemfile::certs(&mut reader);
-                    Ok(certs.into_iter().collect::<Result<Vec<_>, _>>()?)
+                    let cert = X509Certificate::from_pem(content.as_bytes()).map_err(|_| io::Error::new(io::ErrorKind::Other, "cert error"))?;
+                    Ok((cert.validity_not_after(), certs.into_iter().collect::<Result<Vec<_>, _>>()?))
                 }
                 Err(e) => {
                     log::warn!("加载公钥{}出错，错误内容:{:?}", path, e);
@@ -92,6 +106,8 @@ impl WrapTlsAccepter {
             last: Instant::now(),
             domain: Some(domain),
             accepter: None,
+            expired: None,
+            is_acme: true,
         };
         wrap.try_load_cert();
         wrap
@@ -99,8 +115,9 @@ impl WrapTlsAccepter {
 
     pub fn try_load_cert(&mut self) -> bool {
         match Self::load_ssl(&self.get_cert_path(), &self.get_key_path()) {
-            Ok(accepter) => {
+            Ok((expired, accepter)) => {
                 self.accepter = Some(accepter);
+                self.expired = Some(expired);
                 true
             }
             Err(e) => {
@@ -137,11 +154,11 @@ impl WrapTlsAccepter {
         self.accepter.is_none()
     }
 
-    pub fn load_ssl(cert: &Option<String>, key: &Option<String>) -> io::Result<TlsAcceptor> {
+    pub fn load_ssl(cert: &Option<String>, key: &Option<String>) -> io::Result<(DateTime<Utc>, TlsAcceptor)> {
         println!("cert = {:?}", cert);
         println!("key = {:?}", key);
+        let (expired, one_cert) = Self::load_certs(&cert)?;
         let one_key = Self::load_keys(&key)?;
-        let one_cert = Self::load_certs(&cert)?;
         let config = rustls::ServerConfig::builder();
         let mut config = config
             .with_no_client_auth()
@@ -152,15 +169,17 @@ impl WrapTlsAccepter {
             })?;
         config.alpn_protocols.push("h2".as_bytes().to_vec());
         config.alpn_protocols.push("http/1.1".as_bytes().to_vec());
-        Ok(TlsAcceptor::from(Arc::new(config)))
+        Ok((expired, TlsAcceptor::from(Arc::new(config))))
     }
 
     pub fn new_cert(cert: &Option<String>, key: &Option<String>) -> io::Result<WrapTlsAccepter> {
-        let config = Self::load_ssl(cert, key)?;
+        let (expired, config) = Self::load_ssl(cert, key)?;
         Ok(WrapTlsAccepter {
             last: Instant::now(),
             domain: None,
             accepter: Some(config),
+            expired: Some(expired),
+            is_acme: false,
         })
     }
 
@@ -178,11 +197,32 @@ impl WrapTlsAccepter {
         F: FnOnce(&mut ServerConnection),
     {
         if let Some(a) = &self.accepter {
+            if self.is_acme && self.is_tls_will_expired() {
+                let _ = self.check_and_request_cert();
+            }
             Ok(a.accept_with(stream, f))
         } else {
             self.check_and_request_cert()
                 .map_err(|_| io::Error::new(io::ErrorKind::Other, "load https error"))?;
             Err(io::Error::new(io::ErrorKind::Other, "try next https error"))
+        }
+    }
+
+    fn is_tls_will_expired(&self) -> bool {
+        if let Some(expire) = &self.expired {
+            let now = Utc::now();
+            if now.timestamp() > expire.timestamp() - 86400 {
+                return true;
+            }
+        }
+        false
+    }
+
+    fn get_delay_time(&self) -> Duration {
+        if self.accepter.is_some() {
+            *REQUEST_UPDATE_DELAY
+        } else {
+            *REQUEST_NEW_DELAY
         }
     }
 
@@ -195,7 +235,7 @@ impl WrapTlsAccepter {
                 .lock()
                 .map_err(|_| io::Error::new(io::ErrorKind::Other, "Fail get Lock"))?;
             if let Some(last) = map.get(self.domain.as_ref().unwrap()) {
-                if last.elapsed() < Duration::from_secs(30) {
+                if last.elapsed() < self.get_delay_time() {
                     return Err(io::Error::new(io::ErrorKind::Other, "等待上次请求结束").into());
                 }
             }
@@ -238,7 +278,7 @@ impl WrapTlsAccepter {
             }
 
             // 超时30秒，认为失败了
-            if start.elapsed() > Duration::from_secs(30) {
+            if start.elapsed() > self.get_delay_time() {
                 println!("获取证书超时");
                 return Ok(());
             }
