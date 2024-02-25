@@ -48,7 +48,7 @@ jobs:
             os: macOS-latest
             target: aarch64-apple-darwin
             bin: wmproxy-darwin-arm64
-            depend: echo "skip"
+            depend: brew install openssl
         toolchain:
           - stable
     steps:

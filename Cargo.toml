@@ -44,7 +44,6 @@ rbtree = "0.2.0"
 regex = "1.10.2"
 
 async-std = "1.12.0"
-acme-lib = "0.9.1"
 base64 = "0.21.4"
 async-recursion = "1.0.5"
 bpaf = { version = "0.9.8", features = [
@@ -59,6 +58,8 @@ console = "0.15.8"
 local-ip-address = "0.5.7"
 x509-certificate="0.23.1"
 # wenmeng={git="https://github.com/tickbh/wenmeng.git"}
+# acme-lib = "0.9.1"
+acme-lib={git="https://github.com/tickbh/acme-lib"}
 [features]
 bright-color = ["bpaf/bright-color"]
 dull-color = ["bpaf/dull-color"]
