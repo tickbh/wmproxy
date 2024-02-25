@@ -20,26 +20,39 @@ jobs:
             os: ubuntu-20.04
             target: aarch64-unknown-linux-musl
             bin: wmproxy-linux-arm64
+            depend: |
+              sudo apt-get update
+              sudo apt-get install -y libssl-dev
           - os_name: Linux-x86_64
             os: ubuntu-20.04
             target: x86_64-unknown-linux-gnu
             bin: wmproxy-linux-amd64
+            depend: |
+              sudo apt-get update
+              sudo apt-get install -y libssl-dev
           - os_name: Windows-x86_64
             os: windows-latest
             target: x86_64-pc-windows-msvc
             bin: wmproxy-amd64.exe
+            depend: |
+              echo "VCPKG_ROOT=$env:VCPKG_INSTALLATION_ROOT" | Out-File -FilePath $env:GITHUB_ENV -Append
+              vcpkg install openssl:x64-windows-static-md
           - os_name: macOS-x86_64
             os: macOS-latest
             target: x86_64-apple-darwin
             bin: wmproxy-darwin-amd64
+            depend: echo "skip"
           - os_name: macOS-aarch64
             os: macOS-latest
             target: aarch64-apple-darwin
             bin: wmproxy-darwin-arm64
+            depend: echo "skip"
         toolchain:
           - stable
     steps:
       - uses: actions/checkout@v3
+      - name: Install Depend
+        run: ${{ matrix.platform.depend }}
       - name: Build binary
         uses: houseabsolute/actions-rust-cross@v0
         with:
