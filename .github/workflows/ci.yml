@@ -22,8 +22,9 @@ jobs:
             bin: wmproxy-linux-arm64
             depend: |
               sudo apt-get update
-              sudo apt-get install -y pkg-config
               sudo apt-get install -y libssl-dev
+              sudo apt-get install -y pkg-config
+              export PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig/ 
           - os_name: Linux-x86_64
             os: ubuntu-20.04
             target: x86_64-unknown-linux-gnu
