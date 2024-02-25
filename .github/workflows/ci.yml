@@ -22,7 +22,7 @@ jobs:
             bin: wmproxy-linux-arm64
             depend: |
               sudo apt-get update
-              sudo apt-get install -y libssl-dev
+              sudo apt-get install -y libssl-dev:arm64
           - os_name: Linux-x86_64
             os: ubuntu-20.04
             target: x86_64-unknown-linux-gnu
