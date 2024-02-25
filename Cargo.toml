@@ -58,8 +58,9 @@ console = "0.15.8"
 local-ip-address = "0.5.7"
 x509-certificate="0.23.1"
 # wenmeng={git="https://github.com/tickbh/wenmeng.git"}
-# acme-lib = "0.9.1"
-acme-lib={git="https://github.com/tickbh/acme-lib"}
+acme-lib = "0.9.1"
+openssl = { version = "0.10.32", features = ["vendored"] }
+# acme-lib={git="https://github.com/tickbh/acme-lib"}
 [features]
 bright-color = ["bpaf/bright-color"]
 dull-color = ["bpaf/dull-color"]
