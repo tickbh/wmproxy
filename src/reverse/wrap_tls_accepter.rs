@@ -1,13 +1,10 @@
-use acme_lib::create_rsa_key;
-use acme_lib::persist::MemoryPersist;
-use acme_lib::{Directory, DirectoryUrl, Error};
+#[cfg(feature = "acme")]
+use acme_lib::{create_rsa_key, Directory, DirectoryUrl, Error, persist::MemoryPersist};
 use chrono::{DateTime, Utc};
 use x509_certificate::X509Certificate;
 use std::collections::HashMap;
 use std::io::Read;
-use std::path::Path;
 use std::sync::Mutex;
-use std::thread;
 use std::time::{Duration, Instant};
 use std::{
     fs::File,
@@ -22,8 +19,6 @@ use rustls::{
 };
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio_rustls::{Accept, TlsAcceptor};
-
-use crate::Helper;
 
 lazy_static! {
     static ref CACHE_REQUEST: Mutex<HashMap<String, Instant>> = Mutex::new(HashMap::new());
@@ -69,9 +64,11 @@ impl WrapTlsAccepter {
     fn load_keys(path: &Option<String>) -> io::Result<PrivateKeyDer<'static>> {
         if let Some(path) = path {
             match File::open(&path) {
-                Ok(file) => {
+                Ok(mut file) => {
+                    let mut content = String::new();
+                    file.read_to_string(&mut content)?;
                     {
-                        let mut reader = BufReader::new(&file);
+                        let mut reader = BufReader::new(content.as_bytes());
                         let mut keys = rustls_pemfile::pkcs8_private_keys(&mut reader)
                             .collect::<Result<Vec<_>, _>>()?;
                         if keys.len() == 1 {
@@ -79,7 +76,7 @@ impl WrapTlsAccepter {
                         }
                     }
                     {
-                        let mut reader = BufReader::new(&file);
+                        let mut reader = BufReader::new(content.as_bytes());
                         let mut keys = rustls_pemfile::rsa_private_keys(&mut reader)
                             .collect::<Result<Vec<_>, _>>()?;
                         if keys.len() == 1 {
@@ -218,6 +215,7 @@ impl WrapTlsAccepter {
         false
     }
 
+    #[cfg(feature = "acme")]
     fn get_delay_time(&self) -> Duration {
         if self.accepter.is_some() {
             *REQUEST_UPDATE_DELAY
@@ -226,6 +224,12 @@ impl WrapTlsAccepter {
         }
     }
 
+    #[cfg(not (feature = "acme"))]
+    fn check_and_request_cert(&self)  -> Result<(), io::Error> {
+        Ok(())
+    }
+    
+    #[cfg(feature = "acme")]
     fn check_and_request_cert(&self)  -> Result<(), Error> {
         if self.domain.is_none() {
             return Err(io::Error::new(io::ErrorKind::Other, "未知域名").into());
@@ -243,16 +247,17 @@ impl WrapTlsAccepter {
         };
 
         let obj = self.clone();
-        thread::spawn(move || {
+        std::thread::spawn(move || {
             let _ = obj.request_cert();
         });
         Ok(())
     }
 
+    #[cfg(feature = "acme")]
     fn request_cert(&self) -> Result<(), Error> {
         // 使用let's encrypt签发证书
         let url = DirectoryUrl::LetsEncrypt;
-        let path = Path::new(".well-known/acme-challenge");
+        let path = std::path::Path::new(".well-known/acme-challenge");
         if !path.exists() {
             let _ = std::fs::create_dir_all(path);
         }
@@ -301,7 +306,7 @@ impl WrapTlsAccepter {
             // 获取token的内容
             let proof = chall.http_proof();
 
-            Helper::write_to_file(&path, proof.as_bytes())?;
+            crate::Helper::write_to_file(&path, proof.as_bytes())?;
 
             // 等待acme检测时间，以ms计
             chall.validate(5000)?;
@@ -319,11 +324,11 @@ impl WrapTlsAccepter {
 
         // 下载签名及证书，此时下载下来的为pkcs#8证书格式
         let cert = ord_cert.download_and_save_cert()?;
-        Helper::write_to_file(
+        crate::Helper::write_to_file(
             &self.get_cert_path().unwrap(),
             cert.certificate().as_bytes(),
         )?;
-        Helper::write_to_file(&self.get_key_path().unwrap(), cert.private_key().as_bytes())?;
+        crate::Helper::write_to_file(&self.get_key_path().unwrap(), cert.private_key().as_bytes())?;
         Ok(())
     }
 }

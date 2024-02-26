@@ -161,6 +161,13 @@ struct ReverseProxyConfig {
         display_fallback
     )]
     pub(crate) from: WrapVecAddr,
+    /// 负载均衡来源地址SSL
+    #[bpaf(
+        long,
+        fallback(WrapVecAddr(vec![])),
+        display_fallback
+    )]
+    pub(crate) from_ssl: WrapVecAddr,
     /// 负载均衡映射地址
     #[bpaf(short, long)]
     pub(crate) to: WrapAddr,
@@ -173,6 +180,12 @@ struct ReverseProxyConfig {
     /// 是否映射到https上
     #[bpaf(long)]
     pub(crate) tls: bool,
+    /// 证书cert
+    #[bpaf(long)]
+    pub(crate) cert: Option<String>,
+    /// 证书key
+    #[bpaf(long)]
+    pub(crate) key: Option<String>,
     /// 是否支持websocket
     #[bpaf(long)]
     pub(crate) ws: bool,
@@ -541,6 +554,7 @@ pub async fn parse_env() -> ProxyResult<ConfigOption> {
         Command::ReverseProxy(reverse) => {
             let mut http = HttpConfig::new();
             let mut server = ServerConfig::new(reverse.from.clone());
+            server.bind_ssl = reverse.from_ssl;
             let mut location = LocationConfig::new();
             let up_name = "server".to_string();
             let upstream = UpstreamConfig::new_single(up_name.clone(), reverse.to.0);
@@ -551,6 +565,8 @@ pub async fn parse_env() -> ProxyResult<ConfigOption> {
                 let name = format!("http://{}", up_name);
                 Url::parse(name.into_bytes())?
             };
+            server.cert = reverse.cert;
+            server.key = reverse.key;
             location.comm.proxy_url = Some(url);
             location.headers = reverse.header;
             location.is_ws = reverse.ws;

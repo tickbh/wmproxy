@@ -55,15 +55,16 @@ bpaf = { version = "0.9.8", features = [
 webparse = { version = "0.2.6" }
 wenmeng = { version = "0.2.6" }
 console = "0.15.8"
-local-ip-address = "0.5.7"
+local-ip-address = "0.6.1"
 x509-certificate="0.23.1"
-# wenmeng={git="https://github.com/tickbh/wenmeng.git"}
-acme-lib = "0.9.1"
-openssl = { version = "0.10.32", features = ["vendored"] }
+
+acme-lib = { version = "^0.9.1", default-features = false, optional = true}
+openssl = { version = "0.10.32", default-features = false, features = ["vendored"], optional = true }
 # acme-lib={git="https://github.com/tickbh/acme-lib"}
 [features]
 bright-color = ["bpaf/bright-color"]
 dull-color = ["bpaf/dull-color"]
+acme = ["acme-lib"]
 
 # [dependencies.webparse]
 # path = "../webparse"
