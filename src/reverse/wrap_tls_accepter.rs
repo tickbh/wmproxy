@@ -152,8 +152,6 @@ impl WrapTlsAccepter {
     }
 
     pub fn load_ssl(cert: &Option<String>, key: &Option<String>) -> io::Result<(DateTime<Utc>, TlsAcceptor)> {
-        println!("cert = {:?}", cert);
-        println!("key = {:?}", key);
         let (expired, one_cert) = Self::load_certs(&cert)?;
         let one_key = Self::load_keys(&key)?;
         let config = rustls::ServerConfig::builder();

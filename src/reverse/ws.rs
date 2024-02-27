@@ -44,7 +44,6 @@ impl WsTrait for ServerWsOperate {
                 return Err(ProtError::Extension("Not Support Ws"));
             }
             if let Ok((url, domain)) = location.get_reverse_url() {
-                println!("connect url = {}, domain = {:?}", url, domain);
                 let mut client = Client::builder()
                     .url(url)?
                     .connect_with_domain(&domain)
@@ -67,7 +66,6 @@ impl WsTrait for ServerWsOperate {
                     {
                         println!("error = {:?}", e);
                     };
-                    println!("client close!!!!!!!!!!");
                 });
             }
             return Ok(Some(option));

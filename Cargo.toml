@@ -52,8 +52,6 @@ bpaf = { version = "0.9.8", features = [
     "batteries",
     "autocomplete",
 ] }
-webparse = { version = "0.2.6" }
-wenmeng = { version = "0.2.6" }
 console = "0.15.8"
 local-ip-address = "0.6.1"
 x509-certificate="0.23.1"
@@ -61,13 +59,18 @@ x509-certificate="0.23.1"
 acme-lib = { version = "^0.9.1", default-features = false, optional = true}
 openssl = { version = "0.10.32", default-features = false, features = ["vendored"], optional = true }
 # acme-lib={git="https://github.com/tickbh/acme-lib"}
-[features]
-bright-color = ["bpaf/bright-color"]
-dull-color = ["bpaf/dull-color"]
-acme = ["acme-lib"]
 
+
+webparse = { version = "0.2.7" }
+wenmeng = { version = "0.2.7" }
 # [dependencies.webparse]
 # path = "../webparse"
 
 # [dependencies.wenmeng]
 # path = "../wenmeng"
+
+[features]
+bright-color = ["bpaf/bright-color"]
+dull-color = ["bpaf/dull-color"]
+acme = ["acme-lib"]
+

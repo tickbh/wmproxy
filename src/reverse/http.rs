@@ -315,9 +315,6 @@ impl HttpConfig {
                 if sender.is_some() && receiver.is_some() {
                     cache.insert(clone, (sender.unwrap(), receiver.unwrap()));
                 }
-                for h in res.headers().iter() {
-                    println!("header = {}:{:?}", h.0, h.1.as_string());
-                }
                 return Ok(res);
             }
         }

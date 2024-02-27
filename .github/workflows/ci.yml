@@ -61,7 +61,7 @@ jobs:
           command: "build"
           target: ${{ matrix.platform.target }}
           toolchain: ${{ matrix.toolchain }}
-          args: " --release"
+          args: " --release --features \"acme openssl\""
           strip: true
       - name: Rename binary (linux and macos)
         run: mv target/${{ matrix.platform.target }}/release/wmproxy target/${{ matrix.platform.target }}/release/${{ matrix.platform.bin }}
