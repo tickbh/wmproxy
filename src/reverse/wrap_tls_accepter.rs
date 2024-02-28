@@ -1,4 +1,4 @@
-#[cfg(feature = "acme")]
+#[cfg(feature = "acme-lib")]
 use acme_lib::{create_rsa_key, Directory, DirectoryUrl, Error, persist::MemoryPersist};
 use chrono::{DateTime, Utc};
 use x509_certificate::X509Certificate;
@@ -21,7 +21,11 @@ use tokio::io::{AsyncRead, AsyncWrite};
 use tokio_rustls::{Accept, TlsAcceptor};
 
 lazy_static! {
+    // 请求时间做记录,防止短时间内重复请求
     static ref CACHE_REQUEST: Mutex<HashMap<String, Instant>> = Mutex::new(HashMap::new());
+    
+    // 成功加载时间记录,以方便将过期的数据做更新
+    static ref SUCCESS_CERT: Mutex<HashMap<String, Instant>> = Mutex::new(HashMap::new());
 
     // 初始申请新证书延时
     static ref REQUEST_NEW_DELAY: Duration = Duration::from_secs(30);
@@ -30,11 +34,17 @@ lazy_static! {
     static ref REQUEST_UPDATE_DELAY: Duration = Duration::from_secs(300);
 }
 
+/// 包装tls accepter, 用于适应acme及自有证书两种
 #[derive(Clone)]
 pub struct WrapTlsAccepter {
+    /// 最后请求的时间
     pub last: Instant,
+    /// 最后成功加载证书的时间
+    pub last_success: Instant,
+    /// 域名
     pub domain: Option<String>,
     pub accepter: Option<TlsAcceptor>,
+    /// 证书的过期时间,将加载证书的时候同步读取
     pub expired: Option<DateTime<Utc>>,
     pub is_acme: bool,
 }
@@ -101,6 +111,7 @@ impl WrapTlsAccepter {
     pub fn new(domain: String) -> WrapTlsAccepter {
         let mut wrap = WrapTlsAccepter {
             last: Instant::now(),
+            last_success: Instant::now(),
             domain: Some(domain),
             accepter: None,
             expired: None,
@@ -111,7 +122,7 @@ impl WrapTlsAccepter {
     }
 
     pub fn try_load_cert(&mut self) -> bool {
-        match Self::load_ssl(&self.get_cert_path(), &self.get_key_path()) {
+        let succ = match Self::load_ssl(&self.get_cert_path(), &self.get_key_path()) {
             Ok((expired, accepter)) => {
                 self.accepter = Some(accepter);
                 self.expired = Some(expired);
@@ -121,7 +132,11 @@ impl WrapTlsAccepter {
                 println!("load ssl error ={:?}", e);
                 false
             }
+        };
+        if succ {
+            self.last_success = Instant::now();
         }
+        succ
     }
 
     pub fn get_cert_path(&self) -> Option<String> {
@@ -141,9 +156,24 @@ impl WrapTlsAccepter {
     }
 
     pub fn update_last(&mut self) {
-        if self.last.elapsed() > Duration::from_secs(5) {
-            self.try_load_cert();
-            self.last = Instant::now();
+        if self.accepter.is_none() {
+            if self.last.elapsed() > Duration::from_secs(5) {
+                self.try_load_cert();
+                self.last = Instant::now();
+            }
+        } else {
+            if self.domain.is_none() {
+                return;
+            }
+            let map = SUCCESS_CERT.lock().unwrap();
+            let doamin = &self.domain.clone().unwrap();
+            if !map.contains_key(doamin) {
+                return;
+            }
+            if self.last_success < map[doamin] && self.last < map[doamin] {
+                self.try_load_cert();
+                self.last = map[doamin];
+            }
         }
     }
 
@@ -171,6 +201,7 @@ impl WrapTlsAccepter {
         let (expired, config) = Self::load_ssl(cert, key)?;
         Ok(WrapTlsAccepter {
             last: Instant::now(),
+            last_success: Instant::now(),
             domain: None,
             accepter: Some(config),
             expired: Some(expired),
@@ -213,7 +244,7 @@ impl WrapTlsAccepter {
         false
     }
 
-    #[cfg(feature = "acme")]
+    #[cfg(feature = "acme-lib")]
     fn get_delay_time(&self) -> Duration {
         if self.accepter.is_some() {
             *REQUEST_UPDATE_DELAY
@@ -222,12 +253,12 @@ impl WrapTlsAccepter {
         }
     }
 
-    #[cfg(not (feature = "acme"))]
+    #[cfg(not (feature = "acme-lib"))]
     fn check_and_request_cert(&self)  -> Result<(), io::Error> {
         Ok(())
     }
     
-    #[cfg(feature = "acme")]
+    #[cfg(feature = "acme-lib")]
     fn check_and_request_cert(&self)  -> Result<(), Error> {
         if self.domain.is_none() {
             return Err(io::Error::new(io::ErrorKind::Other, "未知域名").into());
@@ -251,7 +282,7 @@ impl WrapTlsAccepter {
         Ok(())
     }
 
-    #[cfg(feature = "acme")]
+    #[cfg(feature = "acme-lib")]
     fn request_cert(&self) -> Result<(), Error> {
         // 使用let's encrypt签发证书
         let url = DirectoryUrl::LetsEncrypt;
@@ -327,6 +358,9 @@ impl WrapTlsAccepter {
             cert.certificate().as_bytes(),
         )?;
         crate::Helper::write_to_file(&self.get_key_path().unwrap(), cert.private_key().as_bytes())?;
+        let mut map = SUCCESS_CERT.lock().unwrap();
+        let doamin = self.domain.clone().unwrap();
+        map.insert(doamin, Instant::now());
         Ok(())
     }
 }
