@@ -178,6 +178,8 @@ impl HttpConfig {
                     if !has_http {
                         return Err(crate::ProxyError::Extension("未配置证书需要求HTTP端口配合"));
                     }
+                    #[cfg(not(feature="acme-lib"))]
+                    return Err(crate::ProxyError::Extension("未启用acme, https必须配置证书"));
                 }
                 tlss.push(true);
             }
