@@ -15,7 +15,7 @@ use std::{
     io::{self, Read},
     net::{IpAddr, Ipv4Addr, SocketAddr},
     path::PathBuf,
-    process::exit,
+    process::exit, str::FromStr,
 };
 
 use bpaf::*;
@@ -26,7 +26,7 @@ use wenmeng::Client;
 use crate::{
     option::proxy_config,
     reverse::{HttpConfig, LocationConfig, ServerConfig, UpstreamConfig},
-    ConfigHeader, ConfigLog, ConfigOption, FileServer, ProxyConfig, ProxyResult,
+    ConfigHeader, ConfigLog, ConfigOption, FileServer, ProxyConfig, ProxyResult, StaticResponse,
 };
 use crate::{reverse::StreamConfig, WrapVecAddr};
 use crate::{ConfigDuration, WrapAddr};
@@ -98,6 +98,27 @@ struct ReloadConfig {
     /// 控制微端地址
     #[bpaf(short, long)]
     pub(crate) url: Option<String>,
+}
+
+#[derive(Debug, Clone, Bpaf)]
+#[allow(dead_code)]
+struct RespondConfig {
+    
+    /// 监听地址
+    #[bpaf(short, long)]
+    pub(crate) listen: WrapVecAddr,
+
+    /// 状态码
+    #[bpaf(short, long)]
+    #[bpaf(fallback(200), display_fallback)]
+    pub(crate) status: u16,
+
+    #[bpaf(short('H'), long)]
+    pub(crate) header: Vec<ConfigHeader>,
+    /// body内容
+    #[bpaf(short, long)]
+    #[bpaf(fallback("It's wmproxy, welcome {client_ip}.".to_string()), display_fallback)]
+    pub(crate) body: String,
 }
 
 #[derive(Debug, Clone, Bpaf)]
@@ -234,6 +255,7 @@ enum Command {
     FileServer(FileServerConfig),
     ReverseProxy(ReverseProxyConfig),
     WsProxy(WsProxyConfig),
+    Respond(RespondConfig),
     Version(VersionConfig),
 }
 
@@ -280,6 +302,13 @@ fn parse_command() -> impl Parser<(Command, Shared)> {
         .command("reverse-proxy")
         .help("启动负载均衡服务器");
 
+    let respond_config = respond_config().map(Command::Respond);
+    let respond_config = construct!(respond_config, shared())
+        .to_options()
+        .command("respond")
+        .help("静态返回");
+        
+
     let ws_config = ws_proxy_config().map(Command::WsProxy);
     let ws_config = construct!(ws_config, shared())
         .to_options()
@@ -300,6 +329,7 @@ fn parse_command() -> impl Parser<(Command, Shared)> {
         file_config,
         reverse_config,
         ws_config,
+        respond_config,
         version_config
     ])
 }
@@ -499,7 +529,7 @@ pub async fn parse_env() -> ProxyResult<ConfigOption> {
                 server.key = file.key;
                 server.comm.domain = file.domain;
             }
-            
+
             let mut location = LocationConfig::new();
             let mut file_server = FileServer::new(file.root, "".to_string());
             file_server.robots = file.robots;
@@ -547,6 +577,18 @@ pub async fn parse_env() -> ProxyResult<ConfigOption> {
             server.comm.domain = ws.domain;
             stream.server.push(server);
             option.stream = Some(stream);
+            option.disable_control = true;
+            option.after_load_option()?;
+            return Ok(option);
+        }
+        Command::Respond(respod) => {
+            let mut http = HttpConfig::new();
+            let mut server = ServerConfig::new(respod.listen.clone());
+            let mut location = LocationConfig::new();
+            location.static_response = Some(StaticResponse::from_str(&respod.body)?);
+            server.location.push(location);
+            http.server.push(server);
+            option.http = Some(http);
             option.disable_control = true;
             option.after_load_option()?;
             return Ok(option);

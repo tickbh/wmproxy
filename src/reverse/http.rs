@@ -178,12 +178,10 @@ impl HttpConfig {
                     if !has_http {
                         return Err(crate::ProxyError::Extension("未配置证书需要求HTTP端口配合"));
                     }
-                    #[cfg(not(feature="acme-lib"))]
-                    return Err(crate::ProxyError::Extension("未启用acme, https必须配置证书"));
                 }
                 tlss.push(true);
             }
-
+            
             if has_acme {
                 let mut location = LocationConfig::new();
                 let file_server = FileServer::new(
@@ -193,6 +191,9 @@ impl HttpConfig {
                 location.rule = Matcher::from_str("/.well-known/acme-challenge/").expect("matcher error");
                 location.file_server = Some(file_server);
                 value.location.insert(0, location);
+                
+                #[cfg(not(feature="acme-lib"))]
+                return Err(crate::ProxyError::Extension("未启用acme, https必须配置证书"));
             }
         }
         Ok((accepters, tlss, listeners))
