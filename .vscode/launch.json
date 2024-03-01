@@ -152,6 +152,26 @@
             },
             "args": [],
             "cwd": "${workspaceFolder}"
-        }
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "debug",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=wmproxy",
+                    "--package=wmproxy"
+                ],
+                "filter": {
+                    "name": "wmproxy",
+                    "kind": "bin"
+                }
+            },
+            // "console": "externalTerminal",
+            "env": {"RUST_LOG": "trace"},
+            "args": ["reverse-proxy", "--from-ssl", ":443", "-t", "127.0.0.1:8001", "--cert", "key/local.tool.fit.pem", "--key", "key/local.tool.fit.key"],
+            "cwd": "${workspaceFolder}"
+        },
     ]
 }
