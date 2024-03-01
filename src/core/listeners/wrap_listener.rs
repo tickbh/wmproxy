@@ -43,8 +43,9 @@ impl WrapListener {
         })
     }
 
-    // pub async fn accept(&mut self) -> io::Result<Stream> {
-    //     let stream = self.listener.accept().await?;
-        
-    // }
+    pub async fn accept(&mut self) -> io::Result<Stream> {
+        let stream = self.listener.accept().await?;
+        todo!()
+        // Ok(Box::new(stream.0))   
+    }
 }
