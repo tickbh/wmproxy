@@ -1,7 +1,7 @@
 use std::{fmt::Debug, net::SocketAddr, pin::Pin};
 use tokio::io::{AsyncRead, AsyncWrite};
 
-use super::IoTrait;
+use super::{ClientAddrTrait, IoTrait};
 
 #[derive(Debug)]
 pub struct WrapStream<IO: AsyncRead + AsyncWrite + Unpin + Debug + Send + Sync + 'static> {
@@ -22,6 +22,11 @@ impl<IO: AsyncRead + AsyncWrite + Unpin + Debug + Send + Sync + 'static> WrapStr
     }
 }
 
+impl<IO: AsyncRead + AsyncWrite + Unpin + Debug + Send + Sync + 'static> ClientAddrTrait for WrapStream<IO> {
+    fn client_addr(&self) -> &Option<SocketAddr> {
+        &self.addr        
+    }
+}
 
 impl<IO: AsyncRead + AsyncWrite + Unpin + Debug + Send + Sync + 'static> IoTrait for WrapStream<IO> {
     fn as_any(&self) -> &dyn std::any::Any {

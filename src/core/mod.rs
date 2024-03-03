@@ -4,4 +4,4 @@ mod listeners;
 mod streams;
 mod apps;
 
-pub use streams::{Stream, Shutdown};
+pub use streams::{Stream, WrapStream};
