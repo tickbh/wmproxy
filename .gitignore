@@ -5,3 +5,4 @@ Cargo.lock
 .cargo
 /logs/*.log
 wmproxy.md
+.DS_Store
