@@ -3,8 +3,10 @@ use std::io;
 use tokio::net::TcpListener;
 use tokio_rustls::TlsAcceptor;
 
-
-use crate::{core::Stream, Helper};
+use crate::{
+    core::{Stream, WrapStream},
+    Helper,
+};
 
 use super::wrap_tls_accepter::WrapTlsAccepter;
 
@@ -43,9 +45,32 @@ impl WrapListener {
         })
     }
 
-    pub async fn accept(&mut self) -> io::Result<Stream> {
-        let stream = self.listener.accept().await?;
-        todo!()
-        // Ok(Box::new(stream.0))   
+    pub async fn new_tls_multi(
+        bind: &str,
+        infos: Vec<(String, String, String)>,
+    ) -> io::Result<WrapListener> {
+        let listener = Helper::bind(bind).await?;
+        Self::new_listener_tls_multi(listener, infos).await
+    }
+
+    pub async fn new_listener_tls_multi(
+        listener: TcpListener,
+        infos: Vec<(String, String, String)>,
+    ) -> io::Result<WrapListener> {
+        let accepter = WrapTlsAccepter::new_multi(infos)?;
+        Ok(Self {
+            listener,
+            accepter: Some(accepter),
+        })
+    }
+
+    pub async fn accept<IO>(&mut self) -> io::Result<Stream> {
+        let (stream, addr) = self.listener.accept().await?;
+        if let Some(accept) = &self.accepter {
+            let stream = accept.accept(stream)?.await?;
+            Ok(Box::new(WrapStream::with_addr(stream, addr)))
+        } else {
+            Ok(Box::new(WrapStream::with_addr(stream, addr)))
+        }
     }
 }

@@ -1,7 +1,9 @@
 #[cfg(feature = "acme-lib")]
-use acme_lib::{create_rsa_key, Directory, DirectoryUrl, Error, persist::MemoryPersist};
+use acme_lib::{create_rsa_key, persist::MemoryPersist, Directory, DirectoryUrl, Error};
 use chrono::{DateTime, Utc};
-use x509_certificate::X509Certificate;
+use rustls::crypto::ring::sign;
+use rustls::server::ResolvesServerCertUsingSni;
+use rustls::sign::CertifiedKey;
 use std::collections::HashMap;
 use std::io::Read;
 use std::sync::Mutex;
@@ -11,6 +13,7 @@ use std::{
     io::{self, BufReader},
     sync::Arc,
 };
+use x509_certificate::X509Certificate;
 
 use lazy_static::lazy_static;
 use rustls::{
@@ -23,7 +26,7 @@ use tokio_rustls::{Accept, TlsAcceptor};
 lazy_static! {
     // 请求时间做记录,防止短时间内重复请求
     static ref CACHE_REQUEST: Mutex<HashMap<String, Instant>> = Mutex::new(HashMap::new());
-    
+
     // 成功加载时间记录,以方便将过期的数据做更新
     static ref SUCCESS_CERT: Mutex<HashMap<String, Instant>> = Mutex::new(HashMap::new());
 
@@ -50,7 +53,9 @@ pub struct WrapTlsAccepter {
 }
 
 impl WrapTlsAccepter {
-    fn load_certs(path: &Option<String>) -> io::Result<(DateTime<Utc>, Vec<CertificateDer<'static>>)> {
+    fn load_certs(
+        path: &Option<String>,
+    ) -> io::Result<(DateTime<Utc>, Vec<CertificateDer<'static>>)> {
         if let Some(path) = path {
             match File::open(&path) {
                 Ok(mut file) => {
@@ -58,8 +63,12 @@ impl WrapTlsAccepter {
                     file.read_to_string(&mut content)?;
                     let mut reader = BufReader::new(content.as_bytes());
                     let certs = rustls_pemfile::certs(&mut reader);
-                    let cert = X509Certificate::from_pem(content.as_bytes()).map_err(|_| io::Error::new(io::ErrorKind::Other, "cert error"))?;
-                    Ok((cert.validity_not_after(), certs.into_iter().collect::<Result<Vec<_>, _>>()?))
+                    let cert = X509Certificate::from_pem(content.as_bytes())
+                        .map_err(|_| io::Error::new(io::ErrorKind::Other, "cert error"))?;
+                    Ok((
+                        cert.validity_not_after(),
+                        certs.into_iter().collect::<Result<Vec<_>, _>>()?,
+                    ))
                 }
                 Err(e) => {
                     log::warn!("加载公钥{}出错，错误内容:{:?}", path, e);
@@ -181,7 +190,10 @@ impl WrapTlsAccepter {
         self.accepter.is_none()
     }
 
-    pub fn load_ssl(cert: &Option<String>, key: &Option<String>) -> io::Result<(DateTime<Utc>, TlsAcceptor)> {
+    pub fn load_ssl(
+        cert: &Option<String>,
+        key: &Option<String>,
+    ) -> io::Result<(DateTime<Utc>, TlsAcceptor)> {
         let (expired, one_cert) = Self::load_certs(&cert)?;
         let one_key = Self::load_keys(&key)?;
         let config = rustls::ServerConfig::builder();
@@ -195,6 +207,35 @@ impl WrapTlsAccepter {
         config.alpn_protocols.push("h2".as_bytes().to_vec());
         config.alpn_protocols.push("http/1.1".as_bytes().to_vec());
         Ok((expired, TlsAcceptor::from(Arc::new(config))))
+    }
+
+    pub fn new_multi(infos: Vec<(String, String, String)>) -> io::Result<WrapTlsAccepter> {
+        let config = rustls::ServerConfig::builder();
+        let mut resolve = ResolvesServerCertUsingSni::new();
+        for (domain, cert, key) in infos {
+            let (_expired, one_cert) = Self::load_certs(&Some(cert))?;
+            let key = sign::any_supported_type(&Self::load_keys(&Some(key))?)
+                .map_err(|_| io::Error::new(io::ErrorKind::Other, "unvaild key"))?;
+            let ck = CertifiedKey::new(one_cert, key);
+
+            resolve.add(&domain, ck).map_err(|e| {
+                println!("{:?}", e);
+                io::Error::new(io::ErrorKind::Other, "unvaild key")
+            })?;
+        }
+
+        let config = config
+            .with_no_client_auth()
+            .with_cert_resolver(Arc::new(resolve));
+        let accepter = TlsAcceptor::from(Arc::new(config));
+        Ok(WrapTlsAccepter {
+            last: Instant::now(),
+            last_success: Instant::now(),
+            domain: None,
+            accepter: Some(accepter),
+            expired: None,
+            is_acme: false,
+        })
     }
 
     pub fn new_cert(cert: &Option<String>, key: &Option<String>) -> io::Result<WrapTlsAccepter> {
@@ -253,13 +294,13 @@ impl WrapTlsAccepter {
         }
     }
 
-    #[cfg(not (feature = "acme-lib"))]
-    fn check_and_request_cert(&self)  -> Result<(), io::Error> {
+    #[cfg(not(feature = "acme-lib"))]
+    fn check_and_request_cert(&self) -> Result<(), io::Error> {
         Ok(())
     }
-    
+
     #[cfg(feature = "acme-lib")]
-    fn check_and_request_cert(&self)  -> Result<(), Error> {
+    fn check_and_request_cert(&self) -> Result<(), Error> {
         if self.domain.is_none() {
             return Err(io::Error::new(io::ErrorKind::Other, "未知域名").into());
         }
@@ -342,7 +383,6 @@ impl WrapTlsAccepter {
 
             // 再尝试刷新acme请求
             ord_new.refresh()?;
-
         };
 
         // 创建rsa的密钥对
