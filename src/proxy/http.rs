@@ -62,7 +62,7 @@ impl Operate {
             if up.len() != 2 {
                 return false;
             }
-            if up[0] == self.username.as_ref().unwrap() ||
+            if up[0] == self.username.as_ref().unwrap() &&
                 up[1] == self.password.as_ref().unwrap() {
                 return true;
             }
