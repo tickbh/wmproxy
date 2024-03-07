@@ -1,4 +1,4 @@
-use std::io;
+use std::{io, net::SocketAddr};
 
 use tokio::net::TcpListener;
 use tokio_rustls::TlsAcceptor;
@@ -64,7 +64,14 @@ impl WrapListener {
         })
     }
 
-    pub async fn accept<IO>(&mut self) -> io::Result<Stream> {
+    pub fn local_desc(&self) -> String {
+        self.listener
+            .local_addr()
+            .map(|s| format!("{s}"))
+            .unwrap_or("unknown".to_string())
+    }
+
+    pub async fn accept(&mut self) -> io::Result<Stream> {
         let (stream, addr) = self.listener.accept().await?;
         if let Some(accept) = &self.accepter {
             let stream = accept.accept(stream)?.await?;

@@ -4,6 +4,7 @@ use crate::core::{apps::AppTrait, listeners::{Listeners, WrapListener}};
 
 use self::service::ServiceTrait;
 use async_trait::async_trait;
+use log::{error, info};
 use tokio::runtime::Handle;
 
 use super::ShutdownWatch;
@@ -39,14 +40,34 @@ impl<A: AppTrait + Send + Sync + 'static> Service<A> {
 
     async fn run_wrap(
         app_logic: Arc<A>,
-        mut stack: WrapListener,
+        mut listener: WrapListener,
         mut shutdown: ShutdownWatch,
     ) {
-        // loop {
-        //     let new_io = tokio::select! {
+        loop {
+            let new_io = tokio::select! {
+                new_io = listener.accept() => {
+                    new_io
+                }
+                shutdown_signal = shutdown.changed() => {
+                    match shutdown_signal {
+                        Ok(()) => {
+                            if !*shutdown.borrow() {
+                                // happen in the initial read
+                                continue;
+                            }
+                            info!("Shutting down {}", listener.local_desc());
+                            break;
+                        }
+                        Err(e) => {
+                            error!("shutdown_signal error {e}");
+                            break;
+                        }
+                    }
+                }
+            };
 
-        //     }
-        // }
+
+        }
     }
 }
 
