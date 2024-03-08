@@ -23,7 +23,7 @@ use tokio::{
 use webparse::{Request, Response};
 use wenmeng::{Body, Client, HttpTrait, ProtResult, RecvRequest, RecvResponse, Server};
 
-use crate::{Helper, MappingConfig, ProtCreate, ProtFrame, ProxyError, VirtualStream};
+use crate::{core::{AppTrait, ShutdownWatch, Stream}, Helper, MappingConfig, ProtCreate, ProtFrame, ProxyError, VirtualStream};
 
 static TIP_NOT_FOUND: &'static str = "当前连接未检测到与之匹配的域名，请检查配置是否正确，或者查看官方网站<a href=\"https://github.com/tickbh/wmproxy\"/>wmproxy</a>。";
 struct Operate {
@@ -164,5 +164,19 @@ impl TransHttp {
             log::info!("处理内网穿透时发生错误：{:?}", e);
         };
         Ok(())
+    }
+}
+
+
+#[async_trait]
+impl AppTrait for TransHttp {
+    async fn process_new(
+        self: &Arc<Self>,
+        mut session: Stream,
+        shutdown: &ShutdownWatch,
+    ) -> Option<Stream> {
+        todo!()
+        // self.process(session, shutdown)
+        // TransHttp::process(self, inbound, addr)
     }
 }

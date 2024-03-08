@@ -1,10 +1,10 @@
-use std::{mem, sync::Arc};
+use std::{error::Error, mem, sync::Arc};
 
-use crate::core::{apps::AppTrait, listeners::{Listeners, WrapListener}};
+use crate::core::{apps::AppTrait, listeners::{Listeners, WrapListener}, Stream};
 
-use self::service::ServiceTrait;
+pub use self::service::ServiceTrait;
 use async_trait::async_trait;
-use log::{error, info};
+use log::{debug, error, info};
 use tokio::runtime::Handle;
 
 use super::ShutdownWatch;
@@ -37,7 +37,15 @@ impl<A> Service<A> {
 
 
 impl<A: AppTrait + Send + Sync + 'static> Service<A> {
-
+    pub async fn handle_event(event: Stream, app_logic: Arc<A>, shutdown: ShutdownWatch) {
+        debug!("new event!");
+        let mut reuse_event = app_logic.process_new(event, &shutdown).await;
+        while let Some(event) = reuse_event {
+            debug!("new reusable event!");
+            reuse_event = app_logic.process_new(event, &shutdown).await;
+        }
+    }
+    
     async fn run_wrap(
         app_logic: Arc<A>,
         mut listener: WrapListener,
@@ -65,6 +73,24 @@ impl<A: AppTrait + Send + Sync + 'static> Service<A> {
                     }
                 }
             };
+
+            match new_io {
+                Ok(io) => {
+                    let app = app_logic.clone();
+                    let shutdown = shutdown.clone();
+                    tokio::spawn(async move {
+                            Self::handle_event(io, app, shutdown).await
+                    });
+                },
+                Err(e) => {
+                    if let Some(io_error) = e.raw_os_error() {
+                        // too many open files
+                        if io_error == 24 {
+                            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                        }
+                    }
+                },
+            }
 
 
         }
