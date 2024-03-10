@@ -30,7 +30,7 @@ mod plugins;
 pub mod log;
 mod data;
 pub mod arg;
-mod core;
+pub mod core;
 
 pub use error::{ProxyResult, ProxyError};
 pub use flag::Flag;
