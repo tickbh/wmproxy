@@ -1,4 +1,4 @@
-use std::{error::Error, mem, sync::Arc};
+use std::{error::Error, io, mem, sync::Arc};
 
 use crate::core::{apps::AppTrait, listeners::{Listeners, WrapListener}, Stream};
 
@@ -99,11 +99,18 @@ impl<A: AppTrait + Send + Sync + 'static> Service<A> {
 
 #[async_trait]
 impl<A: AppTrait + Send + Sync + 'static> ServiceTrait for Service<A> {
-
+    
+    async fn ready_service(&mut self) -> io::Result<()> {
+        for listener in &mut self.listeners.listener {
+            listener.try_init().await?;
+        }
+        Ok(())
+    }
+    
     async fn start_service(&mut self, shutdown: ShutdownWatch) {
         let runtime = Handle::current();
         let wrap_listeners = mem::replace(&mut self.listeners.listener, vec![]);
-        
+        println!("cccccccccccccc");
         let handlers = wrap_listeners.into_iter().map(|endpoint| {
             let app_logic = self.app_logic.clone();
             let shutdown = shutdown.clone();
@@ -113,6 +120,7 @@ impl<A: AppTrait + Send + Sync + 'static> ServiceTrait for Service<A> {
         });
 
         futures::future::join_all(handlers).await;
+        println!("dddddddddddddddd");
         self.app_logic.cleanup();
     }
 

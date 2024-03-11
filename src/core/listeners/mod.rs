@@ -20,5 +20,9 @@ impl Listeners {
     pub fn new() -> Self {
         Self { listener: vec![] }
     }
+
+    pub fn add(&mut self, listener: WrapListener) {
+        self.listener.push(listener);
+    }
 }
 

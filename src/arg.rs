@@ -20,6 +20,7 @@ use std::{
 
 use bpaf::*;
 use log::{Level, LevelFilter};
+use tokio::runtime::Runtime;
 use webparse::{Request, Url};
 use wenmeng::Client;
 
@@ -375,7 +376,7 @@ fn kill_process_by_id(id: String) -> Option<i32> {
     return child.status.code();
 }
 
-pub async fn parse_env() -> ProxyResult<ConfigOption> {
+pub fn parse_env() -> ProxyResult<ConfigOption> {
     let (command, shared) = parse_command().run();
     if shared.daemon && shared.forever {
         println!("daemon与forever不能同时被设置");
@@ -470,18 +471,25 @@ pub async fn parse_env() -> ProxyResult<ConfigOption> {
 
             let mut url = Url::parse(url.into_bytes())?;
             url.path = "/stop".to_string();
-
-            let req = Request::builder().method("GET").url(url.clone()).body("")?;
-            println!("url = {:?}", req.get_connect_url());
-            let client = Client::builder().http2(false).url(url)?.connect().await?;
-
-            let (mut recv, _sender) = client.send2(req.into_type()).await?;
-            let res = recv.recv().await.unwrap()?;
-            if res.status() == 200 {
-                println!("关闭成功!");
-            } else {
-                println!("微端响应:{}!", res.status());
+            async fn request(url: Url) -> ProxyResult<()> {
+                let req = Request::builder().method("GET").url(url.clone()).body("")?;
+                println!("url = {:?}", req.get_connect_url());
+                let client = Client::builder().http2(false).url(url)?.connect().await?;
+    
+                let (mut recv, _sender) = client.send2(req.into_type()).await?;
+                let res = recv.recv().await.unwrap()?;
+                if res.status() == 200 {
+                    println!("关闭成功!");
+                } else {
+                    println!("微端响应:{}!", res.status());
+                }
+                Ok(())
             }
+
+            let rt  = Runtime::new().unwrap();
+            rt.block_on(async {
+                let _ = request(url).await;
+            });
             exit(0);
         }
 
@@ -498,18 +506,26 @@ pub async fn parse_env() -> ProxyResult<ConfigOption> {
 
             let mut url = Url::parse(url.into_bytes())?;
             url.path = "/reload".to_string();
+            
+            async fn request(url: Url) -> ProxyResult<()> {
+                let req = Request::builder().method("GET").url(url.clone()).body("")?;
+                println!("url = {:?}", req.get_connect_url());
+                let client = Client::builder().http2(false).url(url)?.connect().await?;
 
-            let req = Request::builder().method("GET").url(url.clone()).body("")?;
-            println!("url = {:?}", req.get_connect_url());
-            let client = Client::builder().http2(false).url(url)?.connect().await?;
-
-            let (mut recv, _sender) = client.send2(req.into_type()).await?;
-            let res = recv.recv().await.unwrap()?;
-            if res.status() == 200 {
-                println!("重载文件成功!");
-            } else {
-                println!("重载文件失败: 微端响应:{}!", res.status());
+                let (mut recv, _sender) = client.send2(req.into_type()).await?;
+                let res = recv.recv().await.unwrap()?;
+                if res.status() == 200 {
+                    println!("重载文件成功!");
+                } else {
+                    println!("重载文件失败: 微端响应:{}!", res.status());
+                }
+                Ok(())
             }
+
+            let rt  = Runtime::new().unwrap();
+            rt.block_on(async {
+                let _ = request(url).await;
+            });
             exit(0);
         }
         Command::FileServer(file) => {

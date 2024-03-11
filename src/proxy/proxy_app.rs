@@ -2,10 +2,10 @@ use std::{net::IpAddr, sync::Arc};
 use async_trait::async_trait;
 use webparse::BinaryMut;
 
-use crate::{core::{AppTrait, ShutdownWatch, Stream}, error::ProxyTypeResult, ConfigHeader, Flag, ProxyError, ProxyHttp, ProxySocks5};
+use crate::{core::{AppTrait, Listeners, Service, ShutdownWatch, Stream}, error::ProxyTypeResult, ConfigHeader, Flag, ProxyError, ProxyHttp, ProxySocks5};
 
 
-pub struct ClientApp {
+pub struct ProxyApp {
     flag: Flag,
     username: Option<String>,
     password: Option<String>,
@@ -13,7 +13,7 @@ pub struct ClientApp {
     headers: Option<Vec<ConfigHeader>>,
 }
 
-impl ClientApp {
+impl ProxyApp {
     pub fn new(
         flag: Flag,
         username: Option<String>,
@@ -82,16 +82,22 @@ impl ClientApp {
             Err(ProxyError::Continue((buffer, inbound)))
         }
     }
+
+    pub fn build_services(self, listeners: Listeners) -> Service<Self> {
+        Service::with_listeners("proxy_app".to_string(), listeners, Arc::new(self))
+    }
 }
 
 #[async_trait]
-impl AppTrait for ClientApp {
+impl AppTrait for ProxyApp {
     async fn process_new(
         self: &Arc<Self>,
         session: Stream,
-        shutdown: &ShutdownWatch,
+        _shutdown: &ShutdownWatch,
     ) -> Option<Stream> {
-        self.deal_proxy(session).await;
-        todo!()
+        println!("aaaaaaaaaaaaaaa");
+        let _ = self.deal_proxy(session).await;
+        println!("bbbbbbbbbbbbbbbbbb"); 
+        None
     }
 }

@@ -38,6 +38,7 @@ pub use option::{ProxyConfig, Builder, ConfigOption};
 pub use wmcore::WMCore;
 pub use proxy::http::ProxyHttp;
 pub use proxy::socks5::ProxySocks5;
+pub use proxy::ProxyApp;
 pub use streams::*;
 pub use helper::Helper;
 pub use prot::{ProtFrame, ProtFrameHeader, ProtClose, ProtData, ProtCreate};
