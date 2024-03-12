@@ -278,22 +278,22 @@ pub fn default_pidfile() -> String {
 pub struct ConfigOption {
     /// HTTP反向代理,静态文件服相关
     #[serde(default)]
-    pub(crate) proxy: Option<ProxyConfig>,
+    pub proxy: Option<ProxyConfig>,
     /// HTTP反向代理,静态文件服相关
     #[serde(default)]
-    pub(crate) http: Option<HttpConfig>,
+    pub http: Option<HttpConfig>,
     #[serde(default)]
-    pub(crate) stream: Option<StreamConfig>,
+    pub stream: Option<StreamConfig>,
     #[serde(default = "default_control_port")]
-    pub(crate) control: SocketAddr,
+    pub control: SocketAddr,
     #[serde(default)]
-    pub(crate) disable_stdout: bool,
+    pub disable_stdout: bool,
     #[serde(default)]
-    pub(crate) disable_control: bool,
+    pub disable_control: bool,
     #[serde(default="default_pidfile")]
     pub pidfile: String,
     #[serde_as(as = "Option<DisplayFromStr>")]
-    pub(crate) default_level: Option<LevelFilter>,
+    pub default_level: Option<LevelFilter>,
 }
 
 impl Default for ConfigOption {
@@ -534,7 +534,7 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
     }
 
     /// 获取客户端https的Config配置
-    pub async fn get_tls_request(&self) -> ProxyResult<Arc<rustls::ClientConfig>> {
+    pub fn get_tls_request(&self) -> ProxyResult<Arc<rustls::ClientConfig>> {
         if !self.ts {
             return Err(ProxyError::ProtNoSupport);
         }
@@ -565,6 +565,49 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
     //     self.mode.eq_ignore_ascii_case("server")
     // }
 
+    
+    pub async fn try_connect_center_client(
+        &self,
+    ) -> ProxyResult<(
+        Option<Arc<ClientConfig>>,
+        Option<CenterClient>,
+    )> {
+        let client = self.get_tls_request().ok();
+        let mut center_client = None;
+        if self.bind.is_some() {
+            if let Some(server) = self.server.clone() {
+                let mut center = CenterClient::new(
+                    self.clone(),
+                    server,
+                    client.clone(),
+                    self.domain.clone(),
+                    self.mappings.clone(),
+                );
+                match center.connect().await {
+                    Ok(true) => (),
+                    Ok(false) => {
+                        log::error!("未能正确连上服务端:{:?}", self.server.clone().unwrap());
+                        process::exit(1);
+                    }
+                    Err(err) => {
+                        log::error!(
+                            "未能正确连上服务端:{:?}, 发生错误:{:?}",
+                            self.server.clone().unwrap(),
+                            err
+                        );
+                        process::exit(1);
+                    }
+                }
+                let _ = center.serve().await;
+                center_client = Some(center);
+            }
+        }
+        Ok((
+            client,
+            center_client,
+        ))
+    }
+
     pub async fn bind(
         &self,
     ) -> ProxyResult<(
@@ -575,7 +618,7 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
         Option<CenterClient>,
     )> {
         let proxy_accept = self.get_tls_accept().await.ok();
-        let client = self.get_tls_request().await.ok();
+        let client = self.get_tls_request().ok();
         let mut center_client = None;
         if self.bind.is_some() {
             if let Some(server) = self.server.clone() {

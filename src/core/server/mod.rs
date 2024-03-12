@@ -1,7 +1,7 @@
 use std::{thread, time::Duration};
 
 use log::{error, info, warn};
-use tokio::{runtime::{Builder, Runtime}, sync::watch};
+use tokio::{runtime::{Builder, Runtime}, sync::{mpsc::{channel, Receiver}, watch}};
 
 mod services;
 
@@ -37,8 +37,18 @@ impl Server {
     }
 
     async fn main_loop(&self) -> bool {
-        let future = std::future::pending();
-        let () = future.await;
+        let (tx, mut rx) = channel(1);
+
+        ctrlc::set_handler(move || {
+            let tx = tx.clone();
+            thread::spawn(move || {
+                let _ = tx.blocking_send(());
+            });
+        }).expect("Error setting Ctrl-C handler");
+        
+        println!("Waiting for Ctrl-C...");
+        let _ = rx.recv().await;
+        println!("Got it! Exiting..."); 
         false
     }
 
@@ -52,7 +62,7 @@ impl Server {
     }
 
     fn run_service(
-        mut service: Box<dyn ServiceTrait>,
+        mut service: Box<dyn ServiceTrait + 'static>,
         shutdown: ShutdownWatch,
         threads: usize,
     ) -> Runtime {
@@ -88,7 +98,7 @@ impl Server {
         let shutdown_type = server_runtime.handle().block_on(self.main_loop());
 
 
-        let shutdown_timeout = Duration::from_secs(5);
+        let shutdown_timeout = Duration::from_secs(0);
         let shutdowns: Vec<_> = runtimes
             .into_iter()
             .map(|rt| {

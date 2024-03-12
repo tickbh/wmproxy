@@ -19,7 +19,7 @@ pub struct WrapListener {
 }
 
 impl WrapListener {
-    pub fn new(bind: &str) -> io::Result<WrapListener> {
+    pub fn new<T: ToSocketAddrs>(bind: T) -> io::Result<WrapListener>  {
         let socks = bind.to_socket_addrs()?;
         let addrs = socks.collect::<Vec<SocketAddr>>();
         Ok(Self {

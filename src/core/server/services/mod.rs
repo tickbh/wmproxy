@@ -14,23 +14,23 @@ mod service;
 pub struct Service<A> {
     name: String,
     listeners: Listeners,
-    app_logic: Arc<A>,
+    app_logic: Option<A>,
 }
 
 impl<A> Service<A> {
-    pub fn new(name: String, app_logic: Arc<A>) -> Self {
+    pub fn new(name: String, app_logic: A) -> Self {
         Self {
             name,
             listeners: Listeners::new(),
-            app_logic,
+            app_logic: Some(app_logic),
         }
     }
 
-    pub fn with_listeners(name: String, listeners: Listeners, app_logic: Arc<A>) -> Self {
+    pub fn with_listeners(name: String, listeners: Listeners, app_logic: A) -> Self {
         Service {
             name,
             listeners,
-            app_logic,
+            app_logic: Some(app_logic),
         }
     }
 }
@@ -104,6 +104,10 @@ impl<A: AppTrait + Send + Sync + 'static> ServiceTrait for Service<A> {
         for listener in &mut self.listeners.listener {
             listener.try_init().await?;
         }
+        if self.app_logic.is_none() {
+            return Err(io::Error::new(io::ErrorKind::Other, "Not found app_logic"));
+        }
+        self.app_logic.as_mut().unwrap().ready_init().await?;
         Ok(())
     }
     
@@ -111,17 +115,18 @@ impl<A: AppTrait + Send + Sync + 'static> ServiceTrait for Service<A> {
         let runtime = Handle::current();
         let wrap_listeners = mem::replace(&mut self.listeners.listener, vec![]);
         println!("cccccccccccccc");
+        let app_logic = Arc::new(self.app_logic.take().unwrap());
         let handlers = wrap_listeners.into_iter().map(|endpoint| {
-            let app_logic = self.app_logic.clone();
             let shutdown = shutdown.clone();
+            let app_logic_clone = app_logic.clone();
             runtime.spawn(async move {
-                Self::run_wrap(app_logic, endpoint, shutdown).await;
+                Self::run_wrap(app_logic_clone, endpoint, shutdown).await;
             })
         });
 
         futures::future::join_all(handlers).await;
         println!("dddddddddddddddd");
-        self.app_logic.cleanup();
+        app_logic.cleanup();
     }
 
     fn name(&self) -> &str {

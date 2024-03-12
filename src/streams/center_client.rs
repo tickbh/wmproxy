@@ -10,9 +10,10 @@
 // -----
 // Created Date: 2023/09/25 10:08:56
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use std::{collections::HashMap, io};
+use lazy_static::lazy_static;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::mpsc::Receiver;
 use tokio::{io::split, net::TcpStream, sync::mpsc::channel};
@@ -29,6 +30,10 @@ use crate::{
     HealthCheck, Helper, MappingConfig, ProtClose, ProtCreate, ProtFrame, ProxyConfig, ProxyResult,
     TransStream, VirtualStream,
 };
+
+lazy_static!{
+    static ref NEXT_ID: Mutex<u32> = Mutex::new(1);
+}
 
 /// 中心客户端
 /// 负责与服务端建立连接，断开后自动再重连
@@ -362,13 +367,14 @@ impl CenterClient {
         Ok(())
     }
 
-    fn calc_next_id(&mut self) -> u64 {
-        let id = self.next_id;
-        self.next_id = self.next_id.wrapping_add(2);
+    fn calc_next_id(&self) -> u64 {
+        let mut lock = NEXT_ID.lock().unwrap();
+        let id = *lock;
+        *lock = lock.wrapping_add(2);
         Helper::calc_sock_map(self.option.server_id, id)
     }
 
-    pub async fn deal_new_stream<T>(&mut self, inbound: T) -> ProxyResult<()>
+    pub async fn deal_new_stream<T>(&self, inbound: T) -> ProxyResult<()>
     where
         T: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static,
     {

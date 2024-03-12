@@ -30,10 +30,7 @@ use tokio::{
 use tokio_rustls::{rustls, TlsAcceptor};
 
 use crate::{
-    option::ConfigOption,
-    proxy::ProxyServer,
-    reverse::{HttpConfig, ServerConfig, StreamConfig, StreamUdp, WrapTlsAccepter},
-    ActiveHealth, CenterClient, CenterServer, CenterTrans, Helper, OneHealth, ProxyResult,
+    arg, core::{Listeners, Server, WrapListener}, option::ConfigOption, proxy::{CenterApp, ProxyServer}, reverse::{HttpConfig, ServerConfig, StreamConfig, StreamUdp, WrapTlsAccepter}, ActiveHealth, CenterClient, CenterServer, CenterTrans, Flag, Helper, OneHealth, ProxyApp, ProxyResult
 };
 
 /// 核心处理类
@@ -437,6 +434,35 @@ impl WMCore {
             }
         }
         log::warn!("未发现任何tcp服务器，但收到tcp的内网穿透，请检查配置");
+        Ok(())
+    }
+
+    pub fn run_main() -> ProxyResult<()> {
+        let option = arg::parse_env().expect("load config failed");
+        Helper::try_init_log(&option);
+        let pidfile = option.pidfile.clone();
+        let _ = Helper::try_create_pidfile(&pidfile);
+        
+        let mut server = Server::new(Some(option.clone()));
+        if let Some(config) = &option.proxy {
+            if let Some(bind) = config.bind {
+                let mut proxy = ProxyApp::new(Flag::all(), None, None, None, None);
+                proxy.set_config(config.clone());
+                let mut listeners = Listeners::new();
+                listeners.add(WrapListener::new(bind.0).expect("ok"));
+                let service = proxy.build_services(listeners);
+                server.add_service(service);
+            }
+            if let Some(center) = config.center_addr {
+                let app = CenterApp::new(config.clone());
+                let mut listeners = Listeners::new();
+                listeners.add(WrapListener::new(center.0).expect("ok"));
+                let service = app.build_services(listeners);
+                server.add_service(service);
+            }
+        }
+        // let service = Service::new("proxy".to_string(), ClientApp::new());
+        server.run_loop();
         Ok(())
     }
 }

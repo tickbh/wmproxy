@@ -13,7 +13,7 @@
 
 use tokio::net::TcpListener;
 // #![deny(warnings)]
-use wmproxy::{arg, ControlServer, Flag, Helper, ProxyApp, ProxyResult};
+use wmproxy::{arg, ControlServer, Flag, Helper, ProxyApp, ProxyResult, WMCore};
 use wmproxy::core::{Listeners, Server, WrapListener};
 use wmproxy::core::Service;
 
@@ -37,17 +37,5 @@ async fn run_main() -> ProxyResult<()> {
 // }
 
 fn main() {
-    let option = arg::parse_env().expect("load config failed");
-    Helper::try_init_log(&option);
-    let pidfile = option.pidfile.clone();
-    let _ = Helper::try_create_pidfile(&pidfile);
-    
-    let mut server = Server::new(Some(option));
-    let proxy = ProxyApp::new(Flag::all(), None, None, None, None);
-    let mut listeners = Listeners::new();
-    listeners.add(WrapListener::new("0.0.0.0:8090").expect("ok"));
-    let service = proxy.build_services(listeners);
-    // let service = Service::new("proxy".to_string(), ClientApp::new());
-    server.add_service(service);
-    server.run_loop();
+    WMCore::run_main().expect("run main failed");
 }

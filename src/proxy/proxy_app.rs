@@ -1,8 +1,9 @@
-use std::{net::IpAddr, sync::Arc};
+use std::{io, net::IpAddr, sync::Arc};
 use async_trait::async_trait;
+use rustls::ClientConfig;
 use webparse::BinaryMut;
 
-use crate::{core::{AppTrait, Listeners, Service, ShutdownWatch, Stream}, error::ProxyTypeResult, ConfigHeader, Flag, ProxyError, ProxyHttp, ProxySocks5};
+use crate::{core::{AppTrait, Listeners, Service, ShutdownWatch, Stream}, error::ProxyTypeResult, CenterClient, ConfigHeader, Flag, ProxyConfig, ProxyError, ProxyHttp, ProxySocks5};
 
 
 pub struct ProxyApp {
@@ -11,6 +12,9 @@ pub struct ProxyApp {
     password: Option<String>,
     udp_bind: Option<IpAddr>,
     headers: Option<Vec<ConfigHeader>>,
+    config: Option<ProxyConfig>,
+    client_config: Option<Arc<ClientConfig>>,
+    center_client: Option<CenterClient>,
 }
 
 impl ProxyApp {
@@ -27,7 +31,14 @@ impl ProxyApp {
             password,
             udp_bind,
             headers,
+            config: None,
+            client_config: None,
+            center_client: None,
         }
+    }
+
+    pub fn set_config(&mut self, config: ProxyConfig) {
+        self.config = Some(config);
     }
 
     pub async fn deal_proxy(
@@ -84,7 +95,7 @@ impl ProxyApp {
     }
 
     pub fn build_services(self, listeners: Listeners) -> Service<Self> {
-        Service::with_listeners("proxy_app".to_string(), listeners, Arc::new(self))
+        Service::with_listeners("proxy_app".to_string(), listeners, self)
     }
 }
 
@@ -96,8 +107,30 @@ impl AppTrait for ProxyApp {
         _shutdown: &ShutdownWatch,
     ) -> Option<Stream> {
         println!("aaaaaaaaaaaaaaa");
-        let _ = self.deal_proxy(session).await;
-        println!("bbbbbbbbbbbbbbbbbb"); 
-        None
+        
+        if let Some(client) = &self.center_client {
+            let _ = client.deal_new_stream(session).await;
+            None
+        } else {
+            let _ = self.deal_proxy(session).await;
+            println!("bbbbbbbbbbbbbbbbbb"); 
+            None
+        }
+
+    }
+
+    async fn ready_init(&mut self) -> io::Result<()> {
+        if let Some(config) = &self.config {
+            match config.try_connect_center_client().await {
+                Ok((client_config, center_client)) => {
+                    self.client_config = client_config;
+                    self.center_client = center_client;
+                },
+                Err(_) => {
+                    return Err(io::Error::new(io::ErrorKind::Other, "connect to center failed"));
+                },
+            }
+        }
+        Ok(())
     }
 }
