@@ -1,10 +1,13 @@
-use std::{io, net::IpAddr, sync::Arc};
 use async_trait::async_trait;
 use rustls::ClientConfig;
+use std::{io, net::IpAddr, sync::Arc};
 use webparse::BinaryMut;
 
-use crate::{core::{AppTrait, Listeners, Service, ShutdownWatch, Stream}, error::ProxyTypeResult, CenterClient, ConfigHeader, Flag, ProxyConfig, ProxyError, ProxyHttp, ProxySocks5};
-
+use crate::{
+    core::{AppTrait, Listeners, Service, ShutdownWatch, Stream, WrapListener},
+    error::ProxyTypeResult,
+    CenterClient, ConfigHeader, Flag, ProxyConfig, ProxyError, ProxyHttp, ProxyResult, ProxySocks5,
+};
 
 pub struct ProxyApp {
     flag: Flag,
@@ -12,40 +15,26 @@ pub struct ProxyApp {
     password: Option<String>,
     udp_bind: Option<IpAddr>,
     headers: Option<Vec<ConfigHeader>>,
-    config: Option<ProxyConfig>,
+    config: ProxyConfig,
     client_config: Option<Arc<ClientConfig>>,
     center_client: Option<CenterClient>,
 }
 
 impl ProxyApp {
-    pub fn new(
-        flag: Flag,
-        username: Option<String>,
-        password: Option<String>,
-        udp_bind: Option<IpAddr>,
-        headers: Option<Vec<ConfigHeader>>,
-    ) -> Self {
+    pub fn new(config: ProxyConfig) -> Self {
         Self {
-            flag,
-            username,
-            password,
-            udp_bind,
-            headers,
-            config: None,
+            flag: config.flag.clone(),
+            username: config.username.clone(),
+            password: config.password.clone(),
+            udp_bind: config.udp_bind.clone(),
+            headers: None,
+            config: config,
             client_config: None,
             center_client: None,
         }
     }
 
-    pub fn set_config(&mut self, config: ProxyConfig) {
-        self.config = Some(config);
-    }
-
-    pub async fn deal_proxy(
-        &self,
-        inbound: Stream,
-    ) -> ProxyTypeResult<(), Stream>
-    {
+    pub async fn deal_proxy(&self, inbound: Stream) -> ProxyTypeResult<(), Stream> {
         let (read_buf, inbound) = match self.process_http(inbound).await {
             Ok(()) => {
                 return Ok(());
@@ -54,27 +43,26 @@ impl ProxyApp {
             Err(err) => return Err(err),
         };
 
-        let _read_buf =
-            match self.process_socks5(inbound, read_buf).await
-            {
-                Ok(()) => return Ok(()),
-                Err(ProxyError::Continue(buf)) => buf,
-                Err(err) => {
-                    log::info!("socks5代理发生错误：{:?}", err);
-                    return Err(err);
-                }
-            };
+        let _read_buf = match self.process_socks5(inbound, read_buf).await {
+            Ok(()) => return Ok(()),
+            Err(ProxyError::Continue(buf)) => buf,
+            Err(err) => {
+                log::info!("socks5代理发生错误：{:?}", err);
+                return Err(err);
+            }
+        };
         Ok(())
     }
 
-    
-    async fn process_http(
-        &self,
-        inbound: Stream,
-    ) -> ProxyTypeResult<(), Stream>
-    {
+    async fn process_http(&self, inbound: Stream) -> ProxyTypeResult<(), Stream> {
         if self.flag.contains(Flag::HTTP) || self.flag.contains(Flag::HTTPS) {
-            ProxyHttp::process(&self.username, &self.password, self.headers.clone(), inbound).await
+            ProxyHttp::process(
+                &self.username,
+                &self.password,
+                self.headers.clone(),
+                inbound,
+            )
+            .await
         } else {
             Err(ProxyError::Continue((None, inbound)))
         }
@@ -84,18 +72,26 @@ impl ProxyApp {
         &self,
         inbound: Stream,
         buffer: Option<BinaryMut>,
-    ) -> ProxyTypeResult<(), Stream>
-    {
+    ) -> ProxyTypeResult<(), Stream> {
         if self.flag.contains(Flag::SOCKS5) {
-            let mut sock = ProxySocks5::new(self.username.clone(), self.password.clone(), self.udp_bind);
+            let mut sock =
+                ProxySocks5::new(self.username.clone(), self.password.clone(), self.udp_bind);
             sock.process(inbound, buffer).await
         } else {
             Err(ProxyError::Continue((buffer, inbound)))
         }
     }
 
-    pub fn build_services(self, listeners: Listeners) -> Service<Self> {
-        Service::with_listeners("proxy_app".to_string(), listeners, self)
+    pub fn build_services(config: ProxyConfig) -> ProxyResult<Service<Self>> {
+        let bind = config.bind.unwrap().0;
+        let proxy = ProxyApp::new(config);
+        let mut listeners = Listeners::new();
+        listeners.add(WrapListener::new(bind).expect("ok"));
+        Ok(Service::with_listeners(
+            "proxy_app".to_string(),
+            listeners,
+            proxy,
+        ))
     }
 }
 
@@ -107,28 +103,28 @@ impl AppTrait for ProxyApp {
         _shutdown: &ShutdownWatch,
     ) -> Option<Stream> {
         println!("aaaaaaaaaaaaaaa");
-        
+
         if let Some(client) = &self.center_client {
             let _ = client.deal_new_stream(session).await;
             None
         } else {
             let _ = self.deal_proxy(session).await;
-            println!("bbbbbbbbbbbbbbbbbb"); 
+            println!("bbbbbbbbbbbbbbbbbb");
             None
         }
-
     }
 
     async fn ready_init(&mut self) -> io::Result<()> {
-        if let Some(config) = &self.config {
-            match config.try_connect_center_client().await {
-                Ok((client_config, center_client)) => {
-                    self.client_config = client_config;
-                    self.center_client = center_client;
-                },
-                Err(_) => {
-                    return Err(io::Error::new(io::ErrorKind::Other, "connect to center failed"));
-                },
+        match self.config.try_connect_center_client().await {
+            Ok((client_config, center_client)) => {
+                self.client_config = client_config;
+                self.center_client = center_client;
+            }
+            Err(_) => {
+                return Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    "connect to center failed",
+                ));
             }
         }
         Ok(())

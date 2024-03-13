@@ -33,7 +33,7 @@ use crate::{
     arg,
     core::{Listeners, Server, WrapListener},
     option::ConfigOption,
-    proxy::{CenterApp, ProxyServer},
+    proxy::{CenterApp, MappingApp, ProxyServer},
     reverse::{HttpConfig, ServerConfig, StreamConfig, StreamUdp, WrapTlsAccepter},
     ActiveHealth, CenterClient, CenterServer, CenterTrans, Flag, Helper, OneHealth, ProxyApp,
     ProxyResult,
@@ -387,13 +387,13 @@ impl WMCore {
         stream: TcpStream,
         addr: SocketAddr,
     ) -> ProxyResult<()> {
-        self.clear_close_servers();
-        for server in &mut self.center_servers {
-            if !server.is_close() {
-                return server.server_new_http(stream, addr).await;
-            }
-        }
-        log::warn!("未发现任何http服务器，但收到http的内网穿透，请检查配置");
+        // self.clear_close_servers();
+        // for server in &mut self.center_servers {
+        //     if !server.is_close() {
+        //         return server.server_new_http(stream, addr).await;
+        //     }
+        // }
+        // log::warn!("未发现任何http服务器，但收到http的内网穿透，请检查配置");
         Ok(())
     }
 
@@ -418,13 +418,13 @@ impl WMCore {
         stream: TcpStream,
         _addr: SocketAddr,
     ) -> ProxyResult<()> {
-        self.clear_close_servers();
-        for server in &mut self.center_servers {
-            if !server.is_close() {
-                return server.server_new_tcp(stream).await;
-            }
-        }
-        log::warn!("未发现任何tcp服务器，但收到tcp的内网穿透，请检查配置");
+        // self.clear_close_servers();
+        // for server in &mut self.center_servers {
+        //     if !server.is_close() {
+        //         return server.server_new_tcp(stream).await;
+        //     }
+        // }
+        // log::warn!("未发现任何tcp服务器，但收到tcp的内网穿透，请检查配置");
         Ok(())
     }
 
@@ -433,13 +433,13 @@ impl WMCore {
         stream: TcpStream,
         _addr: SocketAddr,
     ) -> ProxyResult<()> {
-        self.clear_close_servers();
-        for server in &mut self.center_servers {
-            if !server.is_close() {
-                return server.server_new_prxoy(stream).await;
-            }
-        }
-        log::warn!("未发现任何tcp服务器，但收到tcp的内网穿透，请检查配置");
+        // self.clear_close_servers();
+        // for server in &mut self.center_servers {
+        //     if !server.is_close() {
+        //         return server.server_new_prxoy(stream).await;
+        //     }
+        // }
+        // log::warn!("未发现任何tcp服务器，但收到tcp的内网穿透，请检查配置");
         Ok(())
     }
 
@@ -451,28 +451,19 @@ impl WMCore {
 
         let mut server = Server::new(Some(option.clone()));
         if let Some(config) = &option.proxy {
-            if let Some(bind) = config.bind {
-                let mut proxy = ProxyApp::new(Flag::all(), None, None, None, None);
-                proxy.set_config(config.clone());
-                let mut listeners = Listeners::new();
-                listeners.add(WrapListener::new(bind.0).expect("ok"));
-                let service = proxy.build_services(listeners);
+            if let Some(_) = config.bind {
+                server.add_service(ProxyApp::build_services(config.clone())?);
+            }
+            if let Some(_) = config.center_addr {
+                let service = CenterApp::build_services(config.clone())?;
                 server.add_service(service);
             }
-            if let Some(center) = config.center_addr {
-                let app = CenterApp::new(config.clone());
-                let mut listeners = Listeners::new();
-                let mut wrap = WrapListener::new(center.0).expect("ok");
-                if config.tc {
-                    let accepter = config.get_tls_accept()?;
-                    wrap.accepter = Some(crate::core::WrapTlsAccepter::with_accepter(accepter));
-                }
-                listeners.add(wrap);
-                let service = app.build_services(listeners);
+            if config.map_http_bind.is_some() || config.map_https_bind.is_some() || config.map_tcp_bind.is_some() {
+                let service = MappingApp::build_services(config.clone())?;
                 server.add_service(service);
             }
         }
-        // let service = Service::new("proxy".to_string(), ClientApp::new());
+        
         server.run_loop();
         Ok(())
     }

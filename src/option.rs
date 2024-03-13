@@ -477,7 +477,7 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
     }
 
     /// 获取服务端https的证书信息
-    pub async fn get_map_tls_accept(&self) -> ProxyResult<TlsAcceptor> {
+    pub fn get_map_tls_accept(&self) -> ProxyResult<TlsAcceptor> {
         // if !self.tc {
         //     return Err(ProxyError::ProtNoSupport);
         // }
@@ -693,7 +693,7 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
         };
 
         if https_listener.is_some() {
-            let accept = self.get_map_tls_accept().await.ok();
+            let accept = self.get_map_tls_accept().ok();
             if accept.is_none() {
                 let _ = https_listener.take();
             }

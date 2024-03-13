@@ -10,7 +10,11 @@ pub trait ClientAddrTrait {
     fn client_addr(&self) -> &Option<SocketAddr>;
 }
 
-pub trait IoTrait: AsyncRead + AsyncWrite + Unpin + ClientAddrTrait + Debug + Send + Sync {
+pub trait DescTrait {
+    fn desc(&self) -> &'static str;
+}
+
+pub trait IoTrait: AsyncRead + AsyncWrite + Unpin + ClientAddrTrait + DescTrait + Debug + Send + Sync {
     fn as_any(&self) -> &dyn Any;
     fn into_any(self: Box<Self>) -> Box<dyn Any>;
 }

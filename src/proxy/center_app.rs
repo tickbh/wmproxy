@@ -3,7 +3,7 @@ use std::{io, sync::Arc};
 use async_trait::async_trait;
 
 use crate::{
-    core::{AppTrait, Listeners, Service, ShutdownWatch, Stream}, proxy::data::ProxyData, CenterServer, CenterTrans, ProxyConfig
+    core::{AppTrait, Listeners, Service, ShutdownWatch, Stream, WrapListener}, proxy::data::ProxyData, CenterServer, CenterTrans, ProxyConfig, ProxyResult
 };
 
 pub struct CenterApp {
@@ -17,8 +17,16 @@ impl CenterApp {
         Self { config, tls_client }
     }
 
-    pub fn build_services(self, listeners: Listeners) -> Service<Self> {
-        Service::with_listeners("center_app".to_string(), listeners, self)
+    pub fn build_services(config: ProxyConfig) -> ProxyResult<Service<Self>> {
+        let app = Self::new(config);
+        let mut listeners = Listeners::new();
+        let mut wrap = WrapListener::new(app.config.center_addr.unwrap().0).expect("ok");
+        if app.config.tc {
+            let accepter = app.config.get_tls_accept()?;
+            wrap.accepter = Some(crate::core::WrapTlsAccepter::with_accepter(accepter));
+        }
+        listeners.add(wrap);
+        Ok(Service::with_listeners("center_app".to_string(), listeners, app))
     }
 }
 

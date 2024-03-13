@@ -16,6 +16,7 @@ pub struct WrapListener {
     pub addrs: Option<Vec<SocketAddr>>,
     pub listener: Option<TcpListener>,
     pub accepter: Option<WrapTlsAccepter>,
+    pub desc: &'static str
 }
 
 impl WrapListener {
@@ -26,6 +27,7 @@ impl WrapListener {
             addrs: Some(addrs),
             listener: None,
             accepter: None,
+            desc: "",
         })
     }
 
@@ -34,6 +36,7 @@ impl WrapListener {
             addrs: None,
             listener: Some(listener),
             accepter: None,
+            desc: "",
         }
     }
 
@@ -45,6 +48,7 @@ impl WrapListener {
             addrs: Some(addrs),
             listener: None,
             accepter: Some(accepter),
+            desc: "",
         })
     }
 
@@ -58,6 +62,7 @@ impl WrapListener {
             addrs: None,
             listener: Some(listener),
             accepter: Some(accepter),
+            desc: "",
         })
     }
 
@@ -72,6 +77,7 @@ impl WrapListener {
             addrs: Some(addrs),
             listener: None,
             accepter: Some(accepter),
+            desc: "",
         })
     }
 
@@ -84,6 +90,7 @@ impl WrapListener {
             addrs: None,
             listener: Some(listener),
             accepter: Some(accepter),
+            desc: "",
         })
     }
 
@@ -95,6 +102,10 @@ impl WrapListener {
                 .unwrap_or("unknown".to_string()),
             None => "unknown".to_string(),
         }
+    }
+
+    pub fn set_desc(&mut self, desc: &'static str) {
+        self.desc = desc;
     }
 
     pub async fn try_init(&mut self) -> io::Result<()> {
@@ -118,12 +129,15 @@ impl WrapListener {
         match &self.listener {
             Some(l) => {
                 let (stream, addr) = l.accept().await?;
-                println!("has accept = {:?}", self.accepter.is_some());
                 if let Some(accept) = &self.accepter {
                     let stream = accept.accept(stream)?.await?;
-                    Ok(Box::new(WrapStream::with_addr(stream, addr)))
+                    let mut stream = WrapStream::with_addr(stream, addr);
+                    stream.set_desc(self.desc);
+                    Ok(Box::new(stream))
                 } else {
-                    Ok(Box::new(WrapStream::with_addr(stream, addr)))
+                    let mut stream = WrapStream::with_addr(stream, addr);
+                    stream.set_desc(self.desc);
+                    Ok(Box::new(stream))
                 }
             }
             None => Err(io::Error::new(io::ErrorKind::Other, "not init listener")),

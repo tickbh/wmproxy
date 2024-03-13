@@ -10,7 +10,12 @@
 // -----
 // Created Date: 2023/09/25 10:08:56
 
-use std::{collections::HashMap, net::SocketAddr, sync::Arc};
+use lazy_static::lazy_static;
+use std::{
+    collections::HashMap,
+    net::SocketAddr,
+    sync::{Arc, Mutex},
+};
 use tokio::{
     io::{split, AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
@@ -29,6 +34,7 @@ use webparse::BinaryMut;
 use webparse::Buf;
 
 use crate::{
+    core::Stream,
     prot::{ProtClose, ProtFrame},
     proxy::ProxyServer,
     trans::{TransHttp, TransTcp},
@@ -54,6 +60,10 @@ pub struct CenterServer {
     next_id: u32,
     /// 内网映射的相关消息, 需要读写分离需加锁
     mappings: Arc<RwLock<Vec<MappingConfig>>>,
+}
+
+lazy_static! {
+    static ref NEXT_ID: Mutex<u32> = Mutex::new(2);
 }
 
 impl CenterServer {
@@ -83,9 +93,10 @@ impl CenterServer {
         self.sender.is_closed()
     }
 
-    pub fn calc_next_id(&mut self) -> u64 {
-        let id = self.next_id;
-        self.next_id = self.next_id.wrapping_add(2);
+    pub fn calc_next_id(&self) -> u64 {
+        let mut lock = NEXT_ID.lock().unwrap();
+        let id = *lock;
+        *lock = lock.wrapping_add(2);
         Helper::calc_sock_map(self.option.server_id, id)
     }
 
@@ -255,11 +266,7 @@ impl CenterServer {
         Ok(())
     }
 
-    pub async fn server_new_http(
-        &mut self,
-        stream: TcpStream,
-        addr: SocketAddr,
-    ) -> ProxyResult<()> {
+    pub fn server_new_http(&self, session: Stream, addr: SocketAddr) -> ProxyResult<()> {
         let trans = TransHttp::new(
             self.sender(),
             self.sender_work(),
@@ -267,7 +274,7 @@ impl CenterServer {
             self.mappings.clone(),
         );
         tokio::spawn(async move {
-            if let Err(e) = trans.process(stream, addr).await {
+            if let Err(e) = trans.process(session, addr).await {
                 log::warn!("内网穿透:Http转发时发生错误:{:?}", e);
             }
         });
@@ -301,7 +308,7 @@ impl CenterServer {
         return Ok(());
     }
 
-    pub async fn server_new_tcp(&mut self, stream: TcpStream) -> ProxyResult<()> {
+    pub fn server_new_tcp(&self, session: Stream) -> ProxyResult<()> {
         let trans = TransTcp::new(
             self.sender(),
             self.sender_work(),
@@ -309,14 +316,14 @@ impl CenterServer {
             self.mappings.clone(),
         );
         tokio::spawn(async move {
-            if let Err(e) = trans.process(stream, "tcp").await {
+            if let Err(e) = trans.process(session, "tcp").await {
                 log::warn!("内网穿透:转发Tcp转发时发生错误:{:?}", e);
             }
         });
         return Ok(());
     }
 
-    pub async fn server_new_prxoy(&mut self, stream: TcpStream) -> ProxyResult<()> {
+    pub fn server_new_proxy(&self, session: Stream) -> ProxyResult<()> {
         // 创建一个tcp的转发数据流，服务端不处理数据，仅做数据映射
         // 服务端也无法连上内网的数据，此处处理数据也没有任何意义
         let trans = TransTcp::new(
@@ -326,7 +333,7 @@ impl CenterServer {
             self.mappings.clone(),
         );
         tokio::spawn(async move {
-            if let Err(e) = trans.process(stream, "proxy").await {
+            if let Err(e) = trans.process(session, "proxy").await {
                 log::warn!("内网穿透:转发Proxy转发时发生错误:{:?}", e);
             }
         });
