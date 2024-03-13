@@ -53,6 +53,16 @@ pub struct WrapTlsAccepter {
 }
 
 impl WrapTlsAccepter {
+    pub fn with_accepter(accepter: TlsAcceptor) -> Self {
+        Self {
+            last: Instant::now(),
+            last_success: Instant::now(),
+            domain: None,
+            accepter: Some(accepter),
+            expired: None,
+            is_acme: false,
+        }
+    }
     fn load_certs(
         path: &Option<String>,
     ) -> io::Result<(DateTime<Utc>, Vec<CertificateDer<'static>>)> {

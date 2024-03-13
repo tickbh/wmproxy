@@ -497,7 +497,7 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
     }
 
     /// 获取服务端https的证书信息
-    pub async fn get_tls_accept(&self) -> ProxyResult<TlsAcceptor> {
+    pub fn get_tls_accept(&self) -> ProxyResult<TlsAcceptor> {
         if !self.tc {
             return Err(ProxyError::ProtNoSupport);
         }
@@ -617,7 +617,7 @@ cR+nZ6DRmzKISbcN9/m8I7xNWwU2cglrYa4NCHguQSrTefhRoZAfl8BEOW1rJVGC
         Option<TcpListener>,
         Option<CenterClient>,
     )> {
-        let proxy_accept = self.get_tls_accept().await.ok();
+        let proxy_accept = self.get_tls_accept().ok();
         let client = self.get_tls_request().ok();
         let mut center_client = None;
         if self.bind.is_some() {

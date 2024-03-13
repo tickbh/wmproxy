@@ -6,7 +6,7 @@ use tokio_rustls::TlsAcceptor;
 mod wrap_listener;
 mod wrap_tls_accepter;
 
-use wrap_tls_accepter::WrapTlsAccepter;
+pub use wrap_tls_accepter::WrapTlsAccepter;
 
 use crate::Helper;
 

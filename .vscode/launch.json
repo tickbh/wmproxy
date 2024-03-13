@@ -94,7 +94,7 @@
                     "kind": "bin"
                 }
             },
-            "args": ["-c", "config/server.yaml"],
+            "args": ["run", "-c", "config/server.toml"],
             "cwd": "${workspaceFolder}"
         },
         {
@@ -130,7 +130,7 @@
                     "kind": "bin"
                 }
             },
-            "args": ["-c", "config/client.toml"],
+            "args": ["run", "-c", "config/client.toml"],
             "args1": ["-b", "0.0.0.0", "-S", "127.0.0.1:8091", "--ts", "-c", "-m", "1"],
             "cwd": "${workspaceFolder}"
         },

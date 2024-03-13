@@ -30,7 +30,13 @@ use tokio::{
 use tokio_rustls::{rustls, TlsAcceptor};
 
 use crate::{
-    arg, core::{Listeners, Server, WrapListener}, option::ConfigOption, proxy::{CenterApp, ProxyServer}, reverse::{HttpConfig, ServerConfig, StreamConfig, StreamUdp, WrapTlsAccepter}, ActiveHealth, CenterClient, CenterServer, CenterTrans, Flag, Helper, OneHealth, ProxyApp, ProxyResult
+    arg,
+    core::{Listeners, Server, WrapListener},
+    option::ConfigOption,
+    proxy::{CenterApp, ProxyServer},
+    reverse::{HttpConfig, ServerConfig, StreamConfig, StreamUdp, WrapTlsAccepter},
+    ActiveHealth, CenterClient, CenterServer, CenterTrans, Flag, Helper, OneHealth, ProxyApp,
+    ProxyResult,
 };
 
 /// 核心处理类
@@ -442,7 +448,7 @@ impl WMCore {
         Helper::try_init_log(&option);
         let pidfile = option.pidfile.clone();
         let _ = Helper::try_create_pidfile(&pidfile);
-        
+
         let mut server = Server::new(Some(option.clone()));
         if let Some(config) = &option.proxy {
             if let Some(bind) = config.bind {
@@ -456,7 +462,12 @@ impl WMCore {
             if let Some(center) = config.center_addr {
                 let app = CenterApp::new(config.clone());
                 let mut listeners = Listeners::new();
-                listeners.add(WrapListener::new(center.0).expect("ok"));
+                let mut wrap = WrapListener::new(center.0).expect("ok");
+                if config.tc {
+                    let accepter = config.get_tls_accept()?;
+                    wrap.accepter = Some(crate::core::WrapTlsAccepter::with_accepter(accepter));
+                }
+                listeners.add(wrap);
                 let service = app.build_services(listeners);
                 server.add_service(service);
             }

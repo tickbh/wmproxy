@@ -37,27 +37,11 @@ impl AppTrait for CenterApp {
             let mut server = CenterServer::new(self.config.clone());
             let _ = server.serve(session).await;
             ProxyData::cache_server(server);
-            // self.center_servers.push(server);
-            // let _ = self.center_servers.last_mut().unwrap().serve(inbound).await;
         }
         None
     }
 
     async fn ready_init(&mut self) -> io::Result<()> {
-        // if let Some(config) = &self.config {
-        //     match config.try_connect_center_client().await {
-        //         Ok((client_config, center_client)) => {
-        //             self.client_config = client_config;
-        //             self.center_client = center_client;
-        //         }
-        //         Err(_) => {
-        //             return Err(io::Error::new(
-        //                 io::ErrorKind::Other,
-        //                 "connect to center failed",
-        //             ));
-        //         }
-        //     }
-        // }
         Ok(())
     }
 }

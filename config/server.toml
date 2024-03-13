@@ -1,6 +1,6 @@
 [proxy]
 #绑定的ip地址
-bind_addr = "0.0.0.0:8091"
+center_addr = "0.0.0.0:8091"
 
 username = "wmproxy"
 password = "wmproxy"

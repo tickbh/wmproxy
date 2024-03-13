@@ -37,7 +37,7 @@ impl WrapListener {
         }
     }
 
-    pub fn new_tls(bind: &str, cert: &str, key: &str) -> io::Result<WrapListener> {
+    pub fn new_tls<T: ToSocketAddrs>(bind: T, cert: &str, key: &str) -> io::Result<WrapListener> {
         let socks = bind.to_socket_addrs()?;
         let addrs = socks.collect::<Vec<SocketAddr>>();
         let accepter = WrapTlsAccepter::new_cert(&Some(cert.to_string()), &Some(key.to_string()))?;
@@ -61,8 +61,8 @@ impl WrapListener {
         })
     }
 
-    pub fn new_tls_multi(
-        bind: &str,
+    pub fn new_tls_multi<T: ToSocketAddrs>(
+        bind: T,
         infos: Vec<(String, String, String)>,
     ) -> io::Result<WrapListener> {
         let socks = bind.to_socket_addrs()?;
@@ -118,6 +118,7 @@ impl WrapListener {
         match &self.listener {
             Some(l) => {
                 let (stream, addr) = l.accept().await?;
+                println!("has accept = {:?}", self.accepter.is_some());
                 if let Some(accept) = &self.accepter {
                     let stream = accept.accept(stream)?.await?;
                     Ok(Box::new(WrapStream::with_addr(stream, addr)))
