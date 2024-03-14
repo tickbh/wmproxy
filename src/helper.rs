@@ -125,7 +125,7 @@ impl Helper {
     }
 
     /// 可端口复用的绑定方式，该端口可能被多个进程同时使用
-    pub async fn bind_upd<A: ToSocketAddrs>(addr: A) -> io::Result<UdpSocket> {
+    pub fn bind_upd<A: ToSocketAddrs>(addr: A) -> io::Result<UdpSocket> {
         let addrs = addr.to_socket_addrs()?;
         let last_err = None;
         for addr in addrs {

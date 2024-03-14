@@ -64,6 +64,26 @@ impl StreamConfig {
     }
     
     /// stream的绑定，按bind_mode区分出udp或者是tcp，返回相应的列表
+    pub fn bind_udp_app(&self) -> ProxyResult<Vec<StreamUdp>> {
+        let mut udp_listeners = vec![];
+        let mut bind_port = HashSet::new();
+        for value in &self.server.clone() {
+            for v in &value.bind_addr.0 {
+                if bind_port.contains(&v.port()) {
+                    continue;
+                }
+                bind_port.insert(v.port());
+                if value.bind_mode == "udp" {
+                    log::info!("负载均衡,stream：{:?}，提供stream中的udp转发功能。", v);
+                    let listener = Helper::bind_upd(v)?;
+                    udp_listeners.push(StreamUdp::new(listener, value.clone()));
+                }
+            }
+        }
+        Ok(udp_listeners)
+    }
+
+    /// stream的绑定，按bind_mode区分出udp或者是tcp，返回相应的列表
     pub fn bind_tcp_app(&mut self) -> ProxyResult<Listeners> {
         let mut listeners = Listeners::new();
         let mut bind_port = HashSet::new();
@@ -96,7 +116,7 @@ impl StreamConfig {
                 bind_port.insert(v.port());
                 if value.bind_mode == "udp" {
                     log::info!("负载均衡,stream：{:?}，提供stream中的udp转发功能。", v);
-                    let listener = Helper::bind_upd(v).await?;
+                    let listener = Helper::bind_upd(v)?;
                     udp_listeners.push(StreamUdp::new(listener, value.clone()));
                 } else {
                     log::info!("负载均衡,stream：{:?}，提供stream中的tcp转发功能。", v);

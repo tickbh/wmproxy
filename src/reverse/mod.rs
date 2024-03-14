@@ -24,6 +24,7 @@ mod ws;
 mod wrap_tls_accepter;
 mod http_app;
 mod stream_app;
+mod stream_udp_service;
 
 pub use common::CommonConfig;
 pub use http::HttpConfig;
@@ -38,6 +39,7 @@ pub use upstream::UpstreamConfig;
 pub use wrap_tls_accepter::WrapTlsAccepter;
 pub use http_app::HttpApp;
 pub use stream_app::StreamApp;
+pub use stream_udp_service::StreamUdpService;
 
 use std::{
     fmt::{self},
