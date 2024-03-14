@@ -17,10 +17,9 @@ pub struct StreamUdpService {
 impl StreamUdpService {
 
     pub fn build_services(stream: StreamConfig) -> ProxyResult<Self> {
-        let stream_udp_listeners = stream.bind_udp_app()?;
         Ok(Self {
             stream,
-            stream_udp_listeners
+            stream_udp_listeners: vec![],
         })
     }
 
@@ -55,7 +54,8 @@ impl StreamUdpService {
 #[async_trait]
 impl ServiceTrait for StreamUdpService {
     async fn ready_service(&mut self) -> io::Result<()> {
-
+        let stream_udp_listeners = self.stream.bind_udp_app().map_err(|e| io::Error::new(io::ErrorKind::Other, "bind udp error"))?;
+        self.stream_udp_listeners = stream_udp_listeners;
         Ok(())
     }
     async fn start_service(&mut self, mut _shutdown: ShutdownWatch) {

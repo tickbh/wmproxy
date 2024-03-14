@@ -474,9 +474,7 @@ impl WMCore {
             server.add_service(app);
 
             let app = StreamUdpService::build_services(stream.clone())?;
-            if app.is_valid() {
-                server.add_service(app);
-            }
+            server.add_service(app);
         }
         
         server.run_loop();
