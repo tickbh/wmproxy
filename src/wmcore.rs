@@ -34,7 +34,7 @@ use crate::{
     core::{Listeners, Server, WrapListener},
     option::ConfigOption,
     proxy::{CenterApp, MappingApp, ProxyServer},
-    reverse::{HttpConfig, ServerConfig, StreamConfig, StreamUdp, WrapTlsAccepter},
+    reverse::{HttpApp, HttpConfig, ServerConfig, StreamApp, StreamConfig, StreamUdp, WrapTlsAccepter},
     ActiveHealth, CenterClient, CenterServer, CenterTrans, Flag, Helper, OneHealth, ProxyApp,
     ProxyResult,
 };
@@ -462,6 +462,16 @@ impl WMCore {
                 let service = MappingApp::build_services(config.clone())?;
                 server.add_service(service);
             }
+        }
+
+        if let Some(http) = &option.http {
+            let app = HttpApp::build_services(http.clone())?;
+            server.add_service(app);
+        }
+        
+        if let Some(stream)= &option.stream {
+            let app = StreamApp::build_services(stream.clone())?;
+            server.add_service(app);
         }
         
         server.run_loop();

@@ -35,7 +35,7 @@ use tokio_util::sync::PollSender;
 use webparse::{BinaryMut, Buf, BufMut};
 use wenmeng::plugins::{StreamToWs, WsToStream};
 
-use crate::{HealthCheck, Helper, ProxyError, ProxyResult};
+use crate::{core::{Listeners, WrapListener}, HealthCheck, Helper, ProxyError, ProxyResult};
 
 use super::{ServerConfig, UpstreamConfig};
 
@@ -61,6 +61,26 @@ impl StreamConfig {
             server.upstream.append(&mut self.upstream.clone());
             server.copy_to_child();
         }
+    }
+    
+    /// stream的绑定，按bind_mode区分出udp或者是tcp，返回相应的列表
+    pub fn bind_tcp_app(&mut self) -> ProxyResult<Listeners> {
+        let mut listeners = Listeners::new();
+        let mut bind_port = HashSet::new();
+        for value in &self.server.clone() {
+            for v in &value.bind_addr.0 {
+                if bind_port.contains(&v.port()) {
+                    continue;
+                }
+                bind_port.insert(v.port());
+                if value.bind_mode != "udp" {
+                    log::info!("负载均衡,stream：{:?}，提供stream中的tcp转发功能。", v);
+                    let listener = WrapListener::new(v)?;
+                    listeners.add(listener);
+                }
+            }
+        }
+        Ok(listeners)
     }
 
     /// stream的绑定，按bind_mode区分出udp或者是tcp，返回相应的列表

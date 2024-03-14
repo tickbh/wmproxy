@@ -1,42 +1,59 @@
 use std::{fmt::Debug, net::SocketAddr, pin::Pin};
 use tokio::io::{AsyncRead, AsyncWrite};
 
-use super::{ClientAddrTrait, DescTrait, IoTrait};
+use crate::INVALID_SOCKET_ADDR;
+
+use super::{ClientAddrTrait, DescTrait, IoTrait, ListenAddrTrait};
 
 #[derive(Debug)]
 pub struct WrapStream<IO: AsyncRead + AsyncWrite + Unpin + Debug + Send + Sync + 'static> {
     io: IO,
-    addr: Option<SocketAddr>,
+    addr: SocketAddr,
     desc: &'static str,
+    listen_addr: SocketAddr,
 }
 
 impl<IO: AsyncRead + AsyncWrite + Unpin + Debug + Send + Sync + 'static> WrapStream<IO> {
     pub fn new(io: IO) -> Self {
         Self {
             io,
-            addr: None,
+            addr: INVALID_SOCKET_ADDR,
             desc: "",
+            listen_addr: INVALID_SOCKET_ADDR,
         }
     }
 
     pub fn with_addr(io: IO, addr: SocketAddr) -> Self {
         Self {
             io,
-            addr: Some(addr),
+            addr,
             desc: "",
+            listen_addr: INVALID_SOCKET_ADDR,
         }
     }
 
     pub fn set_desc(&mut self, desc: &'static str) {
         self.desc = desc
     }
+    
+    pub fn set_listen_addr(&mut self, listen_addr: SocketAddr) {
+        self.listen_addr = listen_addr
+    }
+}
+
+impl<IO: AsyncRead + AsyncWrite + Unpin + Debug + Send + Sync + 'static> ListenAddrTrait
+    for WrapStream<IO>
+{
+    fn listen_addr(&self) -> &SocketAddr {
+        &self.listen_addr
+    }
 }
 
 impl<IO: AsyncRead + AsyncWrite + Unpin + Debug + Send + Sync + 'static> ClientAddrTrait
     for WrapStream<IO>
 {
-    fn client_addr(&self) -> &Option<SocketAddr> {
-        &self.addr
+    fn client_addr(&self) -> SocketAddr {
+        self.addr
     }
 }
 

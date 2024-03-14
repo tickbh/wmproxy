@@ -7,7 +7,7 @@ use tokio::net::TcpListener;
 
 use crate::{
     core::{Stream, WrapStream},
-    Helper,
+    Helper, INVALID_SOCKET_ADDR,
 };
 
 use super::wrap_tls_accepter::WrapTlsAccepter;
@@ -16,11 +16,12 @@ pub struct WrapListener {
     pub addrs: Option<Vec<SocketAddr>>,
     pub listener: Option<TcpListener>,
     pub accepter: Option<WrapTlsAccepter>,
-    pub desc: &'static str
+    pub socket_addr: SocketAddr,
+    pub desc: &'static str,
 }
 
 impl WrapListener {
-    pub fn new<T: ToSocketAddrs>(bind: T) -> io::Result<WrapListener>  {
+    pub fn new<T: ToSocketAddrs>(bind: T) -> io::Result<WrapListener> {
         let socks = bind.to_socket_addrs()?;
         let addrs = socks.collect::<Vec<SocketAddr>>();
         Ok(Self {
@@ -28,12 +29,14 @@ impl WrapListener {
             listener: None,
             accepter: None,
             desc: "",
+            socket_addr: INVALID_SOCKET_ADDR,
         })
     }
 
     pub fn new_listener(listener: TcpListener) -> WrapListener {
         Self {
             addrs: None,
+            socket_addr: listener.local_addr().unwrap_or(INVALID_SOCKET_ADDR),
             listener: Some(listener),
             accepter: None,
             desc: "",
@@ -49,6 +52,7 @@ impl WrapListener {
             listener: None,
             accepter: Some(accepter),
             desc: "",
+            socket_addr: INVALID_SOCKET_ADDR,
         })
     }
 
@@ -60,6 +64,7 @@ impl WrapListener {
         let accepter = WrapTlsAccepter::new_cert(&Some(cert.to_string()), &Some(key.to_string()))?;
         Ok(Self {
             addrs: None,
+            socket_addr: listener.local_addr().unwrap_or(INVALID_SOCKET_ADDR),
             listener: Some(listener),
             accepter: Some(accepter),
             desc: "",
@@ -78,6 +83,7 @@ impl WrapListener {
             listener: None,
             accepter: Some(accepter),
             desc: "",
+            socket_addr: INVALID_SOCKET_ADDR,
         })
     }
 
@@ -88,6 +94,7 @@ impl WrapListener {
         let accepter = WrapTlsAccepter::new_multi(infos)?;
         Ok(Self {
             addrs: None,
+            socket_addr: listener.local_addr().unwrap_or(INVALID_SOCKET_ADDR),
             listener: Some(listener),
             accepter: Some(accepter),
             desc: "",
@@ -115,12 +122,11 @@ impl WrapListener {
             match &self.addrs {
                 Some(addrs) => {
                     let l = Helper::bind(&addrs[..]).await?;
+                    self.socket_addr = l.local_addr().unwrap_or(INVALID_SOCKET_ADDR);
                     self.listener = Some(l);
                     Ok(())
                 }
-                None => {
-                    Err(io::Error::new(io::ErrorKind::Other, "unknow addrs"))
-                }
+                None => Err(io::Error::new(io::ErrorKind::Other, "unknow addrs")),
             }
         }
     }
@@ -133,10 +139,12 @@ impl WrapListener {
                     let stream = accept.accept(stream)?.await?;
                     let mut stream = WrapStream::with_addr(stream, addr);
                     stream.set_desc(self.desc);
+                    stream.set_listen_addr(self.socket_addr);
                     Ok(Box::new(stream))
                 } else {
                     let mut stream = WrapStream::with_addr(stream, addr);
                     stream.set_desc(self.desc);
+                    stream.set_listen_addr(self.socket_addr);
                     Ok(Box::new(stream))
                 }
             }

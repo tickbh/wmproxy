@@ -14,7 +14,7 @@ use std::{
     collections::{HashMap, HashSet}, net::{IpAddr, SocketAddr}, str::FromStr, sync::Arc
 };
 
-use crate::{data::LimitReqData, FileServer, Helper, ProxyResult};
+use crate::{core::{Listeners, WrapListener}, data::LimitReqData, FileServer, Helper, ProxyResult};
 use async_trait::async_trait;
 use console::Style;
 use serde::{Deserialize, Serialize};
@@ -197,6 +197,78 @@ impl HttpConfig {
             }
         }
         Ok((accepters, tlss, listeners))
+    }
+
+    pub fn bind_app(
+        &mut self,
+    ) -> ProxyResult<Listeners> {
+        let mut listeners = Listeners::new();
+        let mut bind_addr_set = HashSet::new();
+        for value in &mut self.server {
+            for v in &value.bind_addr.0 {
+                if bind_addr_set.contains(&v) {
+                    continue;
+                }
+                bind_addr_set.insert(v);
+                let url = format!("http://{}", v);
+                log::info!(
+                    "HTTP服务：{}，提供http处理及转发功能。",
+                    Style::new().blink().green().apply_to(url)
+                );
+                let wrap = WrapListener::new(v)?;
+                listeners.add(wrap);
+            }
+
+            let mut has_acme = false;
+            for v in &value.bind_ssl.0 {
+                if bind_addr_set.contains(&v) {
+                    continue;
+                }
+                bind_addr_set.insert(v);
+                let url = format!("https://{}", v);
+                log::info!(
+                    "HTTPs服务：{}，提供https处理及转发功能。",
+                    Style::new().blink().green().apply_to(url)
+                );
+                let mut wrap = WrapListener::new(v)?;
+                if value.cert.is_some() && value.key.is_some() {
+                    wrap.accepter = Some(crate::core::WrapTlsAccepter::new_cert(&value.cert, &value.key)?);
+                } else {
+                    has_acme = true;
+                    let (_, domain) = value.get_addr_domain()?;
+                    if domain.is_none() {
+                        return Err(crate::ProxyError::Extension("未配置域名且未配置证书"));
+                    }
+                    wrap.accepter = Some(crate::core::WrapTlsAccepter::new(domain.unwrap()));
+
+                    let mut has_http = false;
+                    for v in &value.bind_addr.0 {
+                        if v.port() == 80 {
+                            has_http = true;
+                        }
+                    }
+                    if !has_http {
+                        return Err(crate::ProxyError::Extension("未配置证书需要求HTTP端口配合"));
+                    }
+                }
+                listeners.add(wrap);
+            }
+            
+            if has_acme {
+                let mut location = LocationConfig::new();
+                let file_server = FileServer::new(
+                    ".well-known/acme-challenge".to_string(),
+                    "/.well-known/acme-challenge".to_string(),
+                );
+                location.rule = Matcher::from_str("/.well-known/acme-challenge/").expect("matcher error");
+                location.file_server = Some(file_server);
+                value.location.insert(0, location);
+                
+                #[cfg(not(feature="acme-lib"))]
+                return Err(crate::ProxyError::Extension("未启用acme, https必须配置证书"));
+            }
+        }
+        Ok(listeners)
     }
 
     #[async_recursion]

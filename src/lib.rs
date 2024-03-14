@@ -47,3 +47,5 @@ pub use check::*;
 pub use control::*;
 pub use config::*;
 pub use plugins::*;
+
+const INVALID_SOCKET_ADDR: std::net::SocketAddr = std::net::SocketAddr::new(std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 9)), 8080);

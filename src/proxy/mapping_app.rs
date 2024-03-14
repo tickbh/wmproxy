@@ -61,10 +61,7 @@ impl AppTrait for MappingApp {
         for server in &*servers {
             match session.desc() {
                 "http" | "https" => {
-                    let addr = session.client_addr().unwrap_or(SocketAddr::new(
-                        IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-                        8080,
-                    ));
+                    let addr = session.client_addr();
                     let _ = server.server_new_http(session, addr);
                     break;
                 }

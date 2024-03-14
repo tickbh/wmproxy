@@ -50,8 +50,8 @@ proxy_read_timeout = "10s"
 proxy_write_timeout = "10s"
 root = ""
 # 若有匹配密钥则表示为SSL连接，反之则为http连接
-#cert="key/soft.wm-proxy.com.pem"
-#key="key/soft.wm-proxy.com.key"
+cert="key/soft.wm-proxy.com.pem"
+key="key/soft.wm-proxy.com.key"
 
 # 请求头返回头相应的处理，如有proxy则为请求头处理，+表示添加，-表示删除，其它表示设置
 headers = [
