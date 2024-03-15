@@ -222,8 +222,9 @@ impl Helper {
                 .unwrap()
                 .set_config(log_config);
         } else {
-            let handle = log4rs::init_config(log_config).unwrap();
-            *LOG4RS_HANDLE.lock().unwrap() = Some(handle);
+            if let Ok(handle) = log4rs::init_config(log_config) {
+                *LOG4RS_HANDLE.lock().unwrap() = Some(handle);
+            }
         }
     }
 

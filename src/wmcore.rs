@@ -445,6 +445,12 @@ impl WMCore {
 
     pub fn run_main() -> ProxyResult<()> {
         let option = arg::parse_env().expect("load config failed");
+        Self::run_main_opt(option)?;
+        Ok(())
+    }
+
+    
+    pub fn run_main_opt(option: ConfigOption) -> ProxyResult<()> {
         Helper::try_init_log(&option);
         let pidfile = option.pidfile.clone();
         let _ = Helper::try_create_pidfile(&pidfile);

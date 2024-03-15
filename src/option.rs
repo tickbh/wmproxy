@@ -204,65 +204,65 @@ pub struct ProxyConfig {
     /// 代理id
     #[bpaf(fallback(0), display_fallback, short('s'), long)]
     #[serde(default)]
-    pub(crate) server_id: u32,
+    pub server_id: u32,
 
     /// 代理绑定端口地址
     #[bpaf(short('b'), long)]
     #[serde_as(as = "Option<DisplayFromStr>")]
-    pub(crate) bind: Option<WrapAddr>,
+    pub bind: Option<WrapAddr>,
 
     /// 中心代理绑定端口地址
     #[bpaf(short('c'), long)]
     #[serde_as(as = "Option<DisplayFromStr>")]
-    pub(crate) center_addr: Option<WrapAddr>,
+    pub center_addr: Option<WrapAddr>,
 
     /// 代理种类, 如http https socks5
     #[bpaf(fallback(Flag::default()))]
     #[serde_as(as = "DisplayFromStr")]
     #[serde(default)]
-    pub(crate) flag: Flag,
+    pub flag: Flag,
 
     /// 连接代理服务端地址
     #[bpaf(short('S'), long("server"))]
-    pub(crate) server: Option<String>,
+    pub server: Option<String>,
     /// 用于socks验证及中心服务器验证
     #[bpaf(long("user"))]
-    pub(crate) username: Option<String>,
+    pub username: Option<String>,
     /// 用于socks验证及中心服务器验证
     #[bpaf(long("pass"))]
-    pub(crate) password: Option<String>,
+    pub password: Option<String>,
     /// udp的绑定地址
-    pub(crate) udp_bind: Option<IpAddr>,
+    pub udp_bind: Option<IpAddr>,
     /// 内网http的映射地址
-    pub(crate) map_http_bind: Option<SocketAddr>,
+    pub map_http_bind: Option<SocketAddr>,
     /// 内网https的映射地址
-    pub(crate) map_https_bind: Option<SocketAddr>,
+    pub map_https_bind: Option<SocketAddr>,
     /// 内网tcp的映射地址
-    pub(crate) map_tcp_bind: Option<SocketAddr>,
+    pub map_tcp_bind: Option<SocketAddr>,
     /// 内网代理的映射地址
-    pub(crate) map_proxy_bind: Option<SocketAddr>,
+    pub map_proxy_bind: Option<SocketAddr>,
     /// 内网映射的证书cert
-    pub(crate) map_cert: Option<String>,
+    pub map_cert: Option<String>,
     /// 内网映射的证书key
-    pub(crate) map_key: Option<String>,
+    pub map_key: Option<String>,
 
     /// 连接服务端是否启用tls
     #[serde(default)]
-    pub(crate) ts: bool,
+    pub ts: bool,
     /// 接收客户端是否启用tls
     #[serde(default)]
-    pub(crate) tc: bool,
+    pub tc: bool,
     /// 双向认证是否启用
     #[serde(default)]
-    pub(crate) two_way_tls: bool,
+    pub two_way_tls: bool,
     /// tls证书所用的域名
-    pub(crate) domain: Option<String>,
+    pub domain: Option<String>,
     /// 公开的证书公钥文件
-    pub(crate) cert: Option<String>,
+    pub cert: Option<String>,
     /// 隐私的证书私钥文件
-    pub(crate) key: Option<String>,
+    pub key: Option<String>,
     #[serde(default)]
-    pub(crate) mappings: Vec<MappingConfig>,
+    pub mappings: Vec<MappingConfig>,
 }
 
 pub fn default_control_port() -> SocketAddr {

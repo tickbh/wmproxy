@@ -41,6 +41,11 @@ impl MappingApp {
             wrap.set_desc("tcp");
             listeners.add(wrap);
         }
+        if let Some(proxy) = &app.config.map_proxy_bind {
+            let mut wrap = WrapListener::new(proxy).expect("ok");
+            wrap.set_desc("proxy");
+            listeners.add(wrap);
+        }
         Ok(Service::with_listeners(
             "mapping_app".to_string(),
             listeners,

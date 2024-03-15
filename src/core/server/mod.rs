@@ -38,13 +38,13 @@ impl Server {
 
     async fn main_loop(&self) -> bool {
         let (tx, mut rx) = channel(1);
-
-        ctrlc::set_handler(move || {
+        let _tx1 = tx.clone();
+        let _ = ctrlc::set_handler(move || {
             let tx = tx.clone();
             thread::spawn(move || {
                 let _ = tx.blocking_send(());
             });
-        }).expect("Error setting Ctrl-C handler");
+        });
         
         println!("Waiting for Ctrl-C...");
         let _ = rx.recv().await;
