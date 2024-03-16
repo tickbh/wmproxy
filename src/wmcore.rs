@@ -455,6 +455,12 @@ impl WMCore {
         let pidfile = option.pidfile.clone();
         let _ = Helper::try_create_pidfile(&pidfile);
 
+        let mut server = Self::build_server(option)?;
+        server.run_loop();
+        Ok(())
+    }
+
+    pub fn build_server(option: ConfigOption) -> ProxyResult<Server> {
         let mut server = Server::new(Some(option.clone()));
         if let Some(config) = &option.proxy {
             if let Some(_) = config.bind {
@@ -482,8 +488,7 @@ impl WMCore {
             let app = StreamUdpService::build_services(stream.clone())?;
             server.add_service(app);
         }
-        
-        server.run_loop();
-        Ok(())
+
+        Ok(server)
     }
 }
