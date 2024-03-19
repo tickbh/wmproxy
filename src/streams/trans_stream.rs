@@ -88,6 +88,7 @@ where
             tokio::select! {
                 n = reader.read(&mut buf) => {
                     let n = n?;
+                    println!("read id = {} read len = {}", self.id, n);
                     if n == 0 {
                         return Ok(())
                     } else {
@@ -97,6 +98,7 @@ where
                 r = writer.write(self.write.chunk()), if self.write.has_remaining() => {
                     match r {
                         Ok(n) => {
+                            println!("write id = {} read len = {}", self.id, n);
                             self.write.advance(n);
                             if !self.write.has_remaining() {
                                 self.write.clear();

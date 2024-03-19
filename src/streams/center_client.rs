@@ -32,6 +32,7 @@ use crate::{
 };
 
 lazy_static!{
+    /// 绑定的下一个sock_map映射，为单数
     static ref NEXT_ID: Mutex<u32> = Mutex::new(1);
 }
 
@@ -52,8 +53,6 @@ pub struct CenterClient {
     stream: Option<TcpStream>,
     /// 存在普通连接和加密连接，此处不为None则表示加密连接
     tls_stream: Option<TlsStream<TcpStream>>,
-    /// 绑定的下一个sock_map映射，为单数
-    next_id: u32,
 
     /// 发送Create，并将绑定的Sender发到做绑定
     sender_work: Sender<(ProtCreate, Sender<ProtFrame>)>,
@@ -85,7 +84,6 @@ impl CenterClient {
             mappings,
             stream: None,
             tls_stream: None,
-            next_id: 1,
 
             sender_work,
             receiver_work: Some(receiver_work),

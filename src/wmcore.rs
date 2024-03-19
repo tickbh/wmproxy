@@ -31,7 +31,7 @@ use tokio_rustls::{rustls, TlsAcceptor};
 
 use crate::{
     arg,
-    core::{Listeners, Server, WrapListener},
+    core::{Listeners, Server, ServiceTrait, WrapListener},
     option::ConfigOption,
     proxy::{CenterApp, MappingApp, ProxyServer},
     reverse::{HttpApp, HttpConfig, ServerConfig, StreamApp, StreamConfig, StreamUdp, StreamUdpService, WrapTlsAccepter},
@@ -460,35 +460,54 @@ impl WMCore {
         Ok(())
     }
 
+    
+    pub fn run_main_service(option: ConfigOption, services: Vec<Box<dyn ServiceTrait>>) -> ProxyResult<()> {
+        Helper::try_init_log(&option);
+        let pidfile = option.pidfile.clone();
+        let _ = Helper::try_create_pidfile(&pidfile);
+        let mut server = Server::new(Some(option));
+        server.add_services(services);
+        server.run_loop();
+        Ok(())
+    }
+
     pub fn build_server(option: ConfigOption) -> ProxyResult<Server> {
         let mut server = Server::new(Some(option.clone()));
+        let services = Self::build_services(option)?;
+        server.add_services(services);
+        Ok(server)
+    }
+
+    pub fn build_services(option: ConfigOption) -> ProxyResult<Vec<Box<dyn ServiceTrait>>> {
+        let mut vecs: Vec<Box<dyn ServiceTrait>> = vec![];
         if let Some(config) = &option.proxy {
+            println!("config = {:?}", config);
             if let Some(_) = config.bind {
-                server.add_service(ProxyApp::build_services(config.clone())?);
+                vecs.push(Box::new(ProxyApp::build_services(config.clone())?));
             }
             if let Some(_) = config.center_addr {
                 let service = CenterApp::build_services(config.clone())?;
-                server.add_service(service);
+                vecs.push(Box::new(service));
             }
             if config.map_http_bind.is_some() || config.map_https_bind.is_some() || config.map_tcp_bind.is_some() {
                 let service = MappingApp::build_services(config.clone())?;
-                server.add_service(service);
+                vecs.push(Box::new(service));
             }
         }
 
         if let Some(http) = &option.http {
             let app = HttpApp::build_services(http.clone())?;
-            server.add_service(app);
+            vecs.push(Box::new(app));
         }
         
         if let Some(stream)= &option.stream {
             let app = StreamApp::build_services(stream.clone())?;
-            server.add_service(app);
+            vecs.push(Box::new(app));
 
             let app = StreamUdpService::build_services(stream.clone())?;
-            server.add_service(app);
+            vecs.push(Box::new(app));
         }
 
-        Ok(server)
+        Ok(vecs)
     }
 }

@@ -317,7 +317,7 @@ impl Default for ProxyConfig {
             server_id: 0,
             flag: Flag::HTTP | Flag::HTTPS | Flag::SOCKS5,
             // mode: "client".to_string(),
-            bind: Some(WrapAddr(default_bind_addr())),
+            bind: None,
             center_addr: None,
             server: None,
             username: None,

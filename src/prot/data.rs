@@ -10,6 +10,8 @@
 // -----
 // Created Date: 2023/09/22 10:28:41
 
+use std::cmp::min;
+
 use webparse::{Buf, BufMut, Serialize};
 
 use crate::{
@@ -40,7 +42,8 @@ impl ProtData {
     }
 
     pub fn encode<B: Buf + BufMut>(mut self, buf: &mut B) -> ProxyResult<usize> {
-        log::trace!("代理中心: 编码Data数据长度={}", self.data.len());
+        log::trace!("代理中心: 编码Data数据长度={} socket_map={}", self.data.len(), self.sock_map);
+        println!("data = {:?}", &self.data[..min(10, self.data.len())]);
         let mut head = ProtFrameHeader::new(ProtKind::Data, ProtFlag::zero(), self.sock_map);
         head.length = self.data.len() as u32;
         let mut size = 0;

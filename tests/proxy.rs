@@ -8,40 +8,69 @@ mod tests {
     use tokio::sync::mpsc::{channel, Sender};
     use webparse::Request;
     use wenmeng::Client;
-    use wmproxy::{ConfigOption, WMCore, ProxyConfig, ProxyResult};
+    use wmproxy::{core::ServiceTrait, ConfigOption, ProxyConfig, ProxyResult, WMCore};
 
     static HTTP_URL: &str = "http://www.baidu.com";
     static HTTPS_URL: &str = "https://www.baidu.com";
 
-    async fn run_server_proxy(
+    // async fn run_server_proxy(
+    //     proxy: ProxyConfig,
+    // ) -> ProxyResult<(SocketAddr, Sender<()>)> {
+    //     let option = ConfigOption::new_by_proxy(proxy);
+    //     let addr = option.proxy.as_ref().unwrap().center_addr.unwrap().0;
+    //     let (sender_close, _receiver_close) = channel::<()>(1);
+    //     thread::spawn(move || {
+    //         let _ = WMCore::run_main_opt(option).unwrap();
+    //     });
+
+    //     // let mut proxy = WMCore::new(option);
+    //     // proxy.ready_serve().await.unwrap();
+    //     // let addr = proxy.center_listener.as_ref().unwrap().local_addr()?;
+    //     // tokio::spawn(async move {
+    //     //     let _ = proxy.run_serve(receiver_close, None).await;
+    //     // });
+    //     Ok((addr, sender_close))
+    // }
+
+    
+    async fn build_server_proxy(
         proxy: ProxyConfig,
-    ) -> ProxyResult<(SocketAddr, Sender<()>)> {
+    ) -> ProxyResult<(SocketAddr, Vec<Box<dyn ServiceTrait>>)> {
         let option = ConfigOption::new_by_proxy(proxy);
         let addr = option.proxy.as_ref().unwrap().center_addr.unwrap().0;
         let (sender_close, _receiver_close) = channel::<()>(1);
-        thread::spawn(move || {
-            let _ = WMCore::run_main_opt(option).unwrap();
-        });
-
-        // let mut proxy = WMCore::new(option);
-        // proxy.ready_serve().await.unwrap();
-        // let addr = proxy.center_listener.as_ref().unwrap().local_addr()?;
-        // tokio::spawn(async move {
-        //     let _ = proxy.run_serve(receiver_close, None).await;
-        // });
-        Ok((addr, sender_close))
+        let services = WMCore::build_services(option)?;
+        Ok((addr, services))
     }
 
-    async fn run_proxy(
+    
+    async fn run_server_proxy(
         proxy: ProxyConfig,
-    ) -> ProxyResult<(SocketAddr, Sender<()>)> {
+    ) -> ProxyResult<SocketAddr> {
+        let services = build_server_proxy(proxy.clone()).await?;
+        WMCore::run_main_service(ConfigOption::new_by_proxy(proxy), services.1).unwrap();
+        // let option = ConfigOption::new_by_proxy(proxy);
+        // let addr = option.proxy.as_ref().unwrap().center_addr.unwrap().0;
+        // let (sender_close, _receiver_close) = channel::<()>(1);
+        // let services = WMCore::build_services(option)?;
+        Ok(services.0)
+    }
+
+    async fn build_proxy(
+        proxy: ProxyConfig,
+    ) -> ProxyResult<(SocketAddr, Vec<Box<dyn ServiceTrait>>)> {
         
         let option = ConfigOption::new_by_proxy(proxy);
         let addr = option.proxy.as_ref().unwrap().bind.unwrap().0;
         let (sender_close, _receiver_close) = channel::<()>(1);
-        thread::spawn(move || {
-            let _ = WMCore::run_main_opt(option).unwrap();
-        });
+        let services = WMCore::build_services(option)?;
+
+        // let option = ConfigOption::new_by_proxy(proxy);
+        // let addr = option.proxy.as_ref().unwrap().bind.unwrap().0;
+        // let (sender_close, _receiver_close) = channel::<()>(1);
+        // thread::spawn(move || {
+        //     let _ = WMCore::run_main_opt(option).unwrap();
+        // });
         // let option = ConfigOption::new_by_proxy(proxy);
         // let (sender_close, receiver_close) = channel::<()>(1);
         // let mut proxy = WMCore::new(option);
@@ -50,7 +79,23 @@ mod tests {
         // tokio::spawn(async move {
         //     let _ = proxy.run_serve(receiver_close, None).await;
         // });
-        Ok((addr, sender_close))
+        Ok((addr, services))
+    }
+
+    
+    async fn run_proxy(
+        proxy: ProxyConfig,
+    ) -> ProxyResult<SocketAddr> {
+        let services = build_proxy(proxy.clone()).await?;
+        thread::spawn(move || {
+                WMCore::run_main_service(ConfigOption::new_by_proxy(proxy), services.1).unwrap();
+        });
+
+        // let option = ConfigOption::new_by_proxy(proxy);
+        // let addr = option.proxy.as_ref().unwrap().center_addr.unwrap().0;
+        // let (sender_close, _receiver_close) = channel::<()>(1);
+        // let services = WMCore::build_services(option)?;
+        Ok(services.0)
     }
 
     async fn test_proxy(
@@ -121,7 +166,7 @@ mod tests {
             .into_value()
             .unwrap();
 
-        let (addr, _sender) = run_proxy(proxy).await.unwrap();
+        let addr = run_proxy(proxy).await.unwrap();
         test_proxy(addr, HTTP_URL, "http", None, false).await;
         test_proxy(addr, HTTPS_URL, "http", None, false).await;
         test_proxy(addr, HTTP_URL, "socks5", None, false).await;
@@ -140,7 +185,7 @@ mod tests {
             .into_value()
             .unwrap();
 
-        let (addr, _sender) = run_proxy(proxy)
+        let addr = run_proxy(proxy)
             .await
             .unwrap();
 
@@ -157,41 +202,48 @@ mod tests {
     
     #[tokio::test]
     async fn test_client_server_auth() {
-        let addr = "127.0.0.1:54125".parse().unwrap();
+        let center_addr = "127.0.0.1:54125".parse().unwrap();
+        let bind_addr = "127.0.0.1:54126".parse().unwrap();
         let username = "wmproxy".to_string();
         let password = "wmproxy".to_string();
 
         let proxy = ProxyConfig::builder()
-            .center_addr(addr)
+            .center_addr(center_addr)
             .username(Some(username.clone()))
             .password(Some(password.clone()))
             .into_value()
             .unwrap();
 
-        let (server_addr, _sender) = run_server_proxy(proxy)
+        let (server_addr, mut servivce1) = build_server_proxy(proxy)
             .await
             .unwrap();
         
         let proxy = ProxyConfig::builder()
-            .bind(addr)
+            .bind(bind_addr)
             .username(Some(username.clone()))
             .password(Some(password.clone()))
             .server(Some(format!("{}", server_addr)))
             .into_value()
             .unwrap();
-
-        let (addr, _sender) = run_proxy(proxy)
+        let proxy_clone = proxy.clone();
+        let (addr, mut servivce2) = build_proxy(proxy)
             .await
             .unwrap();
 
-        test_proxy(addr, HTTP_URL, "http", None, true).await;
-        // test_proxy(addr, HTTPS_URL, "http", None, true).await;
-        // test_proxy(addr, HTTP_URL, "socks5", None, true).await;
+        servivce1.append(&mut servivce2);
 
-        // let auth = Some((username, password));
-        // test_proxy(addr, HTTP_URL, "http", auth.clone(), false).await;
-        // test_proxy(addr, HTTPS_URL, "http", auth.clone(), false).await;
-        // test_proxy(addr, HTTP_URL, "socks5", auth.clone(), false).await;
+        thread::spawn(move || {
+            let _ = WMCore::run_main_service(ConfigOption::new_by_proxy(proxy_clone), servivce1).unwrap();
+        });
+
+        test_proxy(addr, HTTP_URL, "http", None, true).await;
+        test_proxy(addr, HTTPS_URL, "http", None, true).await;
+        test_proxy(addr, HTTP_URL, "socks5", None, true).await;
+
+        let auth = Some((username, password));
+        test_proxy(addr, HTTP_URL, "http", auth.clone(), false).await;
+        test_proxy(addr, HTTPS_URL, "http", auth.clone(), false).await;
+        test_proxy(addr, HTTP_URL, "socks5", auth.clone(), false).await;
     }
 
 }

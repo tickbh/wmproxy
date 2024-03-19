@@ -41,6 +41,11 @@ use crate::{
     Helper, MappingConfig, ProtCreate, ProxyConfig, ProxyResult, VirtualStream,
 };
 
+lazy_static! {
+    /// 绑定的下一个sock_map映射，为双数
+    static ref NEXT_ID: Mutex<u32> = Mutex::new(2);
+}
+
 /// 中心服务端
 /// 接受中心客户端的连接，并且将信息处理或者转发
 pub struct CenterServer {
@@ -56,15 +61,10 @@ pub struct CenterServer {
     sender_work: Sender<(ProtCreate, Sender<ProtFrame>)>,
     /// 接收的Sender绑定，开始服务时这值move到工作协程中，所以不能二次调用服务
     receiver_work: Option<Receiver<(ProtCreate, Sender<ProtFrame>)>>,
-    /// 绑定的下一个sock_map映射，为双数
-    next_id: u32,
     /// 内网映射的相关消息, 需要读写分离需加锁
     mappings: Arc<RwLock<Vec<MappingConfig>>>,
 }
 
-lazy_static! {
-    static ref NEXT_ID: Mutex<u32> = Mutex::new(2);
-}
 
 impl CenterServer {
     pub fn new(option: ProxyConfig) -> Self {
@@ -76,7 +76,6 @@ impl CenterServer {
             receiver: Some(receiver),
             sender_work,
             receiver_work: Some(receiver_work),
-            next_id: 2,
             mappings: Arc::new(RwLock::new(vec![])),
         }
     }
@@ -158,6 +157,7 @@ impl CenterServer {
                 r = writer.write(write_buf.chunk()), if write_buf.has_remaining() => {
                     match r {
                         Ok(n) => {
+                            println!("server write id = {} read len = {}", 0, n);
                             write_buf.advance(n);
                             if !write_buf.has_remaining() {
                                 write_buf.clear();
