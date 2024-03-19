@@ -45,7 +45,6 @@ impl AppTrait for HttpApp {
         session: Stream,
         _shutdown: &ShutdownWatch,
     ) -> Option<Stream> {
-        println!("aaaaaaaaaaaaaaa");
         let local_addr = session.listen_addr();
         // log::trace!("反向代理:{}收到客户端连接: {}->{}", if self.http_tlss[index] { "https" } else { "http" }, addr,self.http_listeners[index].local_addr()?);
         let mut local_servers = vec![];

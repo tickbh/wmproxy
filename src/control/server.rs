@@ -86,9 +86,9 @@ impl ControlServer {
         tokio::spawn(async move {
             let mut proxy = WMCore::new(option);
             // 将上一个进程的关闭权限交由下一个服务，只有等下一个服务准备完毕的时候才能关闭上一个服务
-            if let Err(e) = proxy.start_serve(receiver_no_listen, sender_close).await {
-                log::info!("处理失败服务进程失败: {:?}", e);
-            }
+            // if let Err(e) = proxy.start_serve(receiver_no_listen, sender_close).await {
+            //     log::info!("处理失败服务进程失败: {:?}", e);
+            // }
             // 每次退出的时候将让控制计数-1，减到0则退出
             let _ = sender.send(()).await;
         });

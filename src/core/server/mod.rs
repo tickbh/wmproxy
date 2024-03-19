@@ -39,6 +39,7 @@ impl Server {
     async fn main_loop(&self) -> bool {
         let (tx, mut rx) = channel(1);
         let _tx1 = tx.clone();
+
         let _ = ctrlc::set_handler(move || {
             let tx = tx.clone();
             thread::spawn(move || {
@@ -47,7 +48,20 @@ impl Server {
         });
         
         println!("Waiting for Ctrl-C...");
-        let _ = rx.recv().await;
+        
+        let mut recv = self.shutdown_recv.clone();
+        tokio::select! {
+            _ = recv.changed() => {
+                println!("Got it! Exiting...");
+            }
+            // _ = receiver_close.recv() => {
+            //     println!("Got it! Exiting...");
+            // }
+            _ = rx.recv() => {
+                println!("Got it! Exiting...");
+                return false;
+            }
+        }
         println!("Got it! Exiting..."); 
         false
     }
@@ -68,15 +82,11 @@ impl Server {
     ) -> Runtime {
         let service_runtime = Self::create_runtime(service.name(), threads);
         service_runtime.handle().spawn(async move {
-            println!("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaax");
             if let Err(e) = service.ready_service().await {
                 warn!("初始化服务时{}失败, 原因:{:?}", service.name(), e);
-                println!("xxxxxxxxxxxxxxxxxxxxxxxx");
                 return;
             }
-            println!("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee");
             service.start_service(shutdown).await;
-            println!("aaaaaaaaabbbbbbbbbbbbbaaaaaaaaaaaaax");
             info!("service exited.")
         });
         service_runtime

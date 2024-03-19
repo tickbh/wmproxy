@@ -114,7 +114,6 @@ impl<A: AppTrait + Send + Sync + 'static> ServiceTrait for Service<A> {
     async fn start_service(&mut self, shutdown: ShutdownWatch) {
         let runtime = Handle::current();
         let wrap_listeners = mem::replace(&mut self.listeners.listener, vec![]);
-        println!("cccccccccccccc");
         let app_logic = Arc::new(self.app_logic.take().unwrap());
         let handlers = wrap_listeners.into_iter().map(|endpoint| {
             let shutdown = shutdown.clone();
@@ -125,7 +124,6 @@ impl<A: AppTrait + Send + Sync + 'static> ServiceTrait for Service<A> {
         });
 
         futures::future::join_all(handlers).await;
-        println!("dddddddddddddddd");
         app_logic.cleanup();
     }
 

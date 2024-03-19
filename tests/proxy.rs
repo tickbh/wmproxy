@@ -39,7 +39,8 @@ mod tests {
         let option = ConfigOption::new_by_proxy(proxy);
         let addr = option.proxy.as_ref().unwrap().center_addr.unwrap().0;
         let (sender_close, _receiver_close) = channel::<()>(1);
-        let services = WMCore::build_services(option)?;
+        let core = WMCore::new(option);
+        let services = core.build_services()?;
         Ok((addr, services))
     }
 
@@ -63,7 +64,8 @@ mod tests {
         let option = ConfigOption::new_by_proxy(proxy);
         let addr = option.proxy.as_ref().unwrap().bind.unwrap().0;
         let (sender_close, _receiver_close) = channel::<()>(1);
-        let services = WMCore::build_services(option)?;
+        let core = WMCore::new(option);
+        let services = core.build_services()?;
 
         // let option = ConfigOption::new_by_proxy(proxy);
         // let addr = option.proxy.as_ref().unwrap().bind.unwrap().0;

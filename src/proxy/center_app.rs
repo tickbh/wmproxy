@@ -37,7 +37,6 @@ impl AppTrait for CenterApp {
         session: Stream,
         _shutdown: &ShutdownWatch,
     ) -> Option<Stream> {
-        println!("aaaaaaaaaaaaaaa");
         if let Some(server) = self.config.server.clone() {
             let mut server = CenterTrans::new(server, self.config.domain.clone(), self.tls_client.clone());
             let _ = server.serve(session).await;

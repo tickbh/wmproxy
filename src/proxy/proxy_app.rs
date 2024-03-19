@@ -104,11 +104,9 @@ impl AppTrait for ProxyApp {
     ) -> Option<Stream> {
 
         if let Some(client) = &self.center_client {
-            println!("aaaaaaaaaaaaaaa {:?}", session.client_addr());
             let _ = client.deal_new_stream(session).await;
             None
         } else {
-            println!("bbbbbbbbbbbbbbbbbbzzzzzzzzzzzzzzzz {:?}", session.client_addr());
             let _ = self.deal_proxy(session).await;
             None
         }
@@ -117,7 +115,6 @@ impl AppTrait for ProxyApp {
     async fn ready_init(&mut self) -> io::Result<()> {
         match self.config.try_connect_center_client().await {
             Ok((client_config, center_client)) => {
-                println!("do connect !!!!!!!!!!!!!!!!! ???????????????");
                 self.client_config = client_config;
                 self.center_client = center_client;
             }
