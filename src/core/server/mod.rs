@@ -1,4 +1,4 @@
-use std::{thread, time::Duration};
+use std::{sync::{Arc, Mutex}, thread, time::Duration};
 
 use log::{error, info, warn};
 use tokio::{runtime::{Builder, Runtime}, sync::{mpsc::{channel, Receiver}, watch}};
@@ -12,18 +12,18 @@ use crate::{ConfigOption, ProxyConfig};
 
 pub struct Server {
     services: Vec<Box<dyn ServiceTrait>>,
-    shutdown_watch: watch::Sender<bool>,
-    shutdown_recv: ShutdownWatch,
-    opt: Option<ConfigOption>,
+    pub shutdown_watch: Arc<Mutex<watch::Sender<bool>>>,
+    pub shutdown_recv: ShutdownWatch,
+    opt: ConfigOption,
 }
 
 impl Server {
-    pub fn new(opt: Option<ConfigOption>) -> Self {
+    pub fn new(opt: ConfigOption) -> Self {
         let (tx, rx) = watch::channel(false);
         Self {
             opt,
             services: vec![],
-            shutdown_watch: tx,
+            shutdown_watch: Arc::new(Mutex::new(tx)),
             shutdown_recv: rx,
         }
     }
@@ -36,18 +36,27 @@ impl Server {
         self.services.extend(services);
     }
 
-    async fn main_loop(&self) -> bool {
-        let (tx, mut rx) = channel(1);
-        let _tx1 = tx.clone();
+    async fn main_loop(&self, receiver: Option<Receiver<()>>) -> bool {
+        // let (tx, mut rx) = channel(1);
+        // let _tx1 = tx.clone();
 
-        let _ = ctrlc::set_handler(move || {
-            let tx = tx.clone();
-            thread::spawn(move || {
-                let _ = tx.blocking_send(());
-            });
-        });
+        // let _ = ctrlc::set_handler(move || {
+        //     let tx = tx.clone();
+        //     thread::spawn(move || {
+        //         let _ = tx.blocking_send(());
+        //     });
+        // });
         
-        println!("Waiting for Ctrl-C...");
+        // println!("Waiting for Ctrl-C...");
+
+        async fn try_receiver_close(mut receiver: Option<Receiver<()>>) {
+            if receiver.is_some() {
+                receiver.as_mut().unwrap().recv().await;
+            } else {
+                let pending = std::future::pending::<()>();
+                pending.await
+            }
+        }
         
         let mut recv = self.shutdown_recv.clone();
         tokio::select! {
@@ -57,7 +66,7 @@ impl Server {
             // _ = receiver_close.recv() => {
             //     println!("Got it! Exiting...");
             // }
-            _ = rx.recv() => {
+            _ = try_receiver_close(receiver) => {
                 println!("Got it! Exiting...");
                 return false;
             }
@@ -91,8 +100,11 @@ impl Server {
         });
         service_runtime
     }
-
     pub fn run_loop(&mut self) {
+        self.run_loop_with_recv(None)
+    }
+
+    pub fn run_loop_with_recv(&mut self, receiver: Option<Receiver<()>>) {
         let mut runtimes: Vec<Runtime> = Vec::new();
 
         while let Some(service) = self.services.pop() {
@@ -105,8 +117,7 @@ impl Server {
         }
         
         let server_runtime = Self::create_runtime("Server", 1);
-        let shutdown_type = server_runtime.handle().block_on(self.main_loop());
-
+        let shutdown_type = server_runtime.handle().block_on(self.main_loop(receiver));
 
         let shutdown_timeout = Duration::from_secs(0);
         let shutdowns: Vec<_> = runtimes

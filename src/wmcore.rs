@@ -11,9 +11,9 @@
 // Created Date: 2023/09/15 11:37:09
 
 use std::{
-    io::{self},
+    io,
     net::SocketAddr,
-    sync::Arc,
+    sync::{Arc, Mutex},
 };
 
 use futures::{future::select_all, FutureExt, StreamExt};
@@ -23,15 +23,14 @@ use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::{TcpListener, TcpStream},
     sync::{
-        mpsc::{channel, Receiver, Sender},
-        Mutex,
+        mpsc::{channel, Receiver, Sender}, watch
     },
 };
 use tokio_rustls::{rustls, TlsAcceptor};
 
 use crate::{
     arg,
-    core::{Listeners, Server, ServiceTrait, WrapListener},
+    core::{Listeners, Server, ServiceTrait, ShutdownWatch, WrapListener},
     option::ConfigOption,
     proxy::{CenterApp, MappingApp, ProxyServer},
     reverse::{HttpApp, HttpConfig, ServerConfig, StreamApp, StreamConfig, StreamUdp, StreamUdpService, WrapTlsAccepter},
@@ -42,17 +41,14 @@ use crate::{
 /// 核心处理类
 pub struct WMCore {
     pub option: ConfigOption,
-    pub sender: Sender<()>,
-    pub receiver: Option<Receiver<()>>,
+    pub server: Server,
 }
 
 impl WMCore {
     pub fn new(option: ConfigOption) -> WMCore {
-        let (sender, receiver) = channel(1); 
         Self {
+            server: Server::new(option.clone()),
             option,
-            sender,
-            receiver: Some(receiver),
         }
     }
 
@@ -64,13 +60,13 @@ impl WMCore {
     //     self.health_sender = Some(sender);
     //     Ok(())
     // }
-    
-    pub fn get_sender(&self) -> Sender<()> {
-        self.sender.clone()
+
+    pub fn get_watch(&self) -> Arc<Mutex<watch::Sender<bool>>> {
+        self.server.shutdown_watch.clone()
     }
 
-    pub fn take_receiver(&mut self) -> Option<Receiver<()>> {
-        self.receiver.take()
+    pub fn get_shutdown_recv(&self) -> ShutdownWatch {
+        self.server.shutdown_recv.clone()
     }
 
     pub fn init(&self) -> ProxyResult<()> {
@@ -86,39 +82,41 @@ impl WMCore {
         Ok(())
     }
 
-    
     pub fn run_main_opt(option: ConfigOption) -> ProxyResult<()> {
-        let core = WMCore::new(option);
+        let mut core = WMCore::new(option);
         core.init()?;
-        let mut server = core.build_server()?;
-        server.run_loop();
+        core.build_server()?;
+        core.server.run_loop();
         Ok(())
     }
 
     
     pub fn run_main_service(option: ConfigOption, services: Vec<Box<dyn ServiceTrait>>) -> ProxyResult<()> {
-        let core = WMCore::new(option);
+        let mut core = WMCore::new(option);
         core.init()?;
         core.run_services(services)
     }
 
-    pub fn run_server(&self, mut server: Server) -> ProxyResult<()> {
-        server.run_loop();
+    pub fn run_server(&mut self) -> ProxyResult<()> {
+        self.server.run_loop();
+        Ok(())
+    }
+    
+    pub fn run_async_server(&mut self) -> ProxyResult<()> {
+        self.server.run_loop();
         Ok(())
     }
 
-    pub fn run_services(&self, services: Vec<Box<dyn ServiceTrait>>) -> ProxyResult<()> {
-        let mut server = Server::new(Some(self.option.clone()));
-        server.add_services(services);
-        server.run_loop();
+    pub fn run_services(&mut self, services: Vec<Box<dyn ServiceTrait>>) -> ProxyResult<()> {
+        self.server.add_services(services);
+        self.server.run_loop();
         Ok(())
     }
 
-    pub fn build_server(&self) -> ProxyResult<Server> {
-        let mut server = Server::new(Some(self.option.clone()));
+    pub fn build_server(&mut self) -> ProxyResult<()> {
         let services = self.build_services()?;
-        server.add_services(services);
-        Ok(server)
+        self.server.add_services(services);
+        Ok(())
     }
 
     pub fn build_services(&self) -> ProxyResult<Vec<Box<dyn ServiceTrait>>> {
