@@ -136,6 +136,6 @@ impl Server {
             }
         }
         info!("All runtimes exited, exiting now");
-        std::process::exit(0);
+        // std::process::exit(0);
     }
 }

@@ -11,5 +11,7 @@
 // Created Date: 2023/10/25 03:36:28
 
 mod server;
+mod app;
 
 pub use server::ControlServer;
+pub use app::ControlApp;

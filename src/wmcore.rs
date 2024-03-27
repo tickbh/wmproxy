@@ -90,6 +90,19 @@ impl WMCore {
         Ok(())
     }
 
+    pub fn run_main_with_recv(receiver: Receiver<()>) -> ProxyResult<()> {
+        let option = arg::parse_env().expect("load config failed");
+        Self::run_main_opt_with_recv(option, receiver)?;
+        Ok(())
+    }
+
+    pub fn run_main_opt_with_recv(option: ConfigOption, receiver: Receiver<()>) -> ProxyResult<()> {
+        let mut core = WMCore::new(option);
+        core.init()?;
+        core.build_server()?;
+        core.server.run_loop_with_recv(Some(receiver));
+        Ok(())
+    }
     
     pub fn run_main_service(option: ConfigOption, services: Vec<Box<dyn ServiceTrait>>) -> ProxyResult<()> {
         let mut core = WMCore::new(option);
@@ -102,6 +115,11 @@ impl WMCore {
         Ok(())
     }
     
+    pub fn run_server_with_recv(&mut self, receiver: Receiver<()>) -> ProxyResult<()> {
+        self.server.run_loop_with_recv(Some(receiver));
+        Ok(())
+    }
+
     pub fn run_async_server(&mut self) -> ProxyResult<()> {
         self.server.run_loop();
         Ok(())

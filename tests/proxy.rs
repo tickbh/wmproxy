@@ -5,7 +5,7 @@
 mod tests {
     use std::{net::SocketAddr, thread};
 
-    use tokio::sync::mpsc::{channel, Sender};
+    use tokio::sync::mpsc::{self, channel, Sender};
     use webparse::Request;
     use wenmeng::Client;
     use wmproxy::{core::ServiceTrait, ConfigOption, ProxyConfig, ProxyResult, WMCore};
@@ -234,8 +234,11 @@ mod tests {
 
         servivce1.append(&mut servivce2);
 
+        let (tx, rx) = mpsc::channel(1);
         thread::spawn(move || {
-            let _ = WMCore::run_main_service(ConfigOption::new_by_proxy(proxy_clone), servivce1).unwrap();
+            let mut core = WMCore::new(ConfigOption::new_by_proxy(proxy_clone));
+            core.server.add_services(servivce1);
+            let _ = core.run_server_with_recv(rx);
         });
 
         test_proxy(addr, HTTP_URL, "http", None, true).await;
@@ -246,6 +249,7 @@ mod tests {
         test_proxy(addr, HTTP_URL, "http", auth.clone(), false).await;
         test_proxy(addr, HTTPS_URL, "http", auth.clone(), false).await;
         test_proxy(addr, HTTP_URL, "socks5", auth.clone(), false).await;
+        let _  = tx.send(()).await;
     }
 
 }
