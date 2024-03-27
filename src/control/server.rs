@@ -161,6 +161,18 @@ impl ControlServer {
     pub async fn start_control(control: Arc<Mutex<ControlServer>>) -> ProxyResult<()> {
         let listener = {
             let value = &mut control.lock().await;
+            {
+                let shutdown = value.shutdown_watch.clone();
+                let sender = value.control_sender_close.clone();
+                let _ = ctrlc::set_handler(move || {
+                    println!("收到 Ctrl-C 信号, 即将退出进程");
+                    if let Some(s) = &shutdown {
+                        let s = s.lock().expect("lock");
+                        let _ = s.send(true);
+                    }
+                    let _ = sender.send(());
+                });
+            }
             if value.option.disable_control {
                 let mut receiver = value.control_receiver_close.take();
                 let _ = Self::receiver_await(&mut receiver).await;

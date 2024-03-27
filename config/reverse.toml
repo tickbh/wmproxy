@@ -1,5 +1,6 @@
 # 正向代理相关，http/https/socks5等代理配置
 control = "127.0.0.1:8837"
+# disable_control = true
 [proxy]
 bind_addr = "0.0.0.0:8090"
 username = "wmproxy"
