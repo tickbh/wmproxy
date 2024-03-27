@@ -10,7 +10,7 @@
 // -----
 // Created Date: 2023/10/25 03:36:36
 
-use std::{sync::Arc, thread};
+use std::{sync::{self, Arc}, thread};
 
 use crate::{arg, ConfigOption, Helper, ProxyResult, WMCore};
 use async_trait::async_trait;
@@ -28,9 +28,8 @@ use wenmeng::{Body, HttpTrait, ProtResult, RecvRequest, RecvResponse, Server};
 pub struct ControlServer {
     /// 控制端当前的配置文件，如果部分修改将直接修改数据进行重启
     option: ConfigOption,
-    /// 通知服务进行关闭的Sender，服务相关如果收到该消息则停止Accept
-    server_sender_close: Option<Sender<()>>,
-    // pub shutdown_watch: Arc<Mutex<watch::Sender<bool>>>,
+    /// 通知服务进行关闭的watch，可以通知各服务正常的关闭
+    pub shutdown_watch: Option< Arc<sync::Mutex<watch::Sender<bool>>> >,
     /// 通知中心服务的Sender，每个服务拥有一个该Sender，可反向通知中控关闭
     control_sender_close: Sender<()>,
     /// 通知中心服务的Receiver，收到一次则将当前的引用计数-1，如果为0则表示需要关闭服务器
@@ -57,45 +56,11 @@ impl ControlServer {
         let (sender, receiver) = channel::<()>(1);
         Self {
             option,
-            server_sender_close: None,
+            shutdown_watch: None,
             control_sender_close: sender,
             control_receiver_close: Some(receiver),
             count: 0,
         }
-    }
-
-    pub async fn start_serve(mut self) -> ProxyResult<()> {
-        let option = self.option.clone();
-        self.inner_start_server(option).await?;
-        
-        Self::start_control(Arc::new(Mutex::new(self))).await?;
-        Ok(())
-    }
-
-    pub async fn do_restart_serve(&mut self) -> ProxyResult<()> {
-        let option = arg::parse_env()?;
-        Helper::try_init_log(&option);
-        self.inner_start_server(option).await?;
-        Ok(())
-    }
-
-    async fn inner_start_server(&mut self, option: ConfigOption) -> ProxyResult<()> {
-        let sender = self.control_sender_close.clone();
-        let (sender_no_listen, receiver_no_listen) = channel::<()>(1);
-        let sender_close = self.server_sender_close.take();
-        // 每次启动的时候将让控制计数+1
-        self.count += 1;
-        tokio::spawn(async move {
-            let mut proxy = WMCore::new(option);
-            // 将上一个进程的关闭权限交由下一个服务，只有等下一个服务准备完毕的时候才能关闭上一个服务
-            // if let Err(e) = proxy.start_serve(receiver_no_listen, sender_close).await {
-            //     log::info!("处理失败服务进程失败: {:?}", e);
-            // }
-            // 每次退出的时候将让控制计数-1，减到0则退出
-            let _ = sender.send(()).await;
-        });
-        self.server_sender_close = Some(sender_no_listen);
-        Ok(())
     }
 
     pub fn sync_start_serve(mut self) -> ProxyResult<()> {
@@ -107,7 +72,7 @@ impl ControlServer {
             .thread_name("control")
             .build()
             .unwrap();
-        runtime.spawn(async move {
+        runtime.block_on(async move {
             let _ = Self::start_control(Arc::new(Mutex::new(self))).await;
         });
         Ok(())
@@ -122,22 +87,24 @@ impl ControlServer {
 
     fn sync_inner_start_server(&mut self, option: ConfigOption) -> ProxyResult<()> {
         let sender = self.control_sender_close.clone();
-        let (sender_no_listen, receiver_no_listen) = channel::<()>(1);
-        let sender_close = self.server_sender_close.take();
+        let sender_close = self.shutdown_watch.take();
         // 每次启动的时候将让控制计数+1
         self.count += 1;
         let mut proxy = WMCore::new(option);
         proxy.build_server().expect("build server must be ok");
-
+        self.shutdown_watch = Some(proxy.get_watch());
         thread::spawn(move || {
             // 将上一个进程的关闭权限交由下一个服务，只有等下一个服务准备完毕的时候才能关闭上一个服务
-            if let Err(e) = proxy.run_server_with_recv(receiver_no_listen) {
+            if let Err(e) = proxy.run_server() {
                 log::info!("处理失败服务进程失败: {:?}", e);
+            }
+            if let Some(s) = sender_close {
+                let s = s.lock().expect("lock");
+                let _ = s.send(true);
             }
             // 每次退出的时候将让控制计数-1，减到0则退出
             let _ = sender.blocking_send(());
         });
-        self.server_sender_close = Some(sender_no_listen);
         Ok(())
     }
 
@@ -149,7 +116,7 @@ impl ControlServer {
         match &**req.path() {
             "/reload" => {
                 // 将重新启动服务器
-                let _ = value.do_restart_serve().await;
+                let _ = value.sync_do_restart_serve();
                 return Ok(Response::text()
                     .body("重新加载配置成功")
                     .unwrap()
@@ -157,8 +124,9 @@ impl ControlServer {
             }
             "/stop" => {
                 // 通知控制端关闭，控制端阻塞主线程，如果控制端退出后进程退出
-                if let Some(sender) = &value.server_sender_close {
-                    let _ = sender.send(()).await;
+                if let Some(sender) = &value.shutdown_watch {
+                    let text = sender.lock().expect("lock");
+                    let _  = text.send(true);
                 }
                 return Ok(Response::text().body("关闭进程成功").unwrap().into_type());
             }
@@ -175,7 +143,7 @@ impl ControlServer {
         };
 
         return Ok(Response::status503()
-            .body("服务器内部无服务")
+            .body("请选择您要的操作")
             .unwrap()
             .into_type());
     }

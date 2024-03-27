@@ -139,7 +139,7 @@ impl ControlApp {
         }
 
         return Ok(Response::status503()
-            .body("服务器内部无服务")
+            .body("请选择您要的操作")
             .unwrap()
             .into_type());
     }

@@ -17,17 +17,27 @@ use wmproxy::{arg, ControlServer, Flag, Helper, ProxyApp, ProxyResult, WMCore};
 use wmproxy::core::{Listeners, Server, WrapListener};
 use wmproxy::core::Service;
 
-async fn run_main() -> ProxyResult<()> {
+// async fn run_main() -> ProxyResult<()> {
+//     let option = arg::parse_env()?;
+//     Helper::try_init_log(&option);
+//     let pidfile = option.pidfile.clone();
+//     let _ = Helper::try_create_pidfile(&pidfile);
+//     let control = ControlServer::new(option);
+//     control.start_serve().await?;
+//     let _ = Helper::try_remove_pidfile(&pidfile);
+//     Ok(())
+// }
+
+fn run_main() -> ProxyResult<()> {
     let option = arg::parse_env()?;
     Helper::try_init_log(&option);
     let pidfile = option.pidfile.clone();
     let _ = Helper::try_create_pidfile(&pidfile);
     let control = ControlServer::new(option);
-    control.start_serve().await?;
+    control.sync_start_serve().expect("start failed");
     let _ = Helper::try_remove_pidfile(&pidfile);
     Ok(())
 }
-
 // #[forever_rs::main]
 // #[tokio::main]
 // async fn main() {
@@ -37,5 +47,6 @@ async fn run_main() -> ProxyResult<()> {
 // }
 
 fn main() {
-    WMCore::run_main().expect("run main failed");
+    run_main().expect("run main failed");
+    // WMCore::run_main().expect("run main failed");
 }
