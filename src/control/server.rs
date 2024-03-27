@@ -10,7 +10,7 @@
 // -----
 // Created Date: 2023/10/25 03:36:36
 
-use std::{sync::{self, Arc}, thread};
+use std::{sync::{self, Arc, Mutex}, thread, time::Duration};
 
 use crate::{arg, ConfigOption, Helper, ProxyResult, WMCore};
 use async_trait::async_trait;
@@ -18,7 +18,7 @@ use tokio::{
     net::TcpListener,
     runtime::Builder,
     sync::{
-        mpsc::{channel, Receiver, Sender}, watch, Mutex
+        mpsc::{channel, Receiver, Sender}, watch
     },
 };
 use webparse::{HeaderName, Request, Response};
@@ -94,16 +94,20 @@ impl ControlServer {
         proxy.build_server().expect("build server must be ok");
         self.shutdown_watch = Some(proxy.get_watch());
         thread::spawn(move || {
+            thread::spawn(|| {
+                thread::sleep(Duration::from_secs(2));
+                if let Some(s) = sender_close {
+                    let s = s.lock().expect("lock");
+                    let _ = s.send(true);
+                }
+            });
             // 将上一个进程的关闭权限交由下一个服务，只有等下一个服务准备完毕的时候才能关闭上一个服务
             if let Err(e) = proxy.run_server() {
                 log::info!("处理失败服务进程失败: {:?}", e);
             }
-            if let Some(s) = sender_close {
-                let s = s.lock().expect("lock");
-                let _ = s.send(true);
-            }
             // 每次退出的时候将让控制计数-1，减到0则退出
             let _ = sender.blocking_send(());
+
         });
         Ok(())
     }
@@ -112,7 +116,7 @@ impl ControlServer {
         req: &mut Request<Body>,
         data: &mut Arc<Mutex<ControlServer>>,
     ) -> ProtResult<Response<Body>> {
-        let mut value = data.lock().await;
+        let mut value = data.lock().expect("lock");
         match &**req.path() {
             "/reload" => {
                 // 将重新启动服务器
@@ -160,17 +164,17 @@ impl ControlServer {
 
     pub async fn start_control(control: Arc<Mutex<ControlServer>>) -> ProxyResult<()> {
         let listener = {
-            let value = &mut control.lock().await;
+            let value = &mut control.lock().expect("lock");
             {
-                let shutdown = value.shutdown_watch.clone();
-                let sender = value.control_sender_close.clone();
+                let control_clone = control.clone();
                 let _ = ctrlc::set_handler(move || {
+                    let value = control_clone.lock().expect("lock");
                     println!("收到 Ctrl-C 信号, 即将退出进程");
-                    if let Some(s) = &shutdown {
+                    if let Some(s) = &value.shutdown_watch {
                         let s = s.lock().expect("lock");
                         let _ = s.send(true);
                     }
-                    let _ = sender.send(());
+                    let _ = value.control_sender_close.send(());
                 });
             }
             if value.option.disable_control {
@@ -195,7 +199,7 @@ impl ControlServer {
 
         loop {
             let mut receiver = {
-                let value = &mut control.lock().await;
+                let value = &mut control.lock().expect("lock");
                 value.control_receiver_close.take()
             };
 
@@ -212,11 +216,11 @@ impl ControlServer {
                             log::info!("控制中心：处理信息时发生错误：{:?}", e);
                         }
                     });
-                    let value = &mut control.lock().await;
+                    let value = &mut control.lock().expect("lock");
                     value.control_receiver_close = receiver;
                 }
                 _ = Self::receiver_await(&mut receiver) => {
-                    let value = &mut control.lock().await;
+                    let value = &mut control.lock().expect("lock");
                     value.count -= 1;
                     log::info!("反向代理：控制端收到关闭信号，当前:{}", value.count);
                     if value.count <= 0 {
