@@ -157,7 +157,6 @@ impl CenterServer {
                 r = writer.write(write_buf.chunk()), if write_buf.has_remaining() => {
                     match r {
                         Ok(n) => {
-                            println!("server write id = {} read len = {}", 0, n);
                             write_buf.advance(n);
                             if !write_buf.has_remaining() {
                                 write_buf.clear();

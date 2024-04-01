@@ -61,17 +61,13 @@ impl Server {
         let mut recv = self.shutdown_recv.clone();
         tokio::select! {
             _ = recv.changed() => {
-                println!("Got it! Exiting...");
+                info!("Got it! Exiting...");
             }
-            // _ = receiver_close.recv() => {
-            //     println!("Got it! Exiting...");
-            // }
             _ = try_receiver_close(receiver) => {
-                println!("Got it! Exiting...");
+                info!("Got it! Exiting...");
                 return false;
             }
         }
-        println!("Got it! Exiting..."); 
         false
     }
 
