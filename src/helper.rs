@@ -125,6 +125,44 @@ impl Helper {
     }
 
     /// 可端口复用的绑定方式，该端口可能被多个进程同时使用
+    pub fn bind_sync<A: ToSocketAddrs>(addr: A) -> io::Result<std::net::TcpListener> {
+        let addrs = addr.to_socket_addrs()?;
+        let mut last_err = None;
+        for addr in addrs {
+            let socket = Socket::new(
+                if addr.is_ipv4() {
+                    Domain::IPV4
+                } else {
+                    Domain::IPV6
+                },
+                Type::STREAM,
+                None,
+            )?;
+            socket.set_nonblocking(true)?;
+            let _ = socket.set_only_v6(false);
+            socket.set_reuse_address(true)?;
+            Self::set_reuse_port(&socket, true)?;
+            socket.bind(&addr.into())?;
+            match socket.listen(128) {
+                Ok(_) => {
+                    return Ok(socket.into());
+                }
+                Err(e) => {
+                    log::info!("绑定端口地址失败，原因： {:?}", addr);
+                    last_err = Some(e);
+                }
+            }
+        }
+
+        Err(last_err.unwrap_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "could not resolve to any address",
+            )
+        }))
+    }
+
+    /// 可端口复用的绑定方式，该端口可能被多个进程同时使用
     pub fn bind_upd<A: ToSocketAddrs>(addr: A) -> io::Result<UdpSocket> {
         let addrs = addr.to_socket_addrs()?;
         let last_err = None;
@@ -211,7 +249,7 @@ impl Helper {
         }
 
         let log_config = log_config
-            .build(root.build(option.default_level.unwrap_or(LevelFilter::Trace)))
+            .build(root.build(option.default_level.unwrap_or(LevelFilter::Info)))
             .unwrap();
         // 检查静态变量中是否存在handle可能在多线程中,需加锁
         if LOG4RS_HANDLE.lock().unwrap().is_some() {
