@@ -6,3 +6,5 @@ Cargo.lock
 /logs/*.log
 wmproxy.md
 .DS_Store
+.well-known
+hurl_test
