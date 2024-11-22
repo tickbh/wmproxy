@@ -23,7 +23,8 @@ use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::{TcpListener, TcpStream},
     sync::{
-        mpsc::{channel, Receiver, Sender}, watch
+        mpsc::{channel, Receiver, Sender},
+        watch,
     },
 };
 use tokio_rustls::{rustls, TlsAcceptor};
@@ -33,7 +34,10 @@ use crate::{
     core::{Listeners, Server, ServiceTrait, ShutdownWatch, WrapListener},
     option::ConfigOption,
     proxy::{CenterApp, MappingApp, ProxyServer},
-    reverse::{HttpApp, HttpConfig, ServerConfig, StreamApp, StreamConfig, StreamUdp, StreamUdpService, WrapTlsAccepter},
+    reverse::{
+        HttpApp, HttpConfig, ServerConfig, StreamApp, StreamConfig, StreamUdp, StreamUdpService,
+        WrapTlsAccepter,
+    },
     ActiveHealth, CenterClient, CenterServer, CenterTrans, Flag, Helper, OneHealth, ProxyApp,
     ProxyResult,
 };
@@ -103,8 +107,11 @@ impl WMCore {
         core.server.run_loop_with_recv(Some(receiver));
         Ok(())
     }
-    
-    pub fn run_main_service(option: ConfigOption, services: Vec<Box<dyn ServiceTrait>>) -> ProxyResult<()> {
+
+    pub fn run_main_service(
+        option: ConfigOption,
+        services: Vec<Box<dyn ServiceTrait>>,
+    ) -> ProxyResult<()> {
         let mut core = WMCore::new(option);
         core.init()?;
         core.run_services(services)
@@ -114,7 +121,7 @@ impl WMCore {
         self.server.run_loop();
         Ok(())
     }
-    
+
     pub fn run_server_with_recv(&mut self, receiver: Receiver<()>) -> ProxyResult<()> {
         self.server.run_loop_with_recv(Some(receiver));
         Ok(())
@@ -148,7 +155,10 @@ impl WMCore {
                 let service = CenterApp::build_services(config.clone())?;
                 vecs.push(Box::new(service));
             }
-            if config.map_http_bind.is_some() || config.map_https_bind.is_some() || config.map_tcp_bind.is_some() {
+            if config.map_http_bind.is_some()
+                || config.map_https_bind.is_some()
+                || config.map_tcp_bind.is_some()
+            {
                 let service = MappingApp::build_services(config.clone())?;
                 vecs.push(Box::new(service));
             }
@@ -158,8 +168,8 @@ impl WMCore {
             let app = HttpApp::build_services(http.clone())?;
             vecs.push(Box::new(app));
         }
-        
-        if let Some(stream)= &self.option.stream {
+
+        if let Some(stream) = &self.option.stream {
             let app = StreamApp::build_services(stream.clone())?;
             vecs.push(Box::new(app));
 
